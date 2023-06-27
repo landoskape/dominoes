@@ -16,6 +16,7 @@ class dominoeAgent:
     Contains all the standard initialization functions and gameplay methods that every agent requires. 
     Specific instances of dominoeAgent will be created for training and comparison of different strategies. 
     """
+    
     # give this class a name so I can identify the class constructors
     name='dominoeAgent'
     
@@ -70,12 +71,35 @@ class dominoeAgent:
         dummyoptions = np.full(self.numDominoes, False)
         # for dominoe in self.available:
         #     dvals = 
+        # ^^ this is a lot simpler than I was thinking... ^^
+        # 
         return None
            
-    def play(self, dominoe):
+    def play(self):
+        dominoe = self.selectPlay()
         assert dominoe in self.myHand, "dominoe selected to be played is not in hand"
         self.myHand.remove(dominoe)
         self.dominoesInHand()
         return dominoe
+    
+    def selectPlay(self):
+        # select dominoe to play, for the default class, the selection is random based on available plays
+        return None
+    
+    def printHand(self):
+        print(self.myHand)
+        print(self.handValues)
+        
+
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         
         
