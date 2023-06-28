@@ -5,8 +5,11 @@ import dominoesAgents as da
 
 # Gameplay object
 class dominoeGame:
-    def __init__(self, numPlayers, highestDominoe, defaultAgent=da.dominoeAgent, agents=None):
+    def __init__(self, highestDominoe, numPlayers=None, agents=None, defaultAgent=da.dominoeAgent):
         # store inputs
+        assert (numPlayers is not None) or (agents is not None), "either numPlayers or agents need to be specified"
+        if (numPlayers is not None) and (agents is not None): 
+            assert numPlayers == len(agents), "the number of players specified does not equal the number of agents provided..."
         self.numPlayers = numPlayers
         self.highestDominoe = highestDominoe
         # create list of dominoes and number of dominoes for convenience
@@ -24,7 +27,8 @@ class dominoeGame:
         # create agents
         if agents is None: agents = [defaultAgent]*self.numPlayers
         if agents is not None: assert len(agents)==self.numPlayers, "number of agents provided is not equal to number of players"
-        if agents is not None: assert np.all([agent.name=='dominoeAgent' for agent in agents])
+        if agents is not None: agents = [agent if hasattr(agent,'name') and agent.name=='dominoeAgent' else defaultAgent for agent in agents]
+        # if agents is not None: assert np.all([agent.name=='dominoeAgent' for agent in agents])
         self.agents = [agent(numPlayers, highestDominoe, self.dominoes, self.numDominoes, agentIndex) for (agentIndex,agent) in enumerate(agents)]
         
         # these are unnecessary because the math is correct, but might as well keep it as a low-cost sanity check

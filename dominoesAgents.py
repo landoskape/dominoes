@@ -29,6 +29,8 @@ class dominoeAgent:
         self.dominoes = dominoes
         self.numDominoes = numDominoes
         self.agentIndex = agentIndex
+        self.dominoeValue = np.sum(self.dominoes, axis=1).astype(float)
+        self.dominoeDouble = self.dominoes[:,0]==self.dominoes[:,1]
         
         # game-play related variables
         self.handNumber = highestDominoe # which hand are we playing? (always starts with highestDominoe number)
@@ -96,8 +98,8 @@ class dominoeAgent:
         if len(idxPlayer)==0 and len(idxDummy)==0: 
             return None,None
         # otherwise, process options to make choice
-        lineOptionValue = 1*lineOptions # measure value of each option
-        dummyOptionValue = 1*dummyOptions 
+        lineOptionValue = self.optionValue(lineOptions) # measure value of each option
+        dummyOptionValue = self.optionValue(dummyOptions)  
         valuePlayers = lineOptionValue[idxPlayer, idxDominoe] # retrieve value of valid options
         valueDummy = dummyOptionValue[idxDummyDominoe]
         # concatenate lineIdx, dominoeIdx, optionValue
@@ -105,13 +107,15 @@ class dominoeAgent:
         dominoeIdx = np.concatenate((idxDominoe, idxDummyDominoe))
         optionValue = np.concatenate((valuePlayers, valueDummy))
         # make and return choice
-        idxChoice = random.choices(range(len(optionValue)), k=1, weights=optionValue)[0]
+        idxChoice = self.makeChoice(optionValue)
         return dominoeIdx[idxChoice], lineIdx[idxChoice] 
         
     def optionValue(self, options):
-        # convert option to play value using simplest method possible - the number of points on each dominoe
-        dominoeValue = np.sum(self.dominoes,axis=1)
-        return dominoeValue * options
+        # convert option to play value using simplest method possible - value is 1 if option available
+        return 1*options
+    
+    def makeChoice(self, optionValue):
+        return random.choices(range(len(optionValue)), k=1, weights=optionValue)[0]
         
     def printHand(self):
         print(self.myHand)
@@ -119,8 +123,33 @@ class dominoeAgent:
         
 
         
-        
-        
+class greedyAgent(dominoeAgent):
+    def optionValue(self, options):
+        # convert option to play value using simplest method possible - the number of points on each dominoe
+        return self.dominoeValue * options
+    
+    def makeChoice(self, optionValue):
+        return np.argmax(optionValue)
+    
+class stupidAgent(dominoeAgent):
+    def optionValue(self, options):
+        # convert option to play value using simplest method possible - the number of points on each dominoe
+        return self.dominoeValue * options
+    
+    def makeChoice(self, optionValue):
+        return np.argmin(optionValue)
+    
+    
+class doubleAgent(dominoeAgent):
+    def optionValue(self, options):
+        # double agent treats any double opportunity as infinitely valuable (and greedily plays it when it can!)
+        optionValue = self.dominoeValue * options
+        if np.any(self.dominoeDouble*options):
+            optionValue[self.dominoeDouble*options]=np.inf
+        return optionValue
+    
+    def makeChoice(self, optionValue):
+        return np.argmax(optionValue)
         
         
         
