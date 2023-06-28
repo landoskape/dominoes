@@ -19,7 +19,7 @@ class dominoeGame:
         self.handActive = True # boolean determining whether a hand is completed (once it clicks to false, some new actions happen and a new hand begins)
         self.gameActive = True # boolean determining whether the game is still in progress (i.e. if the 0/0 hand hasn't happened yet)
         self.terminateGameCounter = 0 # once everyone cant play, start counting this up to terminate game and not be stuck in a loop
-        self.score = np.full((self.highestDominoe+1, self.numPlayers), np.nan)
+        self.score = np.full((self.highestDominoe+1, self.numPlayers), 0, dtype=int)
         
         # create agents
         if agents is None: agents = [defaultAgent]*self.numPlayers
@@ -57,6 +57,9 @@ class dominoeGame:
             agent.gameState(self.played, self.available, self.handsize, self.cantplay, self.turncounter, self.dummyAvailable, self.dummyPlayable)
             
     def initializeHand(self):
+        if not self.gameActive:
+            print(f"Game has already finished")
+            return
         # identify which dominoe is the first double
         idxFirstDouble = np.where(np.all(self.dominoes==self.handNumber,axis=1))[0]
         assert len(idxFirstDouble)==1, "more or less than 1 double identified as first..."
@@ -142,22 +145,37 @@ class dominoeGame:
         # if everyone hasn't played while they all have pennies up, end game
         if self.terminateGameCounter > self.numPlayers:
             self.handActive = False
-            
-        return None
-        
         
     def playHand(self): 
+        if not self.gameActive:
+            print(f"Game has already finished")
+            return
+        self.initializeHand()
         # request plays from each agent until someone goes out or no more plays available
         while self.handActive:
             self.doTurn()
-        handScore = np.array([df.handValue(self.dominoes, agent.myHand) for agent in self.agents])
+        handScore = np.array([df.handValue(self.dominoes, agent.myHand) for agent in self.agents], dtype=int)
         self.score[self.highestDominoe - self.handNumber] = handScore
-        return None
+        self.handNumber -= 1
+        self.currentScore = np.sum(self.score,axis=0)
+        self.currentWinner = np.argmin(self.currentScore)
+        if self.handNumber < 0:
+            self.gameActive = False
     
     def playGame(self):
-        # -- initialize hand --
-        # -- play hand --
-        # -- move to next handNumber, repeat --
-        # -- once hand number 0 finished, print scores --
-        return None
+        while self.handNumber >= 0:
+            self.playHand()
+         
+    def printResults(self):
+        if self.gameActive:
+            if self.handNumber == self.highestDominoe:
+                print(f"Game has not begun!")
+                return
+            print(self.currentScore)
+            print(f"After playing {self.handNumber+1}'s, agent {self.currentWinner} is in the lead with a score of {self.currentScore[self.currentWinner]}!")
+        else:
+            print(self.score)
+            print(self.currentScore)
+            print(f"The winner is agent: {self.currentWinner} with a score of {self.currentScore[self.currentWinner]}!")
+
         
