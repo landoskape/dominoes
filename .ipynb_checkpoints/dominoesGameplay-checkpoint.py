@@ -10,6 +10,7 @@ class dominoeGame:
         assert (numPlayers is not None) or (agents is not None), "either numPlayers or agents need to be specified"
         if (numPlayers is not None) and (agents is not None): 
             assert numPlayers == len(agents), "the number of players specified does not equal the number of agents provided..."
+        if numPlayers is None: numPlayers = len(agents)
         self.numPlayers = numPlayers
         self.highestDominoe = highestDominoe
         # create list of dominoes and number of dominoes for convenience
