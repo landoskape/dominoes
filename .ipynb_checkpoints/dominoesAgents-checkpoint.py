@@ -1,4 +1,5 @@
 import numpy as np
+import random
 import itertools
 import dominoesFunctions as df
 
@@ -51,7 +52,7 @@ class dominoeAgent:
         # gamestate input, served to the agent each time it requires action (either at it's turn, or each turn for an RNN)
         # each agent will transform these inputs into a "perspective" which converts them to agent-centric information about the game-state
         self.played = played # list of dominoes that have already been played
-        self.available = self.egocentric(available) # list of dominoe available on each players line (centered on agent)
+        self.available = self.egocentric(available) # list of value available on each players line (centered on agent)
         self.handsize = self.egocentric(handsize) # list of handsize for each player (centered on agent)
         self.cantplay = self.egocentric(cantplay) # list of whether each player can/can't play (centered on agent)
         self.turncounter = self.egocentric(turncounter) # list of how many turns until each player is up (meaningless unless agent receives all-turn updates)
@@ -67,25 +68,51 @@ class dominoeAgent:
     
     def playOptions(self):
         # generate list of playable options (starts as boolean, becomes value)
-        lineoptions = np.full((self.numDominoes, self.numPlayers), False)
-        dummyoptions = np.full(self.numDominoes, False)
-        # for dominoe in self.available:
-        #     dvals = 
-        # ^^ this is a lot simpler than I was thinking... ^^
-        # 
-        return None
+        lineOptions = np.full((self.numPlayers, self.numDominoes), False)
+        for idx,value in enumerate(self.available):
+            if idx==0 or self.cantplay[idx]: 
+                idxPlayable = np.where(np.any(self.handValues==value,axis=1))[0]
+                lineOptions[idx,self.myHand[idxPlayable]]=True
+        dummyOptions = np.full(self.numDominoes, False)
+        idxPlayable = np.where(np.any(self.handValues==self.dummyAvailable,axis=1))[0]
+        dummyOptions[self.myHand[idxPlayable]]=True*self.dummyPlayable
+        return lineOptions,dummyOptions
            
     def play(self):
-        dominoe = self.selectPlay()
-        assert dominoe in self.myHand, "dominoe selected to be played is not in hand"
-        self.myHand.remove(dominoe)
-        self.dominoesInHand()
-        return dominoe
+        dominoe, location = self.selectPlay()
+        if dominoe is not None:
+            assert dominoe in self.myHand, "dominoe selected to be played is not in hand"
+            self.myHand = np.delete(self.myHand, self.myHand==dominoe)
+            self.dominoesInHand()
+        return dominoe, location
     
     def selectPlay(self):
         # select dominoe to play, for the default class, the selection is random based on available plays
-        return None
-    
+        lineOptions, dummyOptions = self.playOptions() # get options that are available
+        idxPlayer, idxDominoe = np.where(lineOptions) # find where options are available
+        idxDummyDominoe = np.where(dummyOptions)[0]
+        idxDummy = -1 * np.ones(len(idxDummyDominoe), dtype=int)
+        # if no valid options available, return None
+        if len(idxPlayer)==0 and len(idxDummy)==0: 
+            return None,None
+        # otherwise, process options to make choice
+        lineOptionValue = 1*lineOptions # measure value of each option
+        dummyOptionValue = 1*dummyOptions 
+        valuePlayers = lineOptionValue[idxPlayer, idxDominoe] # retrieve value of valid options
+        valueDummy = dummyOptionValue[idxDummyDominoe]
+        # concatenate lineIdx, dominoeIdx, optionValue
+        lineIdx = np.concatenate((idxPlayer, idxDummy))
+        dominoeIdx = np.concatenate((idxDominoe, idxDummyDominoe))
+        optionValue = np.concatenate((valuePlayers, valueDummy))
+        # make and return choice
+        idxChoice = random.choices(range(len(optionValue)), k=1, weights=optionValue)[0]
+        return dominoeIdx[idxChoice], lineIdx[idxChoice] 
+        
+    def optionValue(self, options):
+        # convert option to play value using simplest method possible - the number of points on each dominoe
+        dominoeValue = np.sum(self.dominoes,axis=1)
+        return dominoeValue * options
+        
     def printHand(self):
         print(self.myHand)
         print(self.handValues)
