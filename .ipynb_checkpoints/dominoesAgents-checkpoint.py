@@ -115,6 +115,7 @@ class dominoeAgent:
         return 1*options
     
     def makeChoice(self, optionValue):
+        # default behavior is to use thompson sampling (picking a dominoe to play randomly, weighted by value of dominoe)
         return random.choices(range(len(optionValue)), k=1, weights=optionValue)[0]
         
     def printHand(self):
@@ -131,6 +132,7 @@ class greedyAgent(dominoeAgent):
     def makeChoice(self, optionValue):
         return np.argmax(optionValue)
     
+
 class stupidAgent(dominoeAgent):
     def optionValue(self, options):
         # convert option to play value using simplest method possible - the number of points on each dominoe

@@ -50,7 +50,7 @@ def gameSequenceToString(dominoes, sequence, direction, player=None, playNumber=
     for idx,seq in enumerate(sequence):
         sequenceString = [dominoesString(dominoes[domIdx]) if domDir==0 else dominoesString(np.flip(dominoes[domIdx])) for domIdx,domDir in zip(seq,direction[idx])]
         if player is not None:
-            sequenceString = [seqString+f"Agent#:{cplay}" for seqString,cplay in zip(sequenceString,player[idx])]
+            sequenceString = [seqString+f" Ag:{cplay}" for seqString,cplay in zip(sequenceString,player[idx])]
         if playNumber is not None:
-            sequenceString = [seqString+f"Play#:{cplay}" for seqString,cplay in zip(sequenceString,playNumber[idx])]
+            sequenceString = [seqString+f" P:{cplay}" for seqString,cplay in zip(sequenceString,playNumber[idx])]
         print(sequenceString)
