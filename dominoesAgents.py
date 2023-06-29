@@ -2,6 +2,12 @@ import numpy as np
 import random
 import itertools
 import dominoesFunctions as df
+import dominoesNetworks as dnn
+import torch
+import torchvision.transforms as transforms
+import torch.nn as nn
+import torch.nn.functional as F
+
 
 # 1. one-hot of dominoes in hand
 # 2. one-hot of dominoes already played
@@ -22,7 +28,7 @@ class dominoeAgent:
     name='dominoeAgent'
     
     # initialization function
-    def __init__(self, numPlayers, highestDominoe, dominoes, numDominoes, agentIndex):
+    def __init__(self, numPlayers, highestDominoe, dominoes, numDominoes, agentIndex, device=None):
         # meta-variables (includes redundant information, but if I train 1000s of networks I want it to be as fast as possible)
         self.numPlayers = numPlayers
         self.highestDominoe = highestDominoe
@@ -31,6 +37,8 @@ class dominoeAgent:
         self.agentIndex = agentIndex
         self.dominoeValue = np.sum(self.dominoes, axis=1).astype(float)
         self.dominoeDouble = self.dominoes[:,0]==self.dominoes[:,1]
+        self.egoShiftIdx = np.mod(np.arange(numPlayers)+agentIndex, numPlayers)
+        self.device = device if device is not None else "cpu"
         
         # game-play related variables
         self.handNumber = highestDominoe # which hand are we playing? (always starts with highestDominoe number)
@@ -39,31 +47,51 @@ class dominoeAgent:
         self.played = [] # list of dominoes that have already been played
         self.available = np.zeros(self.numPlayers,dtype=int) # dominoes that are available to be played on
         self.handsize = np.zeros(self.numPlayers,dtype=int)
-        self.cantplay = np.full(self.numPlayers,False) # 
+        self.cantplay = np.full(self.numPlayers,False) # whether or not there is a penny up (if they didn't play on their line)
+        self.didntplay = np.full(self.numPlayers, False) # whether or not the player played
         self.turncounter = np.zeros(self.numPlayers,dtype=int) # how many turns before each opponent plays
         self.dummyAvailable = [] # index of dominoe available on dummy
         self.dummyPlayable = False # boolean indicating whether the dummyline has been started
         
+        # specialized initialization functions 
+        self.specializedInit()
+        
+        
+    def specializedInit(self):
+        # can be edited for each agent
+        return None
+    
+    def updateModel(self):
+        # default is no learning -- this can be overwritten in special RL agents
+        return None
+    
     # -- input from game manager --
     def serve(self, assignment):
         # serve receives an assignment (indices) of dominoes that make up my hand
         self.myHand = assignment
         self.dominoesInHand()
         
-    def gameState(self, played, available, handsize, cantplay, turncounter, dummyAvailable, dummyPlayable):
+    def gameState(self, played, available, handsize, cantplay, didntplay, turncounter, dummyAvailable, dummyPlayable):
         # gamestate input, served to the agent each time it requires action (either at it's turn, or each turn for an RNN)
         # each agent will transform these inputs into a "perspective" which converts them to agent-centric information about the game-state
         self.played = played # list of dominoes that have already been played
         self.available = self.egocentric(available) # list of value available on each players line (centered on agent)
         self.handsize = self.egocentric(handsize) # list of handsize for each player (centered on agent)
         self.cantplay = self.egocentric(cantplay) # list of whether each player can/can't play (centered on agent)
+        self.didntplay = self.egocentric(didntplay) # list of whether each player didn't play (centered on agent)
         self.turncounter = self.egocentric(turncounter) # list of how many turns until each player is up (meaningless unless agent receives all-turn updates)
         self.dummyAvailable = dummyAvailable # index of dominoe available on dummy line
         self.dummyPlayable = dummyPlayable # bool determining whether the dummy line is playable
+        self.processGameState()
+        
+        
+    def processGameState(self):
+        # processGameState method is always called, but either does nothing in this default case or transforms the input for the RL-Agent cases\ 
+        return None 
     
     # -- functions to process gamestate --
     def egocentric(self, variable):
-        return np.roll(variable, -self.agentIndex) # shift perspective from allocentric to egocentric
+        return variable[self.egoShiftIdx] 
     
     def dominoesInHand(self):
         self.handValues = self.dominoes[self.myHand]
@@ -154,6 +182,85 @@ class doubleAgent(dominoeAgent):
         return np.argmax(optionValue)
         
         
+class valueAgent0(dominoeAgent):
+    def specializedInit(self):
+        # create binary arrays for presenting gamestate information to the RL networks
+        self.binaryPlayed = np.zeros(self.numDominoes)
+        self.binaryLineAvailable = np.zeros((self.numPlayers,self.highestDominoe+1))
+        self.binaryDummyAvailable = np.zeros(self.highestDominoe+1)
+        self.binaryHand = np.zeros(self.numDominoes)
+        
+        # initialize valueNetwork -- predicts next hand value of each player along with final score for each player (using omniscient information to begin with...) 
+        self.handValueNetwork = dnn.valueNetwork(self.numPlayers,self.numDominoes,self.highestDominoe)
+        self.finalScoreNetwork = dnn.valueNetwork(self.numPlayers,self.numDominoes,self.highestDominoe)
+        self.handValueNetwork.to(self.device)
+        self.finalScoreNetwork.to(self.device)
+        
+        # Prepare Training Functions & Optimizers
+        self.handValueLoss = nn.L1Loss()
+        self.handValueOptimizer = torch.optim.SGD(self.handValueNetwork.parameters(), lr=1e-3)
+        # self.finalScoreLoss = lambda output,target : target-output # simple difference loss 
+        self.finalScoreOptimizer = torch.optim.SGD(self.finalScoreNetwork.parameters(), lr=1e-3)
+        
+        # meta parameters
+        self.lam = 0.5
+        
+    def resetBinaries(self):
+        self.binaryPlayed[:]=0
+        self.binaryLineAvailable[:]=0
+        self.binaryDummyAvailable[:]=0
+        self.binaryHand[:]=0
+        
+    # valueAgent0 uses a network model to predict: 1) the final score from the gameState at each turn (learning from the end), 2) and the current hand value of each player (using omniscient info)
+    def processGameState(self):
+        # vectorize game state data
+        self.resetBinaries() # set binaries back to 0
+        self.binaryPlayed[self.played]=1 # indicate which dominoes have been played
+        for lineIdx, dominoeIdx in enumerate(self.available): 
+            self.binaryLineAvailable[lineIdx,dominoeIdx]=1 # indicate which value is available on each line
+        self.binaryDummyAvailable[self.dummyAvailable]=1 # indicate which value is available on the dummy line
+        self.binaryHand[self.myHand]=1 # indicate which dominoes are present in hand
+        
+        # predict value (current points in hand, final points at the end of the game)
+        self.valueNetworkInput = self.generateValueInput().to(self.device)
+        self.handValueOutput, self.finalScoreOutput = self.predictValue(self.valueNetworkInput)
+        
+    def generateValueInput(self):
+        valueNetworkInput = np.concatenate((self.binaryHand, self.binaryPlayed, self.binaryLineAvailable.flatten(), self.binaryDummyAvailable, 
+                                            self.handsize, self.cantplay, self.didntplay, self.turncounter, np.array(self.dummyPlayable).reshape(-1)))
+        print(2*self.numDominoes + (self.highestDominoe+1)*(self.numPlayers+1) + 4*self.numPlayers + 1)
+        print(valueNetworkInput.shape)
+        return valueNetworkInput
+    
+    def predictValue(self, valueNetworkInput):
+        return self.handValueNetwork(valueNetworkInput), self.finalScoreNetwork(valueNetworkInput)
+    
+    def updateModel(self, trueHandValue, currentScoreEstimate, previousScoreEstimate):
+        # Vanilla L1 loss for hand value network
+        loss = self.handValueLoss(self.handValueOutput, trueHandValue)
+        loss.backward()
+        self.handValueOptimizer.step()
+        self.handValueOptimizer.zero_grad() # reset gradients
+        
+        # TD-Lambda for final score network (I think this is a bit different from TD-Lambda, but it's close?)
+        for p in self.finalScoreNetwork.parameters():
+            p.grad *= self.lam
+        loss = self.finalScoreLoss(self.valueNetworkOutput, target)
+        loss.backward()
+        self.optimizer.step()
+        # TD-Lambda for final score network
+        # t=0: 
+        #         measure jacobian of scoreEstimate with respect to weights
+        # at t=1: 
+        #         measure newJacobian of scoreEstimate with respect to weights
+        #         measure newScoreEstimate (if t=end, use true score)
+        #         multiply alpha * dot(scoreEstimateDifference, last jacobian)
+        #         update weights
+        #         
+        return None
+    
+                
+    
         
         
         

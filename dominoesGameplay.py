@@ -2,10 +2,11 @@ import numpy as np
 import itertools
 import dominoesFunctions as df
 import dominoesAgents as da
+import time
 
 # Gameplay object
 class dominoeGame:
-    def __init__(self, highestDominoe, numPlayers=None, agents=None, defaultAgent=da.dominoeAgent):
+    def __init__(self, highestDominoe, infiniteGame=True, numPlayers=None, agents=None, defaultAgent=da.dominoeAgent):
         # store inputs
         assert (numPlayers is not None) or (agents is not None), "either numPlayers or agents need to be specified"
         if (numPlayers is not None) and (agents is not None): 
@@ -13,6 +14,7 @@ class dominoeGame:
         if numPlayers is None: numPlayers = len(agents)
         self.numPlayers = numPlayers
         self.highestDominoe = highestDominoe
+        self.infiniteGame = infiniteGame
         # create list of dominoes and number of dominoes for convenience
         self.dominoes = df.listDominoes(self.highestDominoe)
         self.numDominoes = df.numberDominoes(self.highestDominoe)
@@ -23,7 +25,7 @@ class dominoeGame:
         self.handActive = True # boolean determining whether a hand is completed (once it clicks to false, some new actions happen and a new hand begins)
         self.gameActive = True # boolean determining whether the game is still in progress (i.e. if the 0/0 hand hasn't happened yet)
         self.terminateGameCounter = 0 # once everyone cant play, start counting this up to terminate game and not be stuck in a loop
-        self.score = np.full((self.highestDominoe+1, self.numPlayers), 0, dtype=int)
+        self.score = np.zeros((0,self.numPlayers), dtype=int)
         
         # create agents
         if agents is None: agents = [defaultAgent]*self.numPlayers
@@ -35,7 +37,14 @@ class dominoeGame:
         # these are unnecessary because the math is correct, but might as well keep it as a low-cost sanity check
         assert len(self.dominoes)==self.numDominoes, "the number of dominoes isn't what is expected!"
         assert np.sum(self.dominoePerTurn)==self.numDominoes, "the distribution of dominoes per turn doesn't add up correctly!"
-    
+        
+        # performance monitoring
+        self.prepareScoreTime = [0, 0]
+        self.initHandTime = [0, 0]
+        self.presentGameStateTime = [0, 0]
+        self.agentPlayTime = [0, 0]
+        self.processPlayTime = [0, 0]
+        
     def numDominoeDistribution(self):
         # return list of the number of dominoes each player gets per turn, either randomly at initial or shifted each time
         numberEach = int(np.floor(self.numDominoes/self.numPlayers))
@@ -59,12 +68,17 @@ class dominoeGame:
             
     def presentGameState(self):
         for agent in self.agents:
-            agent.gameState(self.played, self.available, self.handsize, self.cantplay, self.turncounter, self.dummyAvailable, self.dummyPlayable)
+            agent.gameState(self.played, self.available, self.handsize, self.cantplay, self.didntplay, self.turncounter, self.dummyAvailable, self.dummyPlayable)
             
     def initializeHand(self):
+        t = time.time()
         if not self.gameActive:
             print(f"Game has already finished")
             return
+        # reset values
+        self.playNumber = 0
+        self.terminateGameCounter = 0
+        self.handActive = True
         # identify which dominoe is the first double
         idxFirstDouble = np.where(np.all(self.dominoes==self.handNumber,axis=1))[0]
         assert len(idxFirstDouble)==1, "more or less than 1 double identified as first..."
@@ -72,38 +86,51 @@ class dominoeGame:
         assignments = self.distribute() # distribute dominoes randomly
         idxFirstPlayer = np.where([idxFirstDouble in assignment for assignment in assignments])[0][0] # find out which player has the first double
         assignments[idxFirstPlayer] = np.delete(assignments[idxFirstPlayer], assignments[idxFirstPlayer]==idxFirstDouble) # remove it from their hand
-        turncounter = np.roll(np.arange(self.numPlayers), idxFirstPlayer) # assign turns
         self.assignDominoes(assignments) # serve dominoes to agents
         self.nextPlayer = idxFirstPlayer # keep track of whos turn it is
         # prepare initial gameState arrays
         self.played = [idxFirstDouble] # at the beginning, only the double/double of the current hand has been played
-        self.available = self.handNumber * np.ones(self.numPlayers) # at the beginning, everyone can only play on the double/double of the handNumber
-        self.handsize = np.array([len(assignment) for assignment in assignments]) # how many dominoes in each hand
+        self.available = self.handNumber * np.ones(self.numPlayers, dtype=int) # at the beginning, everyone can only play on the double/double of the handNumber
+        self.handsize = np.array([len(assignment) for assignment in assignments], dtype=int) # how many dominoes in each hand
         self.cantplay = np.full(self.numPlayers, False) # whether or not each player has a penny up
-        self.turncounter = np.roll(np.arange(self.numPlayers), -idxFirstPlayer) # which turn it is for each player
-        self.dummyAvailable = self.handNumber # dummy also starts with #handNumber
+        self.didntplay = np.full(self.numPlayers, False) # whether or not each player played last time
+        self.turncounter = np.mod(np.arange(self.numPlayers)-idxFirstPlayer, self.numPlayers).astype(int) # which turn it is for each player
+        self.dummyAvailable = int(self.handNumber) # dummy also starts with #handNumber
         self.dummyPlayable = False # dummy is only playable when everyone has started their line
         # prepare gameplay tracking arrays
-        self.lineSequence = [[] for _ in range(self.numPlayers)] # list of dominoes played by each player
-        self.linePlayDirection = [[] for _ in range(self.numPlayers)] # boolean for whether dominoe was played forward or backward
-        self.linePlayer = [[] for _ in range(self.numPlayers)] # which player played each dominoe
-        self.linePlayNumber = [[] for _ in range(self.numPlayers)] # which play (in the game) it was
+        self.lineSequence = [[]]*self.numPlayers # list of dominoes played by each player
+        self.linePlayDirection = [[]]*self.numPlayers # boolean for whether dominoe was played forward or backward
+        self.linePlayer = [[]]*self.numPlayers # which player played each dominoe
+        self.linePlayNumber = [[]]*self.numPlayers # which play (in the game) it was
         self.dummySequence = [] # same as above for the dummy line
         self.dummyPlayDirection = []
         self.dummyPlayer = []
         self.dummyPlayNumber = []
+        # performance monitoring
+        self.initHandTime[0] += time.time()-t
+        self.initHandTime[1] += 1
         
     def doTurn(self, updates=False):
         # 1. feed gameState to next agent
-        self.agents[self.nextPlayer].gameState(self.played, self.available, self.handsize, self.cantplay, self.turncounter, self.dummyAvailable, self.dummyPlayable)
+        t = time.time()
+        self.agents[self.nextPlayer].gameState(self.played, self.available, self.handsize, self.cantplay, self.didntplay, self.turncounter, self.dummyAvailable, self.dummyPlayable)
+        self.presentGameStateTime[0] += time.time()-t
+        self.presentGameStateTime[1] += 1
         # 2. request "play"
+        t = time.time()
         dominoe, location = self.agents[self.nextPlayer].play()
+        self.agentPlayTime[0] += time.time()-t
+        self.agentPlayTime[1] += 1
+        
+        t = time.time()
         if dominoe is None:
             # if no play is available, penny up and move to next player
             self.cantplay[self.nextPlayer]=True
+            self.didntplay[self.nextPlayer]=True
             self.turncounter = np.roll(self.turncounter,1)
             self.nextPlayer = np.mod(self.nextPlayer+1, self.numPlayers)
-        else:            
+        else:          
+            self.didntplay[self.nextPlayer]=False
             self.handsize[self.nextPlayer] -= 1 # remove 1 from nextPlayers handsize
             # if they are out, end game
             if self.handsize[self.nextPlayer]==0: 
@@ -132,6 +159,8 @@ class dominoeGame:
             if not isDouble:
                 self.turncounter = np.roll(self.turncounter,1) # move turn counter to next player
                 self.nextPlayer = np.mod(self.nextPlayer+1, self.numPlayers) # move to next player
+        self.processPlayTime[0] += time.time()-t
+        self.processPlayTime[1] += 1
         
         # update general game state
         self.playNumber += 1    
@@ -142,7 +171,7 @@ class dominoeGame:
                 self.dummyPlayable = True
         
         # if everyone cant play, start iterating terminateGameCounter
-        if np.all(self.cantplay):
+        if np.all(self.didntplay):
             self.terminateGameCounter+=1
         else:
             self.terminateGameCounter==0
@@ -159,18 +188,21 @@ class dominoeGame:
         # request plays from each agent until someone goes out or no more plays available
         while self.handActive:
             self.doTurn()
-        handScore = np.array([df.handValue(self.dominoes, agent.myHand) for agent in self.agents], dtype=int)
-        self.score[self.highestDominoe - self.handNumber] = handScore
-        self.handNumber -= 1
+        self.handNumber = np.mod(self.handNumber - 1, self.highestDominoe)
+        return np.array([df.handValue(self.dominoes, agent.myHand) for agent in self.agents], dtype=int) # return score of hand
+    
+    def playGame(self, rounds=None):
+        t = time.time()
+        rounds = self.highestDominoe+1 if rounds is None else rounds
+        self.score = np.zeros((rounds,self.numPlayers),dtype=int)
+        self.prepareScoreTime[0] += time.time()-t
+        self.prepareScoreTime[1] += 1
+        for idxRound in range(rounds):
+            handScore = self.playHand()
+            self.score[idxRound] = handScore
         self.currentScore = np.sum(self.score,axis=0)
         self.currentWinner = np.argmin(self.currentScore)
-        if self.handNumber < 0:
-            self.gameActive = False
-    
-    def playGame(self):
-        while self.handNumber >= 0:
-            self.playHand()
-         
+
     def printResults(self):
         if self.gameActive:
             if self.handNumber == self.highestDominoe:

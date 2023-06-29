@@ -2,10 +2,13 @@ import numpy as np
 import itertools
 
 def playDirection(available, dominoe):
+    # available=the value available on a line
+    # dominoe=the dominoe (value,value) pair being played
+    # returns (the direction of the dominoe (forwards/backwards) and the next available value after play)
     if available==dominoe[0]: 
-        return 0, dominoe[1]
+        return 0, int(dominoe[1])
     if available==dominoe[1]: 
-        return 1, dominoe[0]
+        return 1, int(dominoe[0])
     raise ValueError(f"request dominoe ({dominoe}) cannot be played on value {available}!")
     
 def numberDominoes(highestDominoe):
@@ -13,7 +16,7 @@ def numberDominoes(highestDominoe):
     
 def listDominoes(highestDominoe):
     # given a standard rule for how to organize the list of dominoes as one-hot arrays, list the dominoes present in a one hot array
-    return np.array([np.array(quake) for quake in itertools.combinations_with_replacement(np.arange(highestDominoe+1), 2)])
+    return np.array([np.array(quake) for quake in itertools.combinations_with_replacement(np.arange(highestDominoe+1), 2)], dtype=int)
 
 def dominoesString(dominoe):
     return f"{dominoe[0]:>2}|{dominoe[1]:<2}"
@@ -35,6 +38,9 @@ def handValue(dominoes, idxHand):
 def gameSequenceToString(dominoes, sequence, direction, player=None, playNumber=None):
     # take in game sequence and dominoes and convert to string, then print output
     # manage inputs -- 
+    if len(sequence)==0: 
+        print('no play')
+        return
     input1d = not isinstance(sequence[0],list)
     if input1d: sequence = [sequence] # np.reshape(sequence, (1,-1)) # make iterable in the expected way
     if input1d: direction = [direction] # np.reshape(direction, (1,-1)) 
