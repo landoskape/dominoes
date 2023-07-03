@@ -13,18 +13,29 @@ class valueNetwork(nn.Module):
     # --inherited-- Activation function is Relu by default (but can be chosen with hiddenactivation). 
     # --inherited-- Output activation function is identity, because we're using CrossEntropyLoss
     """
-    def __init__(self,numPlayers,numDominoes,highestDominoe,actFunc=F.relu,pDropout=0.5):
+    def __init__(self,numPlayers,numDominoes,highestDominoe,weightPrms=(0.,0.1),biasPrms=0.,actFunc=F.relu,pDropout=0):
         super().__init__()
         self.numPlayers = numPlayers
         self.numDominoes = numDominoes
         self.highestDominoe = highestDominoe
         self.inputDimension = 2*numDominoes + (highestDominoe+1)*(numPlayers+1) + 4*numPlayers + 1 # see dominoesAgents>generateValueInput() for explanation of why this dimensionality
         self.outputDimension = numPlayers
-        self.numLayers = 4
+        
+        # create layers (all linear fully connected)
         self.fc1 = nn.Linear(self.inputDimension, 1000)
         self.fc2 = nn.Linear(1000, 500)
         self.fc3 = nn.Linear(500, 500)
         self.fc4 = nn.Linear(500, self.outputDimension)
+        torch.nn.init.normal_(self.fc1.weight, mean=weightPrms[0], std=weightPrms[1])
+        torch.nn.init.normal_(self.fc2.weight, mean=weightPrms[0], std=weightPrms[1])
+        torch.nn.init.normal_(self.fc3.weight, mean=weightPrms[0], std=weightPrms[1])
+        torch.nn.init.normal_(self.fc4.weight, mean=weightPrms[0], std=weightPrms[1])
+        torch.nn.init.constant_(self.fc1.bias, val=biasPrms)
+        torch.nn.init.constant_(self.fc2.bias, val=biasPrms)
+        torch.nn.init.constant_(self.fc4.bias, val=biasPrms)
+        torch.nn.init.constant_(self.fc4.bias, val=biasPrms)
+        
+        # create special layers
         self.actFunc = actFunc
         self.dropout = nn.Dropout(p=pDropout)
         
