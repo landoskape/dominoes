@@ -3,10 +3,11 @@ import itertools
 import dominoesFunctions as df
 import dominoesAgents as da
 import time
+from tqdm import tqdm
 
 # Gameplay object
 class dominoeGame:
-    def __init__(self, highestDominoe, infiniteGame=True, numPlayers=None, agents=None, defaultAgent=da.dominoeAgent):
+    def __init__(self, highestDominoe, infiniteGame=True, numPlayers=None, agents=None, defaultAgent=da.dominoeAgent, device=None):
         # store inputs
         assert (numPlayers is not None) or (agents is not None), "either numPlayers or agents need to be specified"
         if (numPlayers is not None) and (agents is not None): 
@@ -26,13 +27,14 @@ class dominoeGame:
         self.gameActive = True # boolean determining whether the game is still in progress (i.e. if the 0/0 hand hasn't happened yet)
         self.terminateGameCounter = 0 # once everyone cant play, start counting this up to terminate game and not be stuck in a loop
         self.score = np.zeros((0,self.numPlayers), dtype=int)
+        self.nextPlayerShift = np.mod(np.arange(self.numPlayers)-1,self.numPlayers) # create index to shift to next players turn (faster than np.roll()...)
         
-        # create agents
+        # create agents (let's be smarter about this and provide dictionaries with parameters etc etc, but for now it's okay)
         if agents is None: agents = [defaultAgent]*self.numPlayers
         if agents is not None: assert len(agents)==self.numPlayers, "number of agents provided is not equal to number of players"
         if agents is not None: agents = [agent if hasattr(agent,'name') and agent.name=='dominoeAgent' else defaultAgent for agent in agents]
         # if agents is not None: assert np.all([agent.name=='dominoeAgent' for agent in agents])
-        self.agents = [agent(numPlayers, highestDominoe, self.dominoes, self.numDominoes, agentIndex) for (agentIndex,agent) in enumerate(agents)]
+        self.agents = [agent(numPlayers, highestDominoe, self.dominoes, self.numDominoes, agentIndex, device=device) for (agentIndex,agent) in enumerate(agents)]
         
         # these are unnecessary because the math is correct, but might as well keep it as a low-cost sanity check
         assert len(self.dominoes)==self.numDominoes, "the number of dominoes isn't what is expected!"
@@ -42,6 +44,7 @@ class dominoeGame:
         self.prepareScoreTime = [0, 0]
         self.initHandTime = [0, 0]
         self.presentGameStateTime = [0, 0]
+        self.performPrestateValueTime = [0, 0]
         self.agentPlayTime = [0, 0]
         self.processPlayTime = [0, 0]
         
@@ -69,6 +72,16 @@ class dominoeGame:
     def presentGameState(self):
         for agent in self.agents:
             agent.gameState(self.played, self.available, self.handsize, self.cantplay, self.didntplay, self.turncounter, self.dummyAvailable, self.dummyPlayable)
+            
+    def performPrestateValueEstimate(self):
+        trueHandValue = np.array([np.sum(agent.handValues) for agent in self.agents])
+        for agent in self.agents:
+            agent.estimatePrestateValue(trueHandValue)
+            
+    def performPoststateValueUpdates(self):
+        finalScore = np.array([np.sum(agent.handValues) for agent in self.agents]) if not self.handActive else None
+        for agent in self.agents:
+            agent.updatePoststateValue(finalScore=finalScore)
             
     def initializeHand(self):
         t = time.time()
@@ -111,12 +124,43 @@ class dominoeGame:
         self.initHandTime[1] += 1
         
     def doTurn(self, updates=False):
+        # notes on what information is ~currently~ encoded in gameState
+        # - played: list of indices of dominoes that have already been played
+        # - available: list of values on each line available for next play
+        # - handsize: list of values of numbers of dominoes in each hand
+        # - cantplay: boolean list of whether each line has a "penny up" meaning available for anyone to play on it
+        # - didntplay: boolean list of whether each player played last turn
+        # - turncounter: list of turns until each players turn
+        # - dummyAvailable: value available on dummy
+        # - dummyPlayable: whether dummy can be played on
+        # - handActive: boolean indicating whether current hand is happening or if it's over
+        
+        # notes on updates:
+        # -- convert gamestate values into things that are already prepared for the neural networks (except for reshaping)
+        # -- add secondary function to accept the gameplay and track data (lineSequence etc) --
+        
+        
+        # state change trackers to determine what game states to change at end of turn
+        moveToNextPlayer = False
+        
         # 1. feed gameState to next agent
+        #print("Feed game state to every agent at beginning of doTurn()")
+        #print("This will probably require smarter handling of gamestate data to always be prepared for the networks...")
+        #print("Compute gradV(S,w)/w, compute V(S,w), compute eligibility (lambda * z(t-1) + gradV(S,w)/w")
+        #print("At end of doTurn(), compute V(S_t+1,w), compute tdError (switch V(S_t+1,w) to R_t+1 if end, compute w_t+1")
         t = time.time()
-        self.agents[self.nextPlayer].gameState(self.played, self.available, self.handsize, self.cantplay, self.didntplay, self.turncounter, self.dummyAvailable, self.dummyPlayable)
+        self.presentGameState() # present game state to every agent
+        #self.agents[self.nextPlayer].gameState(self.played, self.available, self.handsize, self.cantplay, self.didntplay, self.turncounter, self.dummyAvailable, self.dummyPlayable)    
         self.presentGameStateTime[0] += time.time()-t
         self.presentGameStateTime[1] += 1
-        # 2. request "play"
+        
+        # 2. tell agent to perform prestate value estimation
+        t = time.time()
+        self.performPrestateValueEstimate()
+        self.performPrestateValueTime[0] += time.time()-t
+        self.performPrestateValueTime[1] += 1
+        
+        # 3. request "play"
         t = time.time()
         dominoe, location = self.agents[self.nextPlayer].play()
         self.agentPlayTime[0] += time.time()-t
@@ -128,7 +172,7 @@ class dominoeGame:
             self.cantplay[self.nextPlayer]=True
             self.didntplay[self.nextPlayer]=True
             self.turncounter = np.roll(self.turncounter,1)
-            self.nextPlayer = np.mod(self.nextPlayer+1, self.numPlayers)
+            moveToNextPlayer = True
         else:          
             self.didntplay[self.nextPlayer]=False
             self.handsize[self.nextPlayer] -= 1 # remove 1 from nextPlayers handsize
@@ -158,12 +202,14 @@ class dominoeGame:
                     self.cantplay[self.nextPlayer]=False
             if not isDouble:
                 self.turncounter = np.roll(self.turncounter,1) # move turn counter to next player
-                self.nextPlayer = np.mod(self.nextPlayer+1, self.numPlayers) # move to next player
+                moveToNextPlayer=True
         self.processPlayTime[0] += time.time()-t
         self.processPlayTime[1] += 1
         
-        # update general game state
+        # 4. update general game state 
         self.playNumber += 1    
+        if moveToNextPlayer:
+            self.nextPlayer = np.mod(self.nextPlayer+1, self.numPlayers)
         
         # check if everyone's line has started
         if not self.dummyPlayable: 
@@ -180,6 +226,14 @@ class dominoeGame:
         if self.terminateGameCounter > self.numPlayers:
             self.handActive = False
         
+        # 5. tell agents to perform poststateValueUpdate
+        self.presentGameState() # present game state to every agent
+        t = time.time()
+        self.performPoststateValueUpdates()
+        self.performPrestateValueTime[0] += time.time()-t
+        self.performPrestateValueTime[1] += 1
+        
+        
     def playHand(self): 
         if not self.gameActive:
             print(f"Game has already finished")
@@ -191,13 +245,17 @@ class dominoeGame:
         self.handNumber = np.mod(self.handNumber - 1, self.highestDominoe)
         return np.array([df.handValue(self.dominoes, agent.myHand) for agent in self.agents], dtype=int) # return score of hand
     
-    def playGame(self, rounds=None):
+    def playGame(self, rounds=None, withUpdates=False):
         t = time.time()
         rounds = self.highestDominoe+1 if rounds is None else rounds
         self.score = np.zeros((rounds,self.numPlayers),dtype=int)
         self.prepareScoreTime[0] += time.time()-t
         self.prepareScoreTime[1] += 1
-        for idxRound in range(rounds):
+        if withUpdates:
+            roundCounter = tqdm(range(rounds))
+        else:
+            roundCounter = range(rounds)
+        for idxRound in roundCounter:
             handScore = self.playHand()
             self.score[idxRound] = handScore
         self.currentScore = np.sum(self.score,axis=0)
