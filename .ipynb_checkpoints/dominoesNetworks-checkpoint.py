@@ -77,3 +77,39 @@ class valueNetwork(nn.Module):
             cw = torch.flatten(cw,1)
             deltaWeights.append(torch.norm(cw-iw,dim=1))
         return deltaWeights
+    
+    
+    
+class handValueNetwork(nn.Module):
+    """
+    MLP that predicts hand value or end score from gameState on each turn in the dominoesGame
+    Number of players and number of dominoes can vary, and it uses dominoesFunctions to figure out what the dimensions are
+    (but I haven't come up with a smart way to construct the network yet for variable players and dominoes, so any learning is specific to that combination...)
+    # --inherited-- Activation function is Relu by default (but can be chosen with hiddenactivation). 
+    # --inherited-- Output activation function is identity, because we're using CrossEntropyLoss
+    """
+    def __init__(self,numPlayers,numDominoes,highestDominoe,weightPrms=(0.,0.1),biasPrms=0.,actFunc=F.relu):
+        super().__init__()
+        self.numPlayers = numPlayers
+        self.numDominoes = numDominoes
+        self.highestDominoe = highestDominoe
+        self.inputDimension = 2*numDominoes
+        self.outputDimension = 2 # my hand value, other hand value
+        
+        # create layers (all linear fully connected)
+        numHidden = 200
+        self.fc1 = nn.Linear(self.inputDimension, numHidden)
+        self.fc4 = nn.Linear(numHidden, self.outputDimension)
+        torch.nn.init.normal_(self.fc1.weight, mean=weightPrms[0], std=weightPrms[1])
+        torch.nn.init.normal_(self.fc4.weight, mean=weightPrms[0], std=weightPrms[1])
+        torch.nn.init.constant_(self.fc1.bias, val=biasPrms)
+        torch.nn.init.constant_(self.fc4.bias, val=biasPrms)
+        
+        # create special layers
+        self.actFunc = actFunc
+        
+    def forward(self, x):
+        self.hidden1 = self.actFunc(self.fc1(x))
+        self.output = self.fc4(self.hidden1)
+        return self.output 
+    

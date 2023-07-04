@@ -181,7 +181,7 @@ class dominoeGame:
                 self.handActive=False
             self.played.append(dominoe) # update played dominoe list
             isDouble = self.dominoes[dominoe][0]==self.dominoes[dominoe][1] # is double played? 
-            playOnDummy = (location == -1) 
+            playOnDummy = (location == -1)
             if playOnDummy:
                 playDirection, nextAvailable = df.playDirection(self.dummyAvailable, self.dominoes[dominoe]) # returns which direction and next available value
                 self.dummySequence.append(dominoe)
