@@ -122,6 +122,63 @@ class dominoeGame:
         # performance monitoring
         self.initHandTime[0] += time.time()-t
         self.initHandTime[1] += 1
+    
+    def initHandFast(self):
+        t = time.time()
+        if not self.gameActive:
+            print(f"Game has already finished")
+            return
+        # reset values
+        self.playNumber = 0
+        self.terminateGameCounter = 0
+        self.handActive = True
+        # identify which dominoe is the first double
+        idxFirstDouble = np.where(np.all(self.dominoes==self.handNumber,axis=1))[0]
+        assert len(idxFirstDouble)==1, "more or less than 1 double identified as first..."
+        idxFirstDouble = idxFirstDouble[0]
+        assignments = self.distribute() # distribute dominoes randomly
+        idxFirstPlayer = np.where([idxFirstDouble in assignment for assignment in assignments])[0][0] # find out which player has the first double
+        assignments[idxFirstPlayer] = np.delete(assignments[idxFirstPlayer], assignments[idxFirstPlayer]==idxFirstDouble) # remove it from their hand
+        self.assignDominoes(assignments) # serve dominoes to agents
+        self.nextPlayer = idxFirstPlayer # keep track of whos turn it is
+        # prepare initial gameState arrays --- 
+        # --- in the "fast" version, everything is already in boolean arrays, which will be updated directly rather than making lists of integers and creating boolean arrays then (by each agent, which is slower (probably)) ---
+        self.played = np.full(self.numDominoes, 0)
+        self.played[idxFirstDouble] = 1
+        self.available = np.full((self.numPlayers, self.highestDominoe), 0)
+        self.available[:,self.handNumber]=1
+        self.handsize = np.array([len(assignment) for assignment in assignments], dtype=int) # how many dominoes in each hand
+        self.cantplay = np.full(self.numPlayers, 0) # whether or not each player has a penny up
+        self.didntplay = np.full(self.numPlayers, 0) # whether or not each player played last time
+        self.turncounter = np.full((self.numPlayers, self.numPlayers), 0)
+        self.turncounter[np.mod(np.arange(self.numPlayers)+idxFirstPlayer,self.numPlayers), np.arange(self.numPlayers)]=1
+        self.dummyAvailable = np.full(self.highestDominoe, 0)
+        self.dummyAvailable[idxFirstDouble] = 1
+        self.dummyPlayable = False # dummy is only playable when everyone has started their line
+        # prepare gameplay tracking arrays
+        self.lineSequence = [[]]*self.numPlayers # list of dominoes played by each player
+        self.linePlayDirection = [[]]*self.numPlayers # boolean for whether dominoe was played forward or backward
+        self.linePlayer = [[]]*self.numPlayers # which player played each dominoe
+        self.linePlayNumber = [[]]*self.numPlayers # which play (in the game) it was
+        self.dummySequence = [] # same as above for the dummy line
+        self.dummyPlayDirection = []
+        self.dummyPlayer = []
+        self.dummyPlayNumber = []
+        # performance monitoring
+        self.initHandTime[0] += time.time()-t
+        self.initHandTime[1] += 1
+        
+    def updateGameState(self, played, available, handsize, cantplay, didntplay, turncounter, dummyAvailable, dummyPlayable, dominoe, location, playerIndex):
+        # self.played, self.available, self.handsize, self.cantplay, self.didntplay, self.turncounter, self.dummyAvailable, self.dummyPlayable)
+        # function for updating game state given 
+        
+        
+        
+        # this is the gameplay simulation engine, which can be used to update self.(--), or to sample a possible future state from the agents...
+        
+        
+        
+        return None
         
     def doTurn(self, updates=False):
         # notes on what information is ~currently~ encoded in gameState

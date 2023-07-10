@@ -97,12 +97,18 @@ class handValueNetwork(nn.Module):
         self.outputDimension = 2 # my hand value, other hand value
         
         # create layers (all linear fully connected)
-        numHidden = 200
+        numHidden = 800
         self.fc1 = nn.Linear(self.inputDimension, numHidden)
+        self.fc2 = nn.Linear(numHidden, numHidden)
+        self.fc3 = nn.Linear(numHidden, numHidden)
         self.fc4 = nn.Linear(numHidden, self.outputDimension)
         torch.nn.init.normal_(self.fc1.weight, mean=weightPrms[0], std=weightPrms[1])
+        torch.nn.init.normal_(self.fc2.weight, mean=weightPrms[0], std=weightPrms[1])
+        torch.nn.init.normal_(self.fc3.weight, mean=weightPrms[0], std=weightPrms[1])
         torch.nn.init.normal_(self.fc4.weight, mean=weightPrms[0], std=weightPrms[1])
         torch.nn.init.constant_(self.fc1.bias, val=biasPrms)
+        torch.nn.init.constant_(self.fc2.bias, val=biasPrms)
+        torch.nn.init.constant_(self.fc3.bias, val=biasPrms)
         torch.nn.init.constant_(self.fc4.bias, val=biasPrms)
         
         # create special layers
@@ -110,6 +116,8 @@ class handValueNetwork(nn.Module):
         
     def forward(self, x):
         self.hidden1 = self.actFunc(self.fc1(x))
-        self.output = self.fc4(self.hidden1)
+        self.hidden2 = self.actFunc(self.fc2(self.hidden1))
+        self.hidden3 = self.actFunc(self.fc3(self.hidden2))
+        self.output = self.fc4(self.hidden3)
         return self.output 
     

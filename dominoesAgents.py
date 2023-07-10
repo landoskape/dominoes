@@ -85,10 +85,10 @@ class dominoeAgent:
         self.dummyPlayable = dummyPlayable # bool determining whether the dummy line is playable
         self.processGameState()
         
-    def estimatePrestateValue(self):
+    def estimatePrestateValue(self,*args,**kwargs):
         return None
         
-    def processGameState(self):
+    def processGameState(self,*args,**kwargs):
         # processGameState method is always called, but either does nothing in this default case or transforms the input for the RL-Agent cases\ 
         return None 
     
