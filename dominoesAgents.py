@@ -25,7 +25,8 @@ class dominoeAgent:
     """
     
     # give this class a name so I can identify the class constructors
-    name='dominoeAgent'
+    className = 'dominoeAgent'
+    agentName = 'default'
     
     # initialization function
     def __init__(self, numPlayers, highestDominoe, dominoes, numDominoes, agentIndex, device=None):
@@ -87,6 +88,9 @@ class dominoeAgent:
         
     def estimatePrestateValue(self,*args,**kwargs):
         return None
+    
+    def updatePoststateValue(self,*args,**kwargs):
+        return None
         
     def processGameState(self,*args,**kwargs):
         # processGameState method is always called, but either does nothing in this default case or transforms the input for the RL-Agent cases\ 
@@ -111,15 +115,15 @@ class dominoeAgent:
         dummyOptions[self.myHand[idxPlayable]]=True*self.dummyPlayable
         return lineOptions,dummyOptions
            
-    def play(self):
-        dominoe, location = self.selectPlay()
+    def play(self, gameEngine=None):
+        dominoe, location = self.selectPlay(gameEngine)
         if dominoe is not None:
             assert dominoe in self.myHand, "dominoe selected to be played is not in hand"
             self.myHand = np.delete(self.myHand, self.myHand==dominoe)
             self.dominoesInHand()
         return dominoe, location
     
-    def selectPlay(self):
+    def selectPlay(self, gameEngine=None):
         # select dominoe to play, for the default class, the selection is random based on available plays
         lineOptions, dummyOptions = self.playOptions() # get options that are available
         idxPlayer, idxDominoe = np.where(lineOptions) # find where options are available
@@ -154,8 +158,8 @@ class dominoeAgent:
         print(self.handValues)
         
 
-        
 class greedyAgent(dominoeAgent):
+    agentName = 'greedyAgent'
     def optionValue(self, options):
         # convert option to play value using simplest method possible - the number of points on each dominoe
         return self.dominoeValue * options
@@ -165,6 +169,7 @@ class greedyAgent(dominoeAgent):
     
 
 class stupidAgent(dominoeAgent):
+    agentName = 'stupidAgent' 
     def optionValue(self, options):
         # convert option to play value using simplest method possible - the number of points on each dominoe
         return self.dominoeValue * options
@@ -174,8 +179,10 @@ class stupidAgent(dominoeAgent):
     
     
 class doubleAgent(dominoeAgent):
+    agentName = 'doubleAgent'
     def optionValue(self, options):
         # double agent treats any double opportunity as infinitely valuable (and greedily plays it when it can!)
+        # otherwise it plays the dominoe with the highest number of points
         optionValue = self.dominoeValue * options
         if np.any(self.dominoeDouble*options):
             optionValue[self.dominoeDouble*options]=np.inf
@@ -186,6 +193,7 @@ class doubleAgent(dominoeAgent):
         
         
 class valueAgent0(dominoeAgent):
+    agentName = 'valueAgent0'
     def specializedInit(self):
         # create binary arrays for presenting gamestate information to the RL networks
         self.binaryPlayed = np.zeros(self.numDominoes)
@@ -215,6 +223,62 @@ class valueAgent0(dominoeAgent):
         self.trackFinalScoreError = []
         self.requireUpdates = True
         
+    def selectPlay(self, gameEngine):
+        # first, identify valid play options
+        lineOptions, dummyOptions = self.playOptions() # get options that are available
+        idxPlayer, idxDominoe = np.where(lineOptions) # find where options are available
+        idxDummyDominoe = np.where(dummyOptions)[0]
+        idxDummy = -1 * np.ones(len(idxDummyDominoe), dtype=int)
+        # if no valid options available, return None
+        if len(idxPlayer)==0 and len(idxDummy)==0: 
+            return None,None
+        
+        numLineOptions = len(idxPlayer)
+        numDummyOptions = len(idxDummy)
+        lineOptionValue = self.optionValue(gameEngine)
+        
+        
+        
+        
+        
+        
+        
+        
+        # need to write this function! (especially optionValue)
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        # otherwise, process options to make choice
+        lineOptionValue = self.optionValue(lineOptions) # measure value of each option
+        dummyOptionValue = self.optionValue(dummyOptions)  
+        valuePlayers = lineOptionValue[idxPlayer, idxDominoe] # retrieve value of valid options
+        valueDummy = dummyOptionValue[idxDummyDominoe]
+        # concatenate lineIdx, dominoeIdx, optionValue
+        lineIdx = np.concatenate((idxPlayer, idxDummy))
+        dominoeIdx = np.concatenate((idxDominoe, idxDummyDominoe))
+        optionValue = np.concatenate((valuePlayers, valueDummy))
+        # make and return choice
+        idxChoice = self.makeChoice(optionValue)
+        return dominoeIdx[idxChoice], lineIdx[idxChoice] 
+    
+    def optionValue(self, dominoe, location, gameEngine):
+        # enter dominoe and location into gameEngine, return new gamestate
+        # with new gamestate, estimate value 
+        # return final score estimate for ~self~ only
+        # make choice will return the argmin of option value, attempting to bring about the lowest final score possible
+        nextState = gameEngine(dominoe, location)
+        played, available, handsize, cantplay, didntplay, turncounter, lineStarted, dummyAvailable, dummyPlayable = nextState[:-2] # (ignore 
+        return None
+    
+    def makeChoice(self, optionValue):
+        return np.argmin(optionValue)
+        
     def resetBinaries(self):
         self.binaryPlayed[:]=0
         self.binaryLineAvailable[:]=0
@@ -231,7 +295,7 @@ class valueAgent0(dominoeAgent):
         self.binaryDummyAvailable[self.dummyAvailable]=1 # indicate which value is available on the dummy line
         self.binaryHand[self.myHand]=1 # indicate which dominoes are present in hand
         
-    def estimatePrestateValue(self,trueHandValue):
+    def estimatePrestateValue(self, trueHandValue):
         # at the beginning of each turn, zero out the gradients 
         self.handValueNetwork.zero_grad()
         self.finalScoreNetwork.zero_grad()
