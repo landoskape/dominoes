@@ -307,8 +307,11 @@ class dominoeGameValueAgents:
         # if agents is not None: assert np.all([agent.name=='dominoeAgent' for agent in agents])
         self.agents = [None]*self.numPlayers
         for agentIdx,agent in enumerate(agents):
-            if isinstance(agent, da.dominoeAgent): 
+            if isinstance(agent, da.dominoeAgent):
+                assert (agent.numPlayers==numPlayers) and (agent.highestDominoe==highestDominoe), f"provided agent (agentIdx:{agentIdx}) did not have the correct number of players or dominoes"
                 self.agents[agentIdx] = agent
+                self.agents[agentIdx].agentIndex = agentIdx
+                self.agents[agentIdx].device = device
             else:
                 self.agents[agentIdx] = agent(numPlayers, highestDominoe, self.dominoes, self.numDominoes, agentIndex, device=device)
         # self.agents = [agent(numPlayers, highestDominoe, self.dominoes, self.numDominoes, agentIndex, device=device) for (agentIndex,agent) in enumerate(agents)]
