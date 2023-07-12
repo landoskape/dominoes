@@ -202,27 +202,18 @@ class valueAgent0(dominoeAgent):
         self.binaryHand = np.zeros(self.numDominoes)
         
         # initialize valueNetwork -- predicts next hand value of each player along with final score for each player (using omniscient information to begin with...) 
-        self.handValueNetwork = dnn.valueNetwork(self.numPlayers,self.numDominoes,self.highestDominoe)
         self.finalScoreNetwork = dnn.valueNetwork(self.numPlayers,self.numDominoes,self.highestDominoe)
-        self.handValueNetwork.to(self.device)
         self.finalScoreNetwork.to(self.device)
         
         # Prepare Training Functions & Optimizers
-        # self.handValueEligibility = [[torch.zeros(prms.shape) for prms in self.handValueNetwork.parameters()] for _ in range(self.handValueNetwork.outputDimension)]
-        self.handValueLoss = nn.SmoothL1Loss()
-        self.handValueOptimizer = torch.optim.SGD(self.handValueNetwork.parameters(), lr=1e-3)
         self.finalScoreEligibility = [[torch.zeros(prms.shape).to(self.device) for prms in self.finalScoreNetwork.parameters()] for _ in range(self.finalScoreNetwork.outputDimension)]
-        # self.finalScoreLoss = nn.SmoothL1Loss()
-        # self.finalScoreOptimizer = torch.optim.SGD(self.finalScoreNetwork.parameters(), lr=1e-3)
         
         # meta parameters
         self.lam = 0.5
         self.alpha = 1e-5
-        self.storeSelfHandvalueError = []
-        self.storeOtherHandvalueError = []
         self.trackFinalScoreError = []
         self.requireUpdates = True
-        
+    
     def selectPlay(self, gameEngine, game):
         # first, identify valid play options
         lineOptions, dummyOptions = self.playOptions() # get options that are available
@@ -235,7 +226,7 @@ class valueAgent0(dominoeAgent):
         # concatenate lineIdx, dominoeIdx, optionValue
         lineIdx = np.concatenate((idxPlayer, idxDummy))
         dominoeIdx = np.concatenate((idxDominoe, idxDummyDominoe))
-        # for each play option, simulate future gamestate and estimate value from it
+        # for each play option, simulate future gamestate and estimate value from it (without gradients)
         optionValue = np.zeros(len(lineIdx))
         for idx in range(len(lineIdx)):
             optionValue[idx] = self.optionValue(dominoeIdx[idx], lineIdx[idx], gameEngine) # for (dominoe,location) in zip(dominoeIdx,lineIdx)])
@@ -275,7 +266,12 @@ class valueAgent0(dominoeAgent):
         self.binaryDummyAvailable[self.dummyAvailable]=1 # indicate which value is available on the dummy line
         self.binaryHand[self.myHand]=1 # indicate which dominoes are present in hand
         self.valueNetworkInput = self.generateValueInput().to(self.device)
-        
+    
+    def generateValueInput(self):
+        valueNetworkInput = torch.tensor(np.concatenate((self.binaryHand, self.binaryPlayed, self.binaryLineAvailable.flatten(), self.binaryDummyAvailable, 
+                                            self.handsize, self.cantplay, self.didntplay, self.turncounter, np.array(self.dummyPlayable).reshape(-1)))).float()
+        return valueNetworkInput      
+    
     def estimatePrestateValue(self, trueHandValue):
         # at the beginning of each turn, zero out the gradients 
         self.finalScoreNetwork.zero_grad()
@@ -283,14 +279,14 @@ class valueAgent0(dominoeAgent):
         # predict V(S,w) of prestate using current weights
         self.finalScoreOutput = self.finalScoreNetwork(self.valueNetworkInput)
         
-        # for finalScore network, compute gradient of V(S,w) with respect to weights and add it to eligibility traces
+        # compute gradient of V(S,w) with respect to weights and add it to eligibility traces
         for idx,hvOutput in enumerate(self.finalScoreOutput):
             hvOutput.backward(retain_graph=True) # measure gradient of weights with respect to this output value
             for trace,prms in zip(self.finalScoreEligibility[idx], self.finalScoreNetwork.parameters()):
-                trace *= self.lam
-                trace += prms.grad
-                prms.grad[:] = 0 # reset gradients for each output of finalScoreNetwork
-                
+                trace *= self.lam # discount past eligibility traces by lambda
+                trace += prms.grad # add new gradient to eligibility trace
+                prms.grad[:] = 0 # reset gradients for parameters of finalScoreNetwork in between each backward call from the output
+    
     
     @torch.no_grad() # don't need to estimate any gradients here, that was done in estimatePrestateValue()!
     def updatePoststateValue(self,finalScore=None):
@@ -298,53 +294,17 @@ class valueAgent0(dominoeAgent):
             # if final score is none, then the game hasn't ended and we should learn from the poststate value estimate
             tdError = self.finalScoreNetwork(self.valueNetworkInput) - self.finalScoreOutput
         else:
+            # if the final score is an array, then we should shift its perspective and learn from the true difference in our penultimate estimate and the actual final score
             finalScore = torch.tensor(self.egocentric(finalScore)).to(self.device)
-            # if the final score is an array, then we should shift perspective and learn from the true difference in our last estimate and the actual final score
             tdError = finalScore - self.finalScoreOutput
         for idx,td in enumerate(tdError):
             for prmIdx,prms in enumerate(self.finalScoreNetwork.parameters()):
                 assert self.finalScoreEligibility[idx][prmIdx].shape == prms.shape, "oops!"
                 prms += self.alpha * self.finalScoreEligibility[idx][prmIdx] * td # TD(lambda) update rule
         if finalScore is not None:
+            # when the final score is provided (i.e. the game ended), then add the error between the penultimate estimate and the true final score to a list for performance monitoring
             self.trackFinalScoreError.append(torch.mean(torch.abs(finalScore-self.finalScoreOutput)).to('cpu'))
-        return None
-    
-    def generateValueInput(self):
-        valueNetworkInput = torch.tensor(np.concatenate((self.binaryHand, self.binaryPlayed, self.binaryLineAvailable.flatten(), self.binaryDummyAvailable, 
-                                            self.handsize, self.cantplay, self.didntplay, self.turncounter, np.array(self.dummyPlayable).reshape(-1)))).float()
-        return valueNetworkInput
-    
-    def updateModel(self, trueHandValue):#, currentScoreEstimate, previousScoreEstimate):
-        # Vanilla L1 loss for hand value network
-        loss = self.handValueLoss(self.handValueOutput, torch.tensor(self.egocentric(trueHandValue)).float().to(self.device))
-        loss.backward()
-        self.handValueOptimizer.step()
-        self.handValueOptimizer.zero_grad() # reset gradients
-        self.storeError.append(np.mean(np.abs(self.handValueOutput.detach().cpu().numpy() - trueHandValue))) 
-        
-        # TD-Lambda for final score network (with only 1 update at end of model)
-#         self.finalScoreOutput.backward() # add gradient of current prediction to weights
-#         for p in self.finalScoreNetwork.parameters():
-#             p.grad *= self.lam
-        
-        # # TD-Lambda for final score network (I think this is a bit different from TD-Lambda, but it's close?)
-        # for p in self.finalScoreNetwork.parameters():
-        #     p.grad *= self.lam
-        # loss = self.finalScoreLoss(self.valueNetworkOutput, target)
-        # loss.backward()
-        # self.optimizer.step()
-        # TD-Lambda for final score network
-        # t=0: 
-        #         measure jacobian of scoreEstimate with respect to weights
-        # at t=1: 
-        #         measure newJacobian of scoreEstimate with respect to weights
-        #         measure newScoreEstimate (if t=end, use true score)
-        #         multiply alpha * dot(scoreEstimateDifference, last jacobian)
-        #         update weights
-        #         
-        return None
-    
-                
+        return None      
     
         
         

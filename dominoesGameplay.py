@@ -278,7 +278,6 @@ class dominoeGame:
             
             
 class dominoeGameValueAgents:
-    # ------------------------- code for "fast" e.g. somewhat optimized(?) and structured for value aganets ----------------------
     def __init__(self, highestDominoe, infiniteGame=True, numPlayers=None, agents=None, defaultAgent=da.dominoeAgent, device=None):
         # store inputs
         assert (numPlayers is not None) or (agents is not None), "either numPlayers or agents need to be specified"
