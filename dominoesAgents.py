@@ -7,7 +7,7 @@ import torch
 import torchvision.transforms as transforms
 import torch.nn as nn
 import torch.nn.functional as F
-
+import pandas as pd
 
 # 1. one-hot of dominoes in hand
 # 2. one-hot of dominoes already played
@@ -143,6 +143,14 @@ class dominoeAgent:
         optionValue = np.concatenate((valuePlayers, valueDummy))
         # make and return choice
         idxChoice = self.makeChoice(optionValue)
+        
+        # if len(lineIdx)>0:
+        #     choiceHot = np.zeros(len(lineIdx))
+        #     choiceHot[idxChoice]=1
+        #     print(pd.DataFrame(data={'Location':lineIdx, 'Dominoe':[df.dominoesString(self.dominoes[didx]) for didx in dominoeIdx], 'OptionValue':optionValue, 'Choice':choiceHot}))
+        # else:
+        #     print('no options')
+            
         return dominoeIdx[idxChoice], lineIdx[idxChoice] 
         
     def optionValue(self, options):
@@ -209,8 +217,8 @@ class valueAgent0(dominoeAgent):
         self.finalScoreEligibility = [[torch.zeros(prms.shape).to(self.device) for prms in self.finalScoreNetwork.parameters()] for _ in range(self.finalScoreNetwork.outputDimension)]
         
         # meta parameters
-        self.lam = 0.5
-        self.alpha = 1e-5
+        self.lam = 0.9
+        self.alpha = 1e-4
         self.trackFinalScoreError = []
         self.requireUpdates = True
     
@@ -232,6 +240,14 @@ class valueAgent0(dominoeAgent):
             optionValue[idx] = self.optionValue(dominoeIdx[idx], lineIdx[idx], gameEngine) # for (dominoe,location) in zip(dominoeIdx,lineIdx)])
         # make choice and return
         idxChoice = self.makeChoice(optionValue)
+        
+        # if len(lineIdx)>0:
+        #     choiceHot = np.zeros(len(lineIdx))
+        #     choiceHot[idxChoice]=1
+        #     print(pd.DataFrame(data={'Location':lineIdx, 'Dominoe':[df.dominoesString(self.dominoes[didx]) for didx in dominoeIdx], 'OptionValue':optionValue, 'Choice':choiceHot}))
+        # else:
+        #     print('no options')
+            
         return dominoeIdx[idxChoice], lineIdx[idxChoice] 
     
     def optionValue(self, dominoe, location, gameEngine):
