@@ -2,6 +2,7 @@ import time
 from functools import partial
 import numpy as np
 from tqdm import tqdm
+from copy import copy
 
 import dominoesFunctions as df
 import dominoesAgents as da
@@ -397,10 +398,12 @@ class dominoeGameValueAgents:
         self.initHandTime[1] += 1
         
         
-    def updateGameState(self, dominoe, location, playerIndex, gameState, playInfo=False):
+    def updateGameState(self, dominoe, location, playerIndex, gameState, copyData=True, playInfo=False):
         # function for updating game state given a dominoe index, a location, and the playerIndex playing the dominoe
         # this is the gameplay simulation engine, which can be used to update self.(--), or to sample a possible future state from the agents...
         
+        # do this to prevent simulation from overwriting game variables
+        if copyData: gameState = [copy(gs) for gs in gameState]
         played, available, handSize, cantPlay, didntPlay, turnCounter, lineStarted, dummyAvailable, dummyPlayable = gameState # unfold gameState input 
         
         if dominoe is None:
@@ -492,13 +495,13 @@ class dominoeGameValueAgents:
         t = time.time()
         gameState = self.played, self.available, self.handSize, self.cantPlay, self.didntPlay, self.turnCounter, self.lineStarted, self.dummyAvailable, self.dummyPlayable
         gameEngine = partial(self.updateGameState, playerIndex=self.nextPlayer, gameState=gameState)
-        dominoe, location = self.agents[self.nextPlayer].play(gameEngine)
+        dominoe, location = self.agents[self.nextPlayer].play(gameEngine, self)
         self.agentPlayTime[0] += time.time()-t
         self.agentPlayTime[1] += 1
         
         # 4. given play, update game state
         t = time.time()
-        gameState = self.updateGameState(dominoe, location, self.nextPlayer, gameState, playInfo=True)
+        gameState = self.updateGameState(dominoe, location, self.nextPlayer, gameState, copyData=False, playInfo=True)
         self.played, self.available, self.handSize, self.cantPlay, self.didntPlay, self.turnCounter, self.lineStarted, self.dummyAvailable, self.dummyPlayable = gameState[:-3]
         playDirection, nextAvailable, moveToNextPlayer = gameState[-3:]
         self.updateGameStateTime[0] += time.time()-t

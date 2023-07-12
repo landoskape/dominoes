@@ -115,15 +115,15 @@ class dominoeAgent:
         dummyOptions[self.myHand[idxPlayable]]=True*self.dummyPlayable
         return lineOptions,dummyOptions
            
-    def play(self, gameEngine=None):
-        dominoe, location = self.selectPlay(gameEngine)
+    def play(self, gameEngine=None, game=None):
+        dominoe, location = self.selectPlay(gameEngine=gameEngine, game=game)
         if dominoe is not None:
             assert dominoe in self.myHand, "dominoe selected to be played is not in hand"
             self.myHand = np.delete(self.myHand, self.myHand==dominoe)
             self.dominoesInHand()
         return dominoe, location
     
-    def selectPlay(self, gameEngine=None):
+    def selectPlay(self, gameEngine=None, game=None):
         # select dominoe to play, for the default class, the selection is random based on available plays
         lineOptions, dummyOptions = self.playOptions() # get options that are available
         idxPlayer, idxDominoe = np.where(lineOptions) # find where options are available
@@ -223,7 +223,7 @@ class valueAgent0(dominoeAgent):
         self.trackFinalScoreError = []
         self.requireUpdates = True
         
-    def selectPlay(self, gameEngine):
+    def selectPlay(self, gameEngine, game):
         # first, identify valid play options
         lineOptions, dummyOptions = self.playOptions() # get options that are available
         idxPlayer, idxDominoe = np.where(lineOptions) # find where options are available
@@ -232,38 +232,14 @@ class valueAgent0(dominoeAgent):
         # if no valid options available, return None
         if len(idxPlayer)==0 and len(idxDummy)==0: 
             return None,None
-        
-        numLineOptions = len(idxPlayer)
-        numDummyOptions = len(idxDummy)
-        lineOptionValue = self.optionValue(gameEngine)
-        
-        
-        
-        
-        
-        
-        
-        
-        # need to write this function! (especially optionValue)
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        # otherwise, process options to make choice
-        lineOptionValue = self.optionValue(lineOptions) # measure value of each option
-        dummyOptionValue = self.optionValue(dummyOptions)  
-        valuePlayers = lineOptionValue[idxPlayer, idxDominoe] # retrieve value of valid options
-        valueDummy = dummyOptionValue[idxDummyDominoe]
         # concatenate lineIdx, dominoeIdx, optionValue
         lineIdx = np.concatenate((idxPlayer, idxDummy))
         dominoeIdx = np.concatenate((idxDominoe, idxDummyDominoe))
-        optionValue = np.concatenate((valuePlayers, valueDummy))
-        # make and return choice
+        # for each play option, simulate future gamestate and estimate value from it
+        optionValue = np.zeros(len(lineIdx))
+        for idx in range(len(lineIdx)):
+            optionValue[idx] = self.optionValue(dominoeIdx[idx], lineIdx[idx], gameEngine) # for (dominoe,location) in zip(dominoeIdx,lineIdx)])
+        # make choice and return
         idxChoice = self.makeChoice(optionValue)
         return dominoeIdx[idxChoice], lineIdx[idxChoice] 
     
@@ -273,8 +249,12 @@ class valueAgent0(dominoeAgent):
         # return final score estimate for ~self~ only
         # make choice will return the argmin of option value, attempting to bring about the lowest final score possible
         nextState = gameEngine(dominoe, location)
-        played, available, handsize, cantplay, didntplay, turncounter, lineStarted, dummyAvailable, dummyPlayable = nextState[:-2] # (ignore 
-        return None
+        played, available, handSize, cantPlay, didntPlay, turnCounter, lineStarted, dummyAvailable, dummyPlayable = nextState
+        self.gameState(played, available, handSize, cantPlay, didntPlay, turnCounter, dummyAvailable, dummyPlayable)
+        with torch.no_grad():
+            valueNetworkInput = self.generateValueInput().to(self.device)
+            finalScoreOutput = self.finalScoreNetwork(valueNetworkInput)
+        return finalScoreOutput[0]
     
     def makeChoice(self, optionValue):
         return np.argmin(optionValue)
@@ -294,27 +274,14 @@ class valueAgent0(dominoeAgent):
             self.binaryLineAvailable[lineIdx,dominoeIdx]=1 # indicate which value is available on each line
         self.binaryDummyAvailable[self.dummyAvailable]=1 # indicate which value is available on the dummy line
         self.binaryHand[self.myHand]=1 # indicate which dominoes are present in hand
+        self.valueNetworkInput = self.generateValueInput().to(self.device)
         
     def estimatePrestateValue(self, trueHandValue):
         # at the beginning of each turn, zero out the gradients 
-        self.handValueNetwork.zero_grad()
         self.finalScoreNetwork.zero_grad()
         
-        # predict prestate value and update eligibility trace
-        self.valueNetworkInput = self.generateValueInput().to(self.device) # convert gameState info into proper input to network
-        
         # predict V(S,w) of prestate using current weights
-        self.handValueOutput = self.handValueNetwork(self.valueNetworkInput)
         self.finalScoreOutput = self.finalScoreNetwork(self.valueNetworkInput)
-        
-        # for handValue network, learn with vanilla L1 loss between estimate and trueHandValues
-        trueHandValue = self.egocentric(trueHandValue)
-        loss = self.handValueLoss(self.handValueOutput, torch.tensor(trueHandValue).float().to(self.device))
-        loss.backward()
-        self.handValueOptimizer.step()
-        self.handValueOptimizer.zero_grad() # reset gradients
-        self.storeSelfHandvalueError.append(self.handValueOutput.detach().cpu().numpy()[0] - trueHandValue[0]) # store difference in own hand value estimate and true hand value
-        self.storeOtherHandvalueError.append(np.mean(self.handValueOutput.detach().cpu().numpy()[1:].sum() - trueHandValue[1:].sum())) # store average difference between total other hand value est. and true
         
         # for finalScore network, compute gradient of V(S,w) with respect to weights and add it to eligibility traces
         for idx,hvOutput in enumerate(self.finalScoreOutput):
@@ -324,8 +291,6 @@ class valueAgent0(dominoeAgent):
                 trace += prms.grad
                 prms.grad[:] = 0 # reset gradients for each output of finalScoreNetwork
                 
-        # end of estimatePrestateValue()
-        return None
     
     @torch.no_grad() # don't need to estimate any gradients here, that was done in estimatePrestateValue()!
     def updatePoststateValue(self,finalScore=None):
@@ -336,8 +301,6 @@ class valueAgent0(dominoeAgent):
             finalScore = torch.tensor(self.egocentric(finalScore)).to(self.device)
             # if the final score is an array, then we should shift perspective and learn from the true difference in our last estimate and the actual final score
             tdError = finalScore - self.finalScoreOutput
-            #print(finalScore)
-            #print(self.finalScoreOutput)
         for idx,td in enumerate(tdError):
             for prmIdx,prms in enumerate(self.finalScoreNetwork.parameters()):
                 assert self.finalScoreEligibility[idx][prmIdx].shape == prms.shape, "oops!"
