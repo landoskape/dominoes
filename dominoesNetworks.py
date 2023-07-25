@@ -5,6 +5,53 @@ from torch import nn
 from torchvision import models, transforms
 import dominoesFunctions as df
 
+
+class lineRepresentationNetwork(nn.Module):
+    def __init__(self, numPlayers, numDominoes, highestDominoe, weightPrms=(0.,0.1),biasPrms=0.,actFunc=F.relu,pDropout=0):
+        super().__init__()
+        self.numPlayers = numPlayers
+        self.numDominoes = numDominoes
+        self.highestDominoe = highestDominoe
+        self.numOutputCNN = 1000
+        self.inputDimension = 2*numDominoes + (highestDominoe+1)*(numPlayers+1) + 4*numPlayers + 1 + self.numOutputCNN # see dominoesAgents>generateValueInput() for explanation of why this dimensionality
+        self.outputDimension = numPlayers
+        self.actFunc = actFunc
+        
+        # the lineRepresentationValue gets passed through a 1d convolutional network
+        # this will transform the (numDominoe, numLineFeatures) input representation into an (numOutputChannels, numLineFeatures) output representation
+        # then, this can be passed as an extra input into a FF network
+        # the point is to use the same weights on the representations of every single dominoe, then process these transformed representations into the rest of the network
+        numLineFeatures = 6
+        numOutputChannels = 10
+        numOutputValues = numOutputChannels * numDominoes
+        self.cnn_c1 = nn.Conv1d(numLineFeatures, numOutputChannels, 1)
+        self.cnn_f1 = nn.Linear(numOutputValues, self.numOutputCNN)
+        self.cnn_ln = nn.LayerNorm((self.numOutputCNN)) # do layer normalization on cnn outputs -- which will change in scale depending on number 
+        
+        self.cnnLayer = nn.Sequential(self.cnn_c1, nn.ReLU(), nn.Flatten(start_dim=0), self.cnn_f1, nn.ReLU(), self.cnn_ln)
+        
+        # create ff network that integrates the standard network input with the convolutional output
+        self.fc1 = nn.Linear(self.inputDimension, 1000)
+        self.fc2 = nn.Linear(1000, 500)
+        self.fc3 = nn.Linear(500, 500)
+        self.fc4 = nn.Linear(500, self.outputDimension)
+        torch.nn.init.normal_(self.fc1.weight, mean=weightPrms[0], std=weightPrms[1])
+        torch.nn.init.normal_(self.fc2.weight, mean=weightPrms[0], std=weightPrms[1])
+        torch.nn.init.normal_(self.fc3.weight, mean=weightPrms[0], std=weightPrms[1])
+        torch.nn.init.normal_(self.fc4.weight, mean=weightPrms[0], std=weightPrms[1])
+        torch.nn.init.constant_(self.fc1.bias, val=biasPrms)
+        torch.nn.init.constant_(self.fc2.bias, val=biasPrms)
+        torch.nn.init.constant_(self.fc4.bias, val=biasPrms)
+        torch.nn.init.constant_(self.fc4.bias, val=biasPrms)
+        
+        self.ffLayer = nn.Sequential(self.fc1, nn.ReLU(), self.fc2, nn.ReLU(), self.fc3, nn.ReLU(), self.fc4)
+
+    def forward(self, x, y):
+        cnnOutput = self.cnnLayer(x)
+        netOutput = self.ffLayer(torch.cat((cnnOutput,y)))
+        return netOutput
+    
+        
 class valueNetwork(nn.Module):
     """
     MLP that predicts hand value or end score from gameState on each turn in the dominoesGame
