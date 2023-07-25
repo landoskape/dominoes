@@ -1,5 +1,10 @@
-import numpy as np
+from copy import copy
 import itertools
+import numpy as np
+
+def softmax(values):
+    ev = np.exp(values - np.max(values))
+    return ev / np.sum(ev)
 
 def playDirection(available, dominoe):
     # available=the value available on a line
@@ -60,3 +65,51 @@ def gameSequenceToString(dominoes, sequence, direction, player=None, playNumber=
         if playNumber is not None:
             sequenceString = [seqString+f" P:{cplay}" for seqString,cplay in zip(sequenceString,playNumber[idx])]
         print(sequenceString)
+        
+def constructLineRecursive(hand, available, previousPlayed=[], previousDirection=[], maxLineLength=None):
+    # if there are too many dominoes in hand, constructing all possible lines takes way too long...
+    if (maxLineLength is not None) and (len(previousPlayed)==maxLineLength): 
+        return [previousPlayed], [previousDirection]
+    
+    # recursively constructs all possible lines given a hand (value pairs in list), an available value to play on, and the previous played/direction dominoe index sequences
+    possiblePlays = np.where(np.any(hand==available,axis=1) & ~np.isin(np.arange(len(hand)), previousPlayed))[0]
+    
+    # if there are no possible plays, the return the finished sequence
+    if len(possiblePlays)==0: return [previousPlayed], [previousDirection]
+    
+    # otherwise, make new lines for each possible play 
+    played = []
+    direction = []
+    for idxPlay in possiblePlays:
+        # if the first value of the possible play matches the available, then play it in the forward direction
+        if hand[idxPlay][0]==available:
+            # copy previousPlayed and previousDirection, append new play in forward direction to it
+            cplay = copy(previousPlayed)
+            cplay.append(idxPlay)
+            cdir = copy(previousDirection)
+            cdir.append(0)
+            # then recursively construct line from this standpoint
+            cPlayed, cDirection = constructLineRecursive(hand, hand[idxPlay][1], previousPlayed=cplay, previousDirection=cdir, maxLineLength=maxLineLength)
+            # once lines are constructed, add them all to "played" and "direction", which will be a list of lists of all possible sequences
+            for cnp,cnd in zip(cPlayed, cDirection):
+                played.append(cnp)
+                direction.append(cnd)
+                
+        # if the second value of the possible play matches the available and it isn't a double, then play it in the reverse direction (all same except direction and next available)
+        if (hand[idxPlay][0]!=hand[idxPlay][1]) and (hand[idxPlay][1]==available):
+            cplay = copy(previousPlayed)
+            cplay.append(idxPlay)
+            cdir = copy(previousDirection)
+            cdir.append(1)
+            cPlayed, cDirection = constructLineRecursive(hand, hand[idxPlay][0], previousPlayed=cplay, previousDirection=cdir, maxLineLength=maxLineLength)
+            for cnp,cnd in zip(cPlayed, cDirection):
+                played.append(cnp)
+                direction.append(cnd)
+    
+    # return :)
+    return played, direction
+
+
+
+
+
