@@ -36,7 +36,22 @@ class dominoeGame:
         if agents is not None: assert len(agents)==self.numPlayers, "number of agents provided is not equal to number of players"
         if agents is not None: agents = [agent if hasattr(agent,'className') and agent.className=='dominoeAgent' else defaultAgent for agent in agents]
         # if agents is not None: assert np.all([agent.name=='dominoeAgent' for agent in agents])
-        self.agents = [agent(numPlayers, highestDominoe, self.dominoes, self.numDominoes, agentIndex, device=device) for (agentIndex,agent) in enumerate(agents)]
+        self.agents = [None]*self.numPlayers
+        for agentIdx,agent in enumerate(agents):
+            if isinstance(agent, da.dominoeAgent):
+                assert (agent.numPlayers==numPlayers) and (agent.highestDominoe==highestDominoe), f"provided agent (agentIdx:{agentIdx}) did not have the correct number of players or dominoes"
+                self.agents[agentIdx] = agent
+                self.agents[agentIdx].agentIndex = agentIdx
+                self.agents[agentIdx].device = device
+            else:
+                self.agents[agentIdx] = agent(numPlayers, highestDominoe, self.dominoes, self.numDominoes, agentIdx, device=device)
+        
+        # # create agents (let's be smarter about this and provide dictionaries with parameters etc etc, but for now it's okay)
+        # if agents is None: agents = [defaultAgent]*self.numPlayers
+        # if agents is not None: assert len(agents)==self.numPlayers, "number of agents provided is not equal to number of players"
+        # if agents is not None: agents = [agent if hasattr(agent,'className') and agent.className=='dominoeAgent' else defaultAgent for agent in agents]
+        # # if agents is not None: assert np.all([agent.name=='dominoeAgent' for agent in agents])
+        # self.agents = [agent(numPlayers, highestDominoe, self.dominoes, self.numDominoes, agentIndex, device=device) for (agentIndex,agent) in enumerate(agents)]
         
         # these are unnecessary because the math is correct, but might as well keep it as a low-cost sanity check
         assert len(self.dominoes)==self.numDominoes, "the number of dominoes isn't what is expected!"
@@ -313,7 +328,7 @@ class dominoeGameValueAgents:
                 self.agents[agentIdx].agentIndex = agentIdx
                 self.agents[agentIdx].device = device
             else:
-                self.agents[agentIdx] = agent(numPlayers, highestDominoe, self.dominoes, self.numDominoes, agentIndex, device=device)
+                self.agents[agentIdx] = agent(numPlayers, highestDominoe, self.dominoes, self.numDominoes, agentIdx, device=device)
         # self.agents = [agent(numPlayers, highestDominoe, self.dominoes, self.numDominoes, agentIndex, device=device) for (agentIndex,agent) in enumerate(agents)]
         
         # these are unnecessary because the math is correct, but might as well keep it as a low-cost sanity check
