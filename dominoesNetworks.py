@@ -5,7 +5,6 @@ from torch import nn
 from torchvision import models, transforms
 import dominoesFunctions as df
 
-
 class lineRepresentationNetwork(nn.Module):
     def __init__(self, numPlayers, numDominoes, highestDominoe, weightPrms=(0.,0.1),biasPrms=0.,actFunc=F.relu,pDropout=0):
         super().__init__()

@@ -5,6 +5,8 @@ import torch
 import dominoesFunctions as df
 import dominoesNetworks as dnn
 
+from datetime import datetime
+
 
 class dominoeAgent:
     """
@@ -47,6 +49,19 @@ class dominoeAgent:
         
         # specialized initialization functions 
         self.specializedInit()
+    
+    def vars(self):
+        attributesInVars = ['numPlayers', 'highestDominoe', 'dominoes', 'numDominoes']
+        var = {}
+        for att in attributesInVars: 
+            var[att]=getattr(self, att)
+        specialVars = self.specialVars()
+        for key,val in specialVars.items():
+            var[key]=val
+        return var
+    
+    def specialVars(self):
+        return {}
         
     def specializedInit(self):
         # can be edited for each agent
@@ -579,12 +594,32 @@ class lineValueAgent(dominoeAgent):
             # when the final score is provided (i.e. the game ended), then add the error between the penultimate estimate and the true final score to a list for performance monitoring
             self.trackFinalScoreError.append(torch.mean(torch.abs(finalScore-self.finalScoreOutput)).to('cpu'))
         return None   
+    
+    def saveAgentParameters(self, path):
+        saveDate = datetime.now().strftime('%y%m%d')
+        modelName = f"lineValueAgentParameters_{saveDate}"
+        networkParameters = self.finalScoreNetwork.state_dict()
+        agentParameters = self.vars()
+        parameters = np.array([agentParameters, networkParameters])
+        np.save(path / modelName, parameters) 
+        
+    def loadAgentParameters(self, path):
+        parameters = np.load(path,allow_pickle=True)
+        unmutableAttributes = ['numPlayers', 'highestDominoe', 'dominoes', 'numDominoes']
+        for uatt in unmutableAttributes:
+            if not(np.array_equal(parameters[0][uatt],getattr(self, uatt))):
+                raise ValueError(f"Mismatched attribute: {uatt}")
+        for key in parameters[0].keys():
+            setattr(self, key, parameters[0][key])
+        self.finalScoreNetwork.load_state_dict(parameters[1])
 
-
-    
-    
-    
-    
+    def specialVars(self):
+        specialVarAttributes = ['inLineDiscount', 'offLineDiscount', 'lineTemperature', 'maxLineLength', 'lam', 'alpha']
+        specialVars = {}
+        for svatt in specialVarAttributes:
+            specialVars[svatt] = getattr(self, svatt)
+        return specialVars
+        
     
     
     
