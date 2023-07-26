@@ -14,7 +14,7 @@ class lineRepresentationNetwork(nn.Module):
         self.highestDominoe = highestDominoe
         self.numOutputCNN = 1000
         self.inputDimension = 2*numDominoes + (highestDominoe+1)*(numPlayers+1) + 4*numPlayers + 1 + self.numOutputCNN # see dominoesAgents>generateValueInput() for explanation of why this dimensionality
-        self.outputDimension = numPlayers
+        self.outputDimension = 1
         self.actFunc = actFunc
         
         # the lineRepresentationValue gets passed through a 1d convolutional network

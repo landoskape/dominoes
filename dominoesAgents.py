@@ -453,7 +453,7 @@ class lineValueAgent(dominoeAgent):
         self.myHand = np.append(self.myHand, dominoe)
         self.dominoesInHand()
         # return optionValue
-        return finalScoreOutput[0]
+        return finalScoreOutput
     
     def makeChoice(self, optionValue):
         return np.argmin(optionValue)
@@ -569,7 +569,7 @@ class lineValueAgent(dominoeAgent):
             tdError = self.finalScoreNetwork(self.lineValueInput, self.gameStateInput) - self.finalScoreOutput
         else:
             # if the final score is an array, then we should shift its perspective and learn from the true difference in our penultimate estimate and the actual final score
-            finalScore = torch.tensor(self.egocentric(finalScore)).to(self.device)
+            finalScore = torch.tensor(self.egocentric(finalScore))[0].to(self.device)
             tdError = finalScore - self.finalScoreOutput
         for idx,td in enumerate(tdError):
             for prmIdx,prms in enumerate(self.finalScoreNetwork.parameters()):
