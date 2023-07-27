@@ -50,17 +50,17 @@ class dominoeAgent:
         # specialized initialization functions 
         self.specializedInit()
     
-    def vars(self):
-        attributesInVars = ['numPlayers', 'highestDominoe', 'dominoes', 'numDominoes']
-        var = {}
-        for att in attributesInVars: 
-            var[att]=getattr(self, att)
-        specialVars = self.specialVars()
-        for key,val in specialVars.items():
-            var[key]=val
-        return var
+    def agentParameters(self):
+        prmNames = ['numPlayers', 'highestDominoe', 'dominoes', 'numDominoes']
+        prm = {}
+        for key in prmNames: 
+            prm[key]=getattr(self, key)
+        specialPrms = self.specialParameters()
+        for key,val in specialPrms.items():
+            prm[key]=val
+        return prm
     
-    def specialVars(self):
+    def specialParameters(self):
         return {}
         
     def specializedInit(self):
@@ -613,12 +613,12 @@ class lineValueAgent(dominoeAgent):
             setattr(self, key, parameters[0][key])
         self.finalScoreNetwork.load_state_dict(parameters[1])
 
-    def specialVars(self):
-        specialVarAttributes = ['inLineDiscount', 'offLineDiscount', 'lineTemperature', 'maxLineLength', 'lam', 'alpha']
-        specialVars = {}
-        for svatt in specialVarAttributes:
-            specialVars[svatt] = getattr(self, svatt)
-        return specialVars
+    def specialParameters(self):
+        specialPrmNames = ['inLineDiscount', 'offLineDiscount', 'lineTemperature', 'maxLineLength', 'lam', 'alpha']
+        specialPrms = {}
+        for key in specialPrmNames:
+            specialPrms[key] = getattr(self, key)
+        return specialPrms
         
     
     

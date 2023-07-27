@@ -250,7 +250,6 @@ class dominoeGame:
         self.performPrestateValueTime[0] += time.time()-t
         self.performPrestateValueTime[1] += 1
         
-        
     def playHand(self): 
         if not self.gameActive:
             print(f"Game has already finished")
