@@ -86,18 +86,21 @@ class dominoeGame:
             agent.serve(assignment)
             
     def presentGameState(self):
-        for agent in self.agents:
-            agent.gameState(self.played, self.available, self.handsize, self.cantplay, self.didntplay, self.turncounter, self.dummyAvailable, self.dummyPlayable)
+        for idx, agent in enumerate(self.agents):
+            agent.gameState(self.played, self.available, self.handsize, self.cantplay, self.didntplay, self.turncounter, self.dummyAvailable, self.dummyPlayable, turnIdx=self.turncounter[idx])
             
     def performPrestateValueEstimate(self):
-        trueHandValue = np.array([np.sum(agent.handValues) for agent in self.agents])
-        for agent in self.agents:
-            agent.estimatePrestateValue(trueHandValue)
+        for idx, agent in enumerate(self.agents):
+            agent.estimatePrestateValue(turnIdx=self.turncounter[idx])
             
     def performPoststateValueUpdates(self):
+        for idx, agent in enumerate(self.agents):
+            agent.updatePoststateValue(finalScore=None, turnIdx=self.turncounter[idx])
+            
+    def performFinalScoreUpdates(self):
         finalScore = np.array([np.sum(agent.handValues) for agent in self.agents]) if not self.handActive else None
         for agent in self.agents:
-            agent.updatePoststateValue(finalScore=finalScore)
+            agent.updatePoststateValue(finalScore=finalScore, turnIdx=0) # force update by setting turnIdx to 0...
             
     def initializeHand(self):
         t = time.time()
@@ -141,49 +144,18 @@ class dominoeGame:
         self.initHandTime[1] += 1
         
     def doTurn(self, updates=False):
-        # notes on what information is ~currently~ encoded in gameState
-        # - played: list of indices of dominoes that have already been played
-        # - available: list of values on each line available for next play
-        # - handsize: list of values of numbers of dominoes in each hand
-        # - cantplay: boolean list of whether each line has a "penny up" meaning available for anyone to play on it
-        # - didntplay: boolean list of whether each player played last turn
-        # - turncounter: list of turns until each players turn
-        # - dummyAvailable: value available on dummy
-        # - dummyPlayable: whether dummy can be played on
-        # - handActive: boolean indicating whether current hand is happening or if it's over
-        
-        # notes on updates:
-        # -- convert gamestate values into things that are already prepared for the neural networks (except for reshaping)
-        # -- add secondary function to accept the gameplay and track data (lineSequence etc) --
-        
-        
         # state change trackers to determine what game states to change at end of turn
         moveToNextPlayer = False
         
         # 1. feed gameState to next agent
-        #print("Feed game state to every agent at beginning of doTurn()")
-        #print("This will probably require smarter handling of gamestate data to always be prepared for the networks...")
-        #print("Compute gradV(S,w)/w, compute V(S,w), compute eligibility (lambda * z(t-1) + gradV(S,w)/w")
-        #print("At end of doTurn(), compute V(S_t+1,w), compute tdError (switch V(S_t+1,w) to R_t+1 if end, compute w_t+1")
-        t = time.time()
         self.presentGameState() # present game state to every agent
-        #self.agents[self.nextPlayer].gameState(self.played, self.available, self.handsize, self.cantplay, self.didntplay, self.turncounter, self.dummyAvailable, self.dummyPlayable)    
-        self.presentGameStateTime[0] += time.time()-t
-        self.presentGameStateTime[1] += 1
         
         # 2. tell agent to perform prestate value estimation
-        t = time.time()
         self.performPrestateValueEstimate()
-        self.performPrestateValueTime[0] += time.time()-t
-        self.performPrestateValueTime[1] += 1
         
         # 3. request "play"
-        t = time.time()
         dominoe, location = self.agents[self.nextPlayer].play()
-        self.agentPlayTime[0] += time.time()-t
-        self.agentPlayTime[1] += 1
         
-        t = time.time()
         if dominoe is None:
             # if no play is available, penny up and move to next player
             self.cantplay[self.nextPlayer]=True
@@ -220,8 +192,6 @@ class dominoeGame:
             if not isDouble:
                 self.turncounter = np.roll(self.turncounter,1) # move turn counter to next player
                 moveToNextPlayer=True
-        self.processPlayTime[0] += time.time()-t
-        self.processPlayTime[1] += 1
         
         # 4. update general game state 
         self.playNumber += 1    
@@ -244,12 +214,11 @@ class dominoeGame:
             self.handActive = False
         
         # 5. tell agents to perform poststateValueUpdate
-        self.presentGameState() # present game state to every agent
-        t = time.time()
-        self.performPoststateValueUpdates()
-        self.performPrestateValueTime[0] += time.time()-t
-        self.performPrestateValueTime[1] += 1
-        
+        if self.handActive:
+            # if hand isn't over, present new game state and do poststate value updates
+            self.presentGameState() # present game state to every agent
+            self.performPoststateValueUpdates()
+            
     def playHand(self): 
         if not self.gameActive:
             print(f"Game has already finished")
@@ -257,7 +226,8 @@ class dominoeGame:
         self.initializeHand()
         # request plays from each agent until someone goes out or no more plays available
         while self.handActive:
-            self.doTurn()
+            self.doTurn()        
+        self.performFinalScoreUpdates() # when game is over, do a parameter update with the final score for each network
         self.handNumber = np.mod(self.handNumber - 1, self.highestDominoe+1)
         return np.array([df.handValue(self.dominoes, agent.myHand) for agent in self.agents], dtype=int) # return score of hand
     
@@ -364,19 +334,22 @@ class dominoeGameValueAgents:
         for agent,assignment in zip(self.agents,assignments): 
             agent.serve(assignment)
             
-    def presentGameState(self):
+    def presentGameState(self, currentPlayer):
         for agent in self.agents:
-            agent.gameState(self.played, self.available, self.handSize, self.cantPlay, self.didntPlay, self.turnCounter, self.dummyAvailable, self.dummyPlayable)
+            agent.gameState(self.played, self.available, self.handSize, self.cantPlay, self.didntPlay, self.turnCounter, self.dummyAvailable, self.dummyPlayable, currentPlayer=currentPlayer)
             
-    def performPrestateValueEstimate(self):
-        trueHandValue = np.array([np.sum(agent.handValues) for agent in self.agents])
+    def performPrestateValueEstimate(self, currentPlayer):
         for agent in self.agents:
-            agent.estimatePrestateValue(trueHandValue)
+            agent.estimatePrestateValue(currentPlayer=currentPlayer)
             
-    def performPoststateValueUpdates(self):
+    def performPoststateValueUpdates(self, currentPlayer):
+        for agent in self.agents:
+            agent.updatePoststateValue(finalScore=None, currentPlayer=currentPlayer)
+            
+    def performFinalScoreUpdates(self):
         finalScore = np.array([np.sum(agent.handValues) for agent in self.agents]) if not self.handActive else None
         for agent in self.agents:
-            agent.updatePoststateValue(finalScore=finalScore)
+            agent.updatePoststateValue(finalScore=finalScore, currentPlayer=agent.agentIndex) # force update by setting currentPlayer to agentIndex
             
     def initializeHand(self):
         t = time.time()
@@ -463,7 +436,6 @@ class dominoeGameValueAgents:
             return played, available, handSize, cantPlay, didntPlay, turnCounter, lineStarted, dummyAvailable, dummyPlayable
             
     
-    
     def documentGameplay(self, dominoe, location, playerIndex, playDirection, nextAvailable, moveToNextPlayer):
         # after updating gamestate, document gameplay
         if dominoe is not None:
@@ -501,46 +473,34 @@ class dominoeGameValueAgents:
             self.handActive=False
         
     def doTurn(self):
+        
+        # 0. Store index of agent who's turn it is
+        currentPlayer = copy(self.nextPlayer)
+        
         # 1. Present game state and gameplay simulation engine to every agent
-        t = time.time()
-        self.presentGameState()
-        self.presentGameStateTime[0] += time.time()-t
-        self.presentGameStateTime[1] += 1
+        self.presentGameState(currentPlayer)
         
         # 2. tell agent to perform prestate value estimation
-        t = time.time()
-        self.performPrestateValueEstimate()
-        self.performPrestateValueTime[0] += time.time()-t
-        self.performPrestateValueTime[1] += 1
+        self.performPrestateValueEstimate(currentPlayer)
         
         # 3. request "play"
-        t = time.time()
         gameState = self.played, self.available, self.handSize, self.cantPlay, self.didntPlay, self.turnCounter, self.lineStarted, self.dummyAvailable, self.dummyPlayable
         gameEngine = partial(self.updateGameState, playerIndex=self.nextPlayer, gameState=gameState)
         dominoe, location = self.agents[self.nextPlayer].play(gameEngine, self)
-        self.agentPlayTime[0] += time.time()-t
-        self.agentPlayTime[1] += 1
         
         # 4. given play, update game state
-        t = time.time()
         gameState = self.updateGameState(dominoe, location, self.nextPlayer, gameState, copyData=False, playInfo=True)
         self.played, self.available, self.handSize, self.cantPlay, self.didntPlay, self.turnCounter, self.lineStarted, self.dummyAvailable, self.dummyPlayable = gameState[:-3]
         playDirection, nextAvailable, moveToNextPlayer = gameState[-3:]
-        self.updateGameStateTime[0] += time.time()-t
-        self.updateGameStateTime[1] += 1
         
         # 5. document play
-        t = time.time()
         self.documentGameplay(dominoe, location, self.nextPlayer, playDirection, nextAvailable, moveToNextPlayer)
-        self.documentGameplayTime[0] += time.time()-t
-        self.documentGameplayTime[1] += 1
-        
+    
         # 6. implement poststateValueUpdates
-        t = time.time()
-        self.presentGameState() # present game state to every agent
-        self.performPoststateValueUpdates()
-        self.performPoststateValueTime[0] += time.time()-t
-        self.performPoststateValueTime[1] += 1
+        if self.handActive:
+            # if hand is still active, do poststate value updates
+            self.presentGameState(currentPlayer) # present game state to every agent
+            self.performPoststateValueUpdates(currentPlayer)
         
         
     def playHand(self):
@@ -550,6 +510,7 @@ class dominoeGameValueAgents:
         self.initializeHand()
         while self.handActive:
             self.doTurn()
+        self.performFinalScoreUpdates() # once hand is over, do final score parameter updates for each agent
             
         self.handNumber = np.mod(self.handNumber - 1, self.highestDominoe+1)
         return np.array([df.handValue(self.dominoes, agent.myHand) for agent in self.agents], dtype=int) # return score of hand

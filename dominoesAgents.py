@@ -77,7 +77,10 @@ class dominoeAgent:
         self.myHand = assignment
         self.dominoesInHand()
         
-    def gameState(self, played, available, handsize, cantplay, didntplay, turncounter, dummyAvailable, dummyPlayable):
+    def gameState(self, played, available, handsize, cantplay, didntplay, turncounter, dummyAvailable, dummyPlayable, currentPlayer=None):
+        # if turn idx isn't zero, then don't update game state
+        if (currentPlayer is not None) and (currentPlayer != self.agentIndex): return None
+        
         # gamestate input, served to the agent each time it requires action (either at it's turn, or each turn for an RNN)
         # each agent will transform these inputs into a "perspective" which converts them to agent-centric information about the game-state
         self.played = played # list of dominoes that have already been played
@@ -366,7 +369,10 @@ class valueAgent0(dominoeAgent):
                                             self.handsize, self.cantplay, self.didntplay, self.turncounter, np.array(self.dummyPlayable).reshape(-1)))).float()
         return valueNetworkInput      
     
-    def estimatePrestateValue(self, trueHandValue):
+    def estimatePrestateValue(self, currentPlayer=None):
+        # if turn idx isn't zero, then don't estimate prestate value
+        if (currentPlayer is not None) and (currentPlayer != self.agentIndex): return None
+    
         # at the beginning of each turn, zero out the gradients 
         self.finalScoreNetwork.zero_grad()
         
@@ -383,7 +389,11 @@ class valueAgent0(dominoeAgent):
     
     
     @torch.no_grad() # don't need to estimate any gradients here, that was done in estimatePrestateValue()!
-    def updatePoststateValue(self,finalScore=None):
+    def updatePoststateValue(self, finalScore=None, currentPlayer=None):
+        # if turn idx isn't zero, then don't estimate poststate value
+        if (currentPlayer is not None) and (currentPlayer != self.agentIndex): return None
+        
+        # otherwise, do post-state value update
         if finalScore is None: 
             # if final score is none, then the game hasn't ended and we should learn from the poststate value estimate
             tdError = self.finalScoreNetwork(self.valueNetworkInput) - self.finalScoreOutput
@@ -399,7 +409,6 @@ class valueAgent0(dominoeAgent):
             # when the final score is provided (i.e. the game ended), then add the error between the penultimate estimate and the true final score to a list for performance monitoring
             self.trackFinalScoreError.append(torch.mean(torch.abs(finalScore-self.finalScoreOutput)).to('cpu'))
         return None   
-    
     
     
 class lineValueAgent(dominoeAgent):
@@ -561,7 +570,10 @@ class lineValueAgent(dominoeAgent):
                                             self.handsize, self.cantplay, self.didntplay, self.turncounter, np.array(self.dummyPlayable).reshape(-1)))).float().to(self.device)
         return lineValueInput, gameStateInput
     
-    def estimatePrestateValue(self, trueHandValue):
+    def estimatePrestateValue(self, currentPlayer=None):
+        # if turn idx isn't zero, then don't estimate prestate value
+        if (currentPlayer is not None) and (currentPlayer != self.agentIndex): return None
+    
         # at the beginning of each turn, zero out the gradients 
         self.finalScoreNetwork.zero_grad()
         
@@ -578,7 +590,10 @@ class lineValueAgent(dominoeAgent):
     
     
     @torch.no_grad() # don't need to estimate any gradients here, that was done in estimatePrestateValue()!
-    def updatePoststateValue(self,finalScore=None):
+    def updatePoststateValue(self,finalScore=None, currentPlayer=None):
+        # if turn idx isn't zero, then don't estimate prestate value
+        if (currentPlayer is not None) and (currentPlayer != self.agentIndex): return None
+        
         if finalScore is None: 
             # if final score is none, then the game hasn't ended and we should learn from the poststate value estimate
             tdError = self.finalScoreNetwork(self.lineValueInput, self.gameStateInput) - self.finalScoreOutput
