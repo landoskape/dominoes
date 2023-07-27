@@ -76,10 +76,13 @@ class dominoeAgent:
         # serve receives an assignment (indices) of dominoes that make up my hand
         self.myHand = assignment
         self.dominoesInHand()
-        
-    def gameState(self, played, available, handsize, cantplay, didntplay, turncounter, dummyAvailable, dummyPlayable, currentPlayer=None):
+    
+    def checkTurnUpdate(self, currentPlayer):
         # if turn idx isn't zero, then don't update game state
-        if (currentPlayer is not None) and (currentPlayer != self.agentIndex): return None
+        return (currentPlayer is not None) and (currentPlayer == self.agentIndex)
+    
+    def gameState(self, played, available, handsize, cantplay, didntplay, turncounter, dummyAvailable, dummyPlayable, currentPlayer=None):
+        if not(self.checkTurnUpdate(currentPlayer)): return None
         
         # gamestate input, served to the agent each time it requires action (either at it's turn, or each turn for an RNN)
         # each agent will transform these inputs into a "perspective" which converts them to agent-centric information about the game-state
@@ -352,7 +355,11 @@ class valueAgent0(dominoeAgent):
         self.binaryLineAvailable[:]=0 
         self.binaryDummyAvailable[:]=0 
         self.binaryHand[:]=0 
-        
+     
+    def checkTurnUpdate(self, currentPlayer):
+        # if turn idx isn't zero, then don't update game state
+        return (currentPlayer is not None) and (currentPlayer == self.agentIndex)
+    
     # valueAgent0 uses a network model to predict: 1) the final score from the gameState at each turn (learning from the end), 2) and the current hand value of each player (using omniscient info)
     def processGameState(self):
         # vectorize game state data
@@ -370,8 +377,7 @@ class valueAgent0(dominoeAgent):
         return valueNetworkInput      
     
     def estimatePrestateValue(self, currentPlayer=None):
-        # if turn idx isn't zero, then don't estimate prestate value
-        if (currentPlayer is not None) and (currentPlayer != self.agentIndex): return None
+        if not(self.checkTurnUpdate(currentPlayer)): return None
     
         # at the beginning of each turn, zero out the gradients 
         self.finalScoreNetwork.zero_grad()
@@ -390,9 +396,8 @@ class valueAgent0(dominoeAgent):
     
     @torch.no_grad() # don't need to estimate any gradients here, that was done in estimatePrestateValue()!
     def updatePoststateValue(self, finalScore=None, currentPlayer=None):
-        # if turn idx isn't zero, then don't estimate poststate value
-        if (currentPlayer is not None) and (currentPlayer != self.agentIndex): return None
-        
+        if not(self.checkTurnUpdate(currentPlayer)): return None
+    
         # otherwise, do post-state value update
         if finalScore is None: 
             # if final score is none, then the game hasn't ended and we should learn from the poststate value estimate
@@ -435,8 +440,8 @@ class lineValueAgent(dominoeAgent):
         self.finalScoreEligibility = [[torch.zeros(prms.shape).to(self.device) for prms in self.finalScoreNetwork.parameters()] for _ in range(self.finalScoreNetwork.outputDimension)]
         
         # meta parameters
-        self.lam = 0.9
-        self.alpha = 1e-5
+        self.lam = 0.8
+        self.alpha = 3e-6
         self.trackFinalScoreError = []
         
     
@@ -570,9 +575,12 @@ class lineValueAgent(dominoeAgent):
                                             self.handsize, self.cantplay, self.didntplay, self.turncounter, np.array(self.dummyPlayable).reshape(-1)))).float().to(self.device)
         return lineValueInput, gameStateInput
     
+    def checkTurnUpdate(self, currentPlayer):
+        # if turn idx isn't zero, then don't update game state
+        return True # (currentPlayer is not None) and (currentPlayer == self.agentIndex)
+    
     def estimatePrestateValue(self, currentPlayer=None):
-        # if turn idx isn't zero, then don't estimate prestate value
-        if (currentPlayer is not None) and (currentPlayer != self.agentIndex): return None
+        if not(self.checkTurnUpdate(currentPlayer)): return None
     
         # at the beginning of each turn, zero out the gradients 
         self.finalScoreNetwork.zero_grad()
@@ -591,9 +599,8 @@ class lineValueAgent(dominoeAgent):
     
     @torch.no_grad() # don't need to estimate any gradients here, that was done in estimatePrestateValue()!
     def updatePoststateValue(self,finalScore=None, currentPlayer=None):
-        # if turn idx isn't zero, then don't estimate prestate value
-        if (currentPlayer is not None) and (currentPlayer != self.agentIndex): return None
-        
+        if not(self.checkTurnUpdate(currentPlayer)): return None
+    
         if finalScore is None: 
             # if final score is none, then the game hasn't ended and we should learn from the poststate value estimate
             tdError = self.finalScoreNetwork(self.lineValueInput, self.gameStateInput) - self.finalScoreOutput
