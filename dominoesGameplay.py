@@ -103,7 +103,6 @@ class dominoeGame:
             agent.updatePoststateValue(finalScore=finalScore, turnIdx=0) # force update by setting turnIdx to 0...
             
     def initializeHand(self):
-        t = time.time()
         if not self.gameActive:
             print(f"Game has already finished")
             return
@@ -139,9 +138,6 @@ class dominoeGame:
         self.dummyPlayDirection = []
         self.dummyPlayer = []
         self.dummyPlayNumber = []
-        # performance monitoring
-        self.initHandTime[0] += time.time()-t
-        self.initHandTime[1] += 1
         
     def doTurn(self, updates=False):
         # state change trackers to determine what game states to change at end of turn
@@ -352,7 +348,6 @@ class dominoeGameValueAgents:
             agent.updatePoststateValue(finalScore=finalScore, currentPlayer=agent.agentIndex) # force update by setting currentPlayer to agentIndex
             
     def initializeHand(self):
-        t = time.time()
         if not self.gameActive:
             print(f"Game has already finished")
             return
@@ -388,9 +383,6 @@ class dominoeGameValueAgents:
         self.dummyPlayDirection = []
         self.dummyPlayer = []
         self.dummyPlayNumber = []
-        # performance monitoring
-        self.initHandTime[0] += time.time()-t
-        self.initHandTime[1] += 1
         
         
     def updateGameState(self, dominoe, location, playerIndex, gameState, copyData=True, playInfo=False):
