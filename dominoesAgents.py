@@ -621,7 +621,7 @@ class lineValueAgent(dominoeAgent):
         saveDate = datetime.now().strftime('%y%m%d')
         modelName = f"lineValueAgentParameters_{saveDate}"
         networkParameters = self.finalScoreNetwork.state_dict()
-        agentParameters = self.vars()
+        agentParameters = self.agentParameters()
         parameters = np.array([agentParameters, networkParameters])
         np.save(path / modelName, parameters) 
         
