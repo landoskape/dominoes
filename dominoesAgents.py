@@ -1,3 +1,6 @@
+import re
+from glob import glob
+from datetime import datetime
 import random
 import itertools
 import numpy as np
@@ -5,9 +8,6 @@ import torch
 import dominoesFunctions as df
 import dominoesNetworks as dnn
 
-from datetime import datetime
-from glob import glob
-import re
 
 class dominoeAgent:
     """
@@ -51,42 +51,54 @@ class dominoeAgent:
         # specialized initialization functions 
         self.specializedInit()
     
-    def agentParameters(self):
-        prmNames = ['numPlayers', 'highestDominoe', 'dominoes', 'numDominoes']
-        prm = {}
-        for key in prmNames: 
-            prm[key]=getattr(self, key)
-        specialPrms = self.specialParameters()
-        for key,val in specialPrms.items():
-            prm[key]=val
-        return prm
-    
-    def specialParameters(self):
-        return {}
-        
     def specializedInit(self):
         # can be edited for each agent
         return None
     
-    def updateModel(self):
-        # default is no learning -- this can be overwritten in special RL agents
-        return None
+    # ------------------
+    # -- top level functions for managing metaparameters and saving of the agent --
+    # ------------------
+    def agentParameters(self):
+        prmNames = ['numPlayers', 'highestDominoe', 'dominoes', 'numDominoes']
+        prm = {}
+        for key in prmNames: prm[key]=getattr(self, key)
+        specialPrms = self.specialParameters()
+        for key,val in specialPrms.items(): prm[key]=val
+        return prm
     
-    # -- input from game manager --
+    def specialParameters(self):
+        # can be edited for each agent
+        return {}
+    
+    def dominoesInHand(self):
+        # simple function to return real values of dominoes from index of dominoes in hand
+        self.handValues = self.dominoes[self.myHand]
+    
+    def printHand(self):
+        print(self.myHand)
+        print(self.handValues)
+    
+    # ------------------
+    # -- functions to process gamestate --
+    # ------------------
     def serve(self, assignment):
         # serve receives an assignment (indices) of dominoes that make up my hand
         self.myHand = assignment
         self.dominoesInHand()
     
+    def egocentric(self, variable):
+        return variable[self.egoShiftIdx]
+        
     def checkTurnUpdate(self, currentPlayer):
         # if turn idx isn't zero, then don't update game state
         return (currentPlayer is not None) and (currentPlayer == self.agentIndex)
     
     def gameState(self, played, available, handsize, cantplay, didntplay, turncounter, dummyAvailable, dummyPlayable, currentPlayer=None, postState=None):
-        if not(self.checkTurnUpdate(currentPlayer)): return None
-        
         # gamestate input, served to the agent each time it requires action (either at it's turn, or each turn for an RNN)
-        # each agent will transform these inputs into a "perspective" which converts them to agent-centric information about the game-state
+        # agents convert these variables to agent-centric information about the game-state
+        if not(self.checkTurnUpdate(currentPlayer)): return None
+        if postState==True: return None
+        
         self.played = played # list of dominoes that have already been played
         self.available = self.egocentric(available) # list of value available on each players line (centered on agent)
         self.handsize = self.egocentric(handsize) # list of handsize for each player (centered on agent)
@@ -98,24 +110,32 @@ class dominoeAgent:
         self.processGameState(postState=postState)
     
     def processGameState(self,*args,**kwargs):
-        # processGameState method is always called, but either does nothing in this default case or transforms the input for the RL-Agent cases\ 
+        # edited on an agent by agent basis, nothing needed for the default agent 
         return None 
     
     def estimatePrestateValue(self,*args,**kwargs):
+        # edited on an agent by agent basis, nothing needed for the default agent 
         return None
     
     def updatePoststateValue(self,*args,**kwargs):
+        # edited on an agent by agent basis, nothing needed for the default agent 
         return None
     
-    # -- functions to process gamestate --
-    def egocentric(self, variable):
-        return variable[self.egoShiftIdx] 
+    # ------------------
+    # -- functions to choose and play a dominoe --
+    # ------------------
+    def makeChoice(self, optionValue):
+        # default behavior is to use thompson sampling (picking a dominoe to play randomly, weighted by value of dominoe)
+        return random.choices(range(len(optionValue)), k=1, weights=optionValue)[0]
     
-    def dominoesInHand(self):
-        self.handValues = self.dominoes[self.myHand]
+    def optionValue(self, options):
+        # convert option to play value using simplest method possible - value is 1 if option available
+        return 1*options
     
     def playOptions(self):
-        # generate list of playable options (starts as boolean, becomes value)
+        # generates list of playable options given game state 
+        # it produces a (numPlayers x numDominoes) array with True's indicating viable dominoe-location pairings
+        # (and also a (numDominoes,) array for the dummy line
         lineOptions = np.full((self.numPlayers, self.numDominoes), False)
         for idx,value in enumerate(self.available):
             if idx==0 or self.cantplay[idx]: 
@@ -125,14 +145,6 @@ class dominoeAgent:
         idxPlayable = np.where(np.any(self.handValues==self.dummyAvailable,axis=1))[0]
         dummyOptions[self.myHand[idxPlayable]]=True*self.dummyPlayable
         return lineOptions,dummyOptions
-           
-    def play(self, gameEngine=None, game=None):
-        dominoe, location = self.selectPlay(gameEngine=gameEngine, game=game)
-        if dominoe is not None:
-            assert dominoe in self.myHand, "dominoe selected to be played is not in hand"
-            self.myHand = np.delete(self.myHand, self.myHand==dominoe)
-            self.dominoesInHand()
-        return dominoe, location
     
     def selectPlay(self, gameEngine=None, game=None):
         # select dominoe to play, for the default class, the selection is random based on available plays
@@ -154,20 +166,19 @@ class dominoeAgent:
         optionValue = np.concatenate((valuePlayers, valueDummy))
         # make and return choice
         idxChoice = self.makeChoice(optionValue)
-        return dominoeIdx[idxChoice], lineIdx[idxChoice] 
-        
-    def optionValue(self, options):
-        # convert option to play value using simplest method possible - value is 1 if option available
-        return 1*options
+        return dominoeIdx[idxChoice], lineIdx[idxChoice]
     
-    def makeChoice(self, optionValue):
-        # default behavior is to use thompson sampling (picking a dominoe to play randomly, weighted by value of dominoe)
-        return random.choices(range(len(optionValue)), k=1, weights=optionValue)[0]
-        
-    def printHand(self):
-        print(self.myHand)
-        print(self.handValues)
-        
+    def play(self, gameEngine=None, game=None):
+        # this function is called by the gameplay object
+        # it is what's used to play a dominoe when it's this agents turn
+        dominoe, location = self.selectPlay(gameEngine=gameEngine, game=game)
+        if dominoe is not None:
+            assert dominoe in self.myHand, "dominoe selected to be played is not in hand"
+            self.myHand = np.delete(self.myHand, self.myHand==dominoe)
+            self.dominoesInHand()
+        return dominoe, location
+    
+    
 
 class greedyAgent(dominoeAgent):
     agentName = 'greedyAgent'
