@@ -85,9 +85,9 @@ class dominoeGame:
         for agent,assignment in zip(self.agents,assignments): 
             agent.serve(assignment)
             
-    def presentGameState(self):
+    def presentGameState(self, postState=False):
         for idx, agent in enumerate(self.agents):
-            agent.gameState(self.played, self.available, self.handsize, self.cantplay, self.didntplay, self.turncounter, self.dummyAvailable, self.dummyPlayable, turnIdx=self.turncounter[idx])
+            agent.gameState(self.played, self.available, self.handsize, self.cantplay, self.didntplay, self.turncounter, self.dummyAvailable, self.dummyPlayable, turnIdx=self.turncounter[idx], postState=postState)
             
     def performPrestateValueEstimate(self):
         for idx, agent in enumerate(self.agents):
@@ -470,7 +470,7 @@ class dominoeGameValueAgents:
         currentPlayer = copy(self.nextPlayer)
         
         # 1. Present game state and gameplay simulation engine to every agent
-        self.presentGameState(currentPlayer)
+        self.presentGameState(currentPlayer, postState=False)
         
         # 2. tell agent to perform prestate value estimation
         self.performPrestateValueEstimate(currentPlayer)
@@ -491,7 +491,7 @@ class dominoeGameValueAgents:
         # 6. implement poststateValueUpdates
         if self.handActive:
             # if hand is still active, do poststate value updates
-            self.presentGameState(currentPlayer) # present game state to every agent
+            self.presentGameState(currentPlayer, postState=True) # present game state to every agent
             self.performPoststateValueUpdates(currentPlayer)
         
         
