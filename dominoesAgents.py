@@ -6,7 +6,8 @@ import dominoesFunctions as df
 import dominoesNetworks as dnn
 
 from datetime import datetime
-
+from glob import glob
+import re
 
 class dominoeAgent:
     """
@@ -629,16 +630,24 @@ class lineValueAgent(dominoeAgent):
             self.trackFinalScoreError.append(torch.mean(torch.abs(finalScore-self.finalScoreOutput)).to('cpu'))
         return None   
     
-    def saveAgentParameters(self, path):
-        saveDate = datetime.now().strftime('%y%m%d')
-        modelName = f"lineValueAgentParameters_{saveDate}"
+    def saveAgentParameters(self, path, description=True):
+        # generate parameters to save
         networkParameters = self.finalScoreNetwork.state_dict()
         agentParameters = self.agentParameters()
-        parameters = np.array([agentParameters, networkParameters])
+        if description:
+            modelDescription = input("Describe this model briefly: ")
+        else:
+            modelDescription = "lineValueNetwork parameters"
+        parameters = np.array([agentParameters, networkParameters, modelDescription])
+        
+        saveDate = datetime.now().strftime('%y%m%d')
+        modelName = f"lineValueAgentParameters_{saveDate}"
+        
+        # Handle model save number
         existingSaves = glob(str(path / modelName)+'_*.npy')
         saveNumbers = [int(re.search(r'^.*(\d+)\.npy', esave).group(1)) for esave in existingSaves]
-        newSaveNumber = max(saveNumbers)+1
-        np.save(path / modelName+f'_{newSaveNumber}', parameters) 
+        modelName += f'_{max(saveNumbers)+1}'
+        np.save(path / modelName, parameters) 
         
     def loadAgentParameters(self, path):
         parameters = np.load(path,allow_pickle=True)
