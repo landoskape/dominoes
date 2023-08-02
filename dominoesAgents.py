@@ -136,9 +136,10 @@ class dominoeAgent:
         # generates list of playable options given game state 
         # it produces a (numPlayers x numDominoes) array with True's indicating viable dominoe-location pairings
         # (and also a (numDominoes,) array for the dummy line
+        print('in play options, I think I can speed this up by using an outerproduct of boolean vectors')
         lineOptions = np.full((self.numPlayers, self.numDominoes), False)
         for idx,value in enumerate(self.available):
-            if idx==0 or self.cantplay[idx]: 
+            if idx==0 or self.cantplay[idx]:
                 idxPlayable = np.where(np.any(self.handValues==value,axis=1))[0]
                 lineOptions[idx,self.myHand[idxPlayable]]=True
         dummyOptions = np.full(self.numDominoes, False)
@@ -178,42 +179,40 @@ class dominoeAgent:
             self.dominoesInHand()
         return dominoe, location
     
-    
-
+# ----------------------------------------------------------------------------
+# --------------------------- simple rule agents -----------------------------
+# ----------------------------------------------------------------------------
 class greedyAgent(dominoeAgent):
+    # greedy agent plays whatever dominoe has the highest number of points
     agentName = 'greedyAgent'
-    def optionValue(self, options):
-        # convert option to play value using simplest method possible - the number of points on each dominoe
-        return self.dominoeValue * options
-    
     def makeChoice(self, optionValue):
         return np.argmax(optionValue)
-    
-
-class stupidAgent(dominoeAgent):
-    agentName = 'stupidAgent' 
     def optionValue(self, options):
-        # convert option to play value using simplest method possible - the number of points on each dominoe
         return self.dominoeValue * options
     
+class stupidAgent(dominoeAgent):
+    # stupid agent plays whatever dominoe has the least number of points
+    agentName = 'stupidAgent' 
     def makeChoice(self, optionValue):
         return np.argmin(optionValue)
-    
+    def optionValue(self, options):
+        return self.dominoeValue * options
     
 class doubleAgent(dominoeAgent):
+    # double agent plays any double it can play immediately, then plays the dominoe with the highest number of points
     agentName = 'doubleAgent'
+    def makeChoice(self, optionValue):
+        return np.argmax(optionValue)
     def optionValue(self, options):
-        # double agent treats any double opportunity as infinitely valuable (and greedily plays it when it can!)
-        # otherwise it plays the dominoe with the highest number of points
         optionValue = self.dominoeValue * options
         if np.any(self.dominoeDouble*options):
             optionValue[self.dominoeDouble*options]=np.inf
         return optionValue
     
-    def makeChoice(self, optionValue):
-        return np.argmax(optionValue)
-
     
+# ----------------------------------------------------------------------------
+# -------------- agents that care about possible sequential lines ------------
+# ----------------------------------------------------------------------------
 class bestLineAgent(dominoeAgent):
     agentName = 'bestLineAgent'
     
@@ -298,6 +297,9 @@ class bestLineAgent(dominoeAgent):
         
         
 
+# ----------------------------------------------------------------------------
+# -------------------------- RL Agents that estimate value -------------------
+# ----------------------------------------------------------------------------
 class valueAgent0(dominoeAgent):
     agentName = 'valueAgent0'
     def specializedInit(self):
