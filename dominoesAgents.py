@@ -96,16 +96,16 @@ class dominoeAgent:
         self.dummyAvailable = dummyAvailable # index of dominoe available on dummy line
         self.dummyPlayable = dummyPlayable # bool determining whether the dummy line is playable
         self.processGameState(postState=postState)
-        
+    
+    def processGameState(self,*args,**kwargs):
+        # processGameState method is always called, but either does nothing in this default case or transforms the input for the RL-Agent cases\ 
+        return None 
+    
     def estimatePrestateValue(self,*args,**kwargs):
         return None
     
     def updatePoststateValue(self,*args,**kwargs):
         return None
-        
-    def processGameState(self,*args,**kwargs):
-        # processGameState method is always called, but either does nothing in this default case or transforms the input for the RL-Agent cases\ 
-        return None 
     
     # -- functions to process gamestate --
     def egocentric(self, variable):
