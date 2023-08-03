@@ -232,7 +232,7 @@ class dominoeGame:
         # 3. request "play"
         gameState = self.played, self.available, self.handSize, self.cantPlay, self.didntPlay, self.turnCounter, self.lineStarted, self.dummyAvailable, self.dummyPlayable
         gameEngine = partial(self.updateGameState, playerIndex=self.nextPlayer, gameState=gameState)
-        dominoe, location = self.agents[self.nextPlayer].play(gameEngine, self)
+        dominoe, location = self.agents[self.nextPlayer].play(gameEngine)
         
         # 4. given play, update game state
         gameState = self.updateGameState(dominoe, location, self.nextPlayer, gameState, copyData=False, playInfo=True)

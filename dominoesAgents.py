@@ -128,15 +128,14 @@ class dominoeAgent:
         # default behavior is to use thompson sampling (picking a dominoe to play randomly, weighted by value of dominoe)
         return random.choices(range(len(optionValue)), k=1, weights=optionValue)[0]
     
-    def optionValue(self, options):
+    def optionValue(self, locations, dominoes):
         # convert option to play value using simplest method possible - value is 1 if option available
-        return 1*options
+        return np.ones_like(dominoes)
     
     def playOptions(self):
         # generates list of playable options given game state 
         # it produces a (numPlayers x numDominoes) array with True's indicating viable dominoe-location pairings
         # (and also a (numDominoes,) array for the dummy line
-        # print('in play options, I think I can speed this up by using an outerproduct of boolean vectors')
         lineOptions = np.full((self.numPlayers, self.numDominoes), False)
         for idx,value in enumerate(self.available):
             if idx==0 or self.cantplay[idx]:
@@ -145,34 +144,27 @@ class dominoeAgent:
         dummyOptions = np.full(self.numDominoes, False)
         idxPlayable = np.where(np.any(self.handValues==self.dummyAvailable,axis=1))[0]
         dummyOptions[self.myHand[idxPlayable]]=True*self.dummyPlayable
-        return lineOptions,dummyOptions
-    
-    def selectPlay(self, gameEngine=None, game=None):
-        # select dominoe to play, for the default class, the selection is random based on available plays
-        lineOptions, dummyOptions = self.playOptions() # get options that are available
+        
         idxPlayer, idxDominoe = np.where(lineOptions) # find where options are available
         idxDummyDominoe = np.where(dummyOptions)[0]
         idxDummy = -1 * np.ones(len(idxDummyDominoe), dtype=int)
-        # if no valid options available, return None
-        if len(idxPlayer)==0 and len(idxDummy)==0: 
-            return None,None
-        # otherwise, process options to make choice
-        lineOptionValue = self.optionValue(lineOptions) # measure value of each option
-        dummyOptionValue = self.optionValue(dummyOptions)  
-        valuePlayers = lineOptionValue[idxPlayer, idxDominoe] # retrieve value of valid options
-        valueDummy = dummyOptionValue[idxDummyDominoe]
-        # concatenate lineIdx, dominoeIdx, optionValue
-        lineIdx = np.concatenate((idxPlayer, idxDummy))
-        dominoeIdx = np.concatenate((idxDominoe, idxDummyDominoe))
-        optionValue = np.concatenate((valuePlayers, valueDummy))
-        # make and return choice
-        idxChoice = self.makeChoice(optionValue)
-        return dominoeIdx[idxChoice], lineIdx[idxChoice]
+        
+        # concatenate locations, dominoes
+        locations = np.concatenate((idxPlayer, idxDummy))
+        dominoes = np.concatenate((idxDominoe, idxDummyDominoe))
+        return locations, dominoes
     
-    def play(self, gameEngine=None, game=None):
+    def selectPlay(self, gameEngine=None):
+        locations, dominoes = self.playOptions()
+        if len(locations)==0: return None, None
+        optionValue = self.optionValue(locations, dominoes)
+        idxChoice = self.makeChoice(optionValue) # make and return choice
+        return dominoes[idxChoice], locations[idxChoice]
+    
+    def play(self, gameEngine=None):
         # this function is called by the gameplay object
         # it is what's used to play a dominoe when it's this agents turn
-        dominoe, location = self.selectPlay(gameEngine=gameEngine, game=game)
+        dominoe, location = self.selectPlay(gameEngine=gameEngine)
         if dominoe is not None:
             assert dominoe in self.myHand, "dominoe selected to be played is not in hand"
             self.myHand = np.delete(self.myHand, self.myHand==dominoe)
@@ -187,26 +179,25 @@ class greedyAgent(dominoeAgent):
     agentName = 'greedyAgent'
     def makeChoice(self, optionValue):
         return np.argmax(optionValue)
-    def optionValue(self, options):
-        return self.dominoeValue * options
+    def optionValue(self, locations, dominoes):
+        return self.dominoeValue[dominoes]
     
 class stupidAgent(dominoeAgent):
     # stupid agent plays whatever dominoe has the least number of points
     agentName = 'stupidAgent' 
     def makeChoice(self, optionValue):
         return np.argmin(optionValue)
-    def optionValue(self, options):
-        return self.dominoeValue * options
+    def optionValue(self, locations, dominoes):
+        return self.dominoeValue[dominoes]
     
 class doubleAgent(dominoeAgent):
     # double agent plays any double it can play immediately, then plays the dominoe with the highest number of points
     agentName = 'doubleAgent'
     def makeChoice(self, optionValue):
         return np.argmax(optionValue)
-    def optionValue(self, options):
-        optionValue = self.dominoeValue * options
-        if np.any(self.dominoeDouble*options):
-            optionValue[self.dominoeDouble*options]=np.inf
+    def optionValue(self, locations, dominoes):
+        optionValue = self.dominoeValue[dominoes]
+        optionValue[self.dominoeDouble[dominoes]]=np.inf
         return optionValue
     
     
@@ -222,22 +213,14 @@ class bestLineAgent(dominoeAgent):
         self.lineTemperature = 1
         self.maxLineLength = 10
     
-    def selectPlay(self, gameEngine=None, game=None):
+    def selectPlay(self, gameEngine=None):
         # select dominoe to play, for the default class, the selection is random based on available plays
-        lineOptions, dummyOptions = self.playOptions() # get options that are available
-        idxPlayer, idxDominoe = np.where(lineOptions) # find where options are available
-        idxDummyDominoe = np.where(dummyOptions)[0]
-        idxDummy = -1 * np.ones(len(idxDummyDominoe), dtype=int)
-        # if no valid options available, return None
-        if len(idxPlayer)==0 and len(idxDummy)==0: 
-            return None,None
-        # concatenate lineIdx, dominoeIdx, optionValue
-        lineIdx = np.concatenate((idxPlayer, idxDummy))
-        dominoeIdx = np.concatenate((idxDominoe, idxDummyDominoe))
-        optionValue = self.optionValue(lineIdx, dominoeIdx)
+        locations, dominoes = self.playOptions() # get options that are available
+        if len(locations)==0: return None, None
+        optionValue = self.optionValue(locations, dominoes)
         # make and return choice
         idxChoice = self.makeChoice(optionValue)
-        return dominoeIdx[idxChoice], lineIdx[idxChoice] 
+        return dominoes[idxChoice], dominoes[idxChoice] 
     
     def makeChoice(self, optionValue):
         return np.argmax(optionValue)
@@ -279,10 +262,7 @@ class bestLineAgent(dominoeAgent):
         
         for line in range(numLines):
             linePlayNumber = np.cumsum(nonDouble[lineSequence[line]])-1 # turns to play each dominoe if playing this line continuously
-            try:
-                lineDiscountFactors[line] = self.inLineDiscount**linePlayNumber # discount factor (gamma**timeStepsInFuture)
-            except:
-                print('hi')
+            lineDiscountFactors[line] = self.inLineDiscount**linePlayNumber # discount factor (gamma**timeStepsInFuture)
             inLineValue[line] = lineDiscountFactors[line] @ playValue[lineSequence[line]] # total value of line, discounted for future plays
             offDiscount = self.offLineDiscount**(linePlayNumber[-1] if len(lineSequence[line])>0 else 1)
             # total value of remaining dominoes in hand after playing line, multiplied by a discount factor
@@ -390,6 +370,15 @@ class valueAgent(dominoeAgent):
             self.trackFinalScoreError.append(torch.mean(torch.abs(finalScore-self.finalScoreOutput)).to('cpu'))
         return None   
     
+    def selectPlay(self, gameEngine):      
+        # first, identify valid play options
+        locations, dominoes = self.playOptions() # get options that are available
+        if len(locations)==0: return None, None
+        # for each play option, simulate future gamestate and estimate value from it (without gradients)
+        optionValue = [self.optionValue(dominoe, location, gameEngine) for (dominoe,location) in zip(dominoes, locations)]
+        idxChoice = self.makeChoice(optionValue) # make choice and return
+        return dominoes[idxChoice], locations[idxChoice] 
+    
     def makeChoice(self, optionValue):
         return np.argmin(optionValue)
     
@@ -468,27 +457,7 @@ class basicValueAgent(valueAgent):
         self.myHand = np.append(self.myHand, dominoe)
         self.dominoesInHand()
         # return optionValue
-        return finalScoreOutput[0]
-    
-    def selectPlay(self, gameEngine, game):
-        # first, identify valid play options
-        lineOptions, dummyOptions = self.playOptions() # get options that are available
-        idxPlayer, idxDominoe = np.where(lineOptions) # find where options are available
-        idxDummyDominoe = np.where(dummyOptions)[0]
-        idxDummy = -1 * np.ones(len(idxDummyDominoe), dtype=int)
-        # if no valid options available, return None
-        if len(idxPlayer)==0 and len(idxDummy)==0: 
-            return None,None
-        # concatenate lineIdx, dominoeIdx, optionValue
-        lineIdx = np.concatenate((idxPlayer, idxDummy))
-        dominoeIdx = np.concatenate((idxDominoe, idxDummyDominoe))
-        # for each play option, simulate future gamestate and estimate value from it (without gradients)
-        optionValue = np.zeros(len(lineIdx))
-        for idx in range(len(lineIdx)):
-            optionValue[idx] = self.optionValue(dominoeIdx[idx], lineIdx[idx], gameEngine) # for (dominoe,location) in zip(dominoeIdx,lineIdx)])
-        # make choice and return
-        idxChoice = self.makeChoice(optionValue)
-        return dominoeIdx[idxChoice], lineIdx[idxChoice] 
+        return finalScoreOutput[0].detach().cpu().numpy()
     
     
     
@@ -599,27 +568,7 @@ class lineValueAgent(valueAgent):
         gameStateInput = torch.tensor(np.concatenate((self.binaryHand, self.binaryPlayed, self.binaryLineAvailable.flatten(), self.binaryDummyAvailable, 
                                             self.handsize, self.cantplay, self.didntplay, self.turncounter, np.array(self.dummyPlayable).reshape(-1)))).float().to(self.device)
         return lineValueInput, gameStateInput
-    
-        
-    def selectPlay(self, gameEngine, game):        
-        # first, identify valid play options
-        lineOptions, dummyOptions = self.playOptions() # get options that are available
-        idxPlayer, idxDominoe = np.where(lineOptions) # find where options are available
-        idxDummyDominoe = np.where(dummyOptions)[0]
-        idxDummy = -1 * np.ones(len(idxDummyDominoe), dtype=int)
-        # if no valid options available, return None
-        if len(idxPlayer)==0 and len(idxDummy)==0: 
-            return None,None
-        # concatenate lineIdx, dominoeIdx, optionValue
-        lineIdx = np.concatenate((idxPlayer, idxDummy))
-        dominoeIdx = np.concatenate((idxDominoe, idxDummyDominoe))
-        # for each play option, simulate future gamestate and estimate value from it (without gradients)
-        optionValue = np.zeros(len(lineIdx))
-        for idx in range(len(lineIdx)):
-            optionValue[idx] = self.optionValue(dominoeIdx[idx], lineIdx[idx], gameEngine) # for (dominoe,location) in zip(dominoeIdx,lineIdx)])
-        # make choice and return
-        idxChoice = self.makeChoice(optionValue)
-        return dominoeIdx[idxChoice], lineIdx[idxChoice] 
+   
     
     def optionValue(self, dominoe, location, gameEngine):
         # enter dominoe and location into gameEngine, return new gamestate
@@ -638,7 +587,7 @@ class lineValueAgent(valueAgent):
         self.myHand = np.append(self.myHand, dominoe)
         self.dominoesInHand()
         # return optionValue
-        return finalScoreOutput
+        return finalScoreOutput.detach().cpu().numpy()
     
     def makeChoice(self, optionValue):
         return np.argmin(optionValue)
