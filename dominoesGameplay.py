@@ -62,7 +62,7 @@ class dominoeGame:
     
     def distribute(self):
         # randomly distribute dominoes at beginning of hand 
-        startStopIndex = [0, *np.cumsum(np.roll(self.dominoePerTurn, self.extraDominoeOffset + (self.playersWithExtra*self.handNumber)))]
+        startStopIndex = [0, *np.cumsum(np.roll(self.dominoePerTurn, self.extraDominoeOffset + self.handNumber))]
         idx = np.random.permutation(self.numDominoes) # randomized dominoe order to be distributed to each player
         assignments = [idx[startStopIndex[i]:startStopIndex[i+1]] for i in range(self.numPlayers)]
         assert np.array_equal(np.arange(self.numDominoes), np.sort(np.concatenate(assignments))), "dominoe assignments are not complete" # sanity check
