@@ -45,9 +45,9 @@ class lineRepresentationNetwork(nn.Module):
         
         self.ffLayer = nn.Sequential(self.fc1, nn.ReLU(), self.fc2, nn.ReLU(), self.fc3, nn.ReLU(), self.fc4)
 
-    def forward(self, x, y):
-        cnnOutput = self.cnnLayer(x)
-        netOutput = self.ffLayer(torch.cat((cnnOutput,y)))
+    def forward(self, x):
+        cnnOutput = self.cnnLayer(x[0])
+        netOutput = self.ffLayer(torch.cat((cnnOutput,x[1])))
         return netOutput
     
         
