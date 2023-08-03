@@ -6,14 +6,15 @@ from torchvision import models, transforms
 import dominoesFunctions as df
 
 class lineRepresentationNetwork(nn.Module):
-    def __init__(self, numPlayers, numDominoes, highestDominoe, weightPrms=(0.,0.1),biasPrms=0.,actFunc=F.relu,pDropout=0):
+    def __init__(self, numPlayers, numDominoes, highestDominoe, finalScoreOutputDimension, weightPrms=(0.,0.1),biasPrms=0.,actFunc=F.relu,pDropout=0):
         super().__init__()
+        assert finalScoreOutputDimension<numPlayers, "finalScoreOutputDimension can't be greater than the number of players"
         self.numPlayers = numPlayers
         self.numDominoes = numDominoes
         self.highestDominoe = highestDominoe
         self.numOutputCNN = 1000
         self.inputDimension = 2*numDominoes + (highestDominoe+1)*(numPlayers+1) + 4*numPlayers + 1 + self.numOutputCNN # see dominoesAgents>generateValueInput() for explanation of why this dimensionality
-        self.outputDimension = 1
+        self.outputDimension = finalScoreOutputDimension
         self.actFunc = actFunc
         
         # the lineRepresentationValue gets passed through a 1d convolutional network
@@ -59,13 +60,14 @@ class valueNetwork(nn.Module):
     # --inherited-- Activation function is Relu by default (but can be chosen with hiddenactivation). 
     # --inherited-- Output activation function is identity, because we're using CrossEntropyLoss
     """
-    def __init__(self,numPlayers,numDominoes,highestDominoe,weightPrms=(0.,0.1),biasPrms=0.,actFunc=F.relu,pDropout=0):
+    def __init__(self,numPlayers,numDominoes,highestDominoe,finalScoreOutputDimension,weightPrms=(0.,0.1),biasPrms=0.,actFunc=F.relu,pDropout=0):
         super().__init__()
+        assert finalScoreOutputDimension<numPlayers, "finalScoreOutputDimension can't be greater than the number of players"
         self.numPlayers = numPlayers
         self.numDominoes = numDominoes
         self.highestDominoe = highestDominoe
         self.inputDimension = 2*numDominoes + (highestDominoe+1)*(numPlayers+1) + 4*numPlayers + 1 # see dominoesAgents>generateValueInput() for explanation of why this dimensionality
-        self.outputDimension = numPlayers
+        self.outputDimension = finalScoreOutputDimension
         
         # create layers (all linear fully connected)
         self.fc1 = nn.Linear(self.inputDimension, 1000)

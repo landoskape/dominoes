@@ -21,7 +21,7 @@ class dominoeAgent:
     agentName = 'default'
     
     # initialization function
-    def __init__(self, numPlayers, highestDominoe, dominoes, numDominoes, agentIndex, device=None):
+    def __init__(self, numPlayers, highestDominoe, dominoes, numDominoes, agentIndex, device=None, **kwargs):
         # meta-variables (includes redundant information, but if I train 1000s of networks I want it to be as fast as possible)
         self.numPlayers = numPlayers
         self.highestDominoe = highestDominoe
@@ -49,9 +49,9 @@ class dominoeAgent:
         self.requireUpdates = False
         
         # specialized initialization functions 
-        self.specializedInit()
+        self.specializedInit(**kwargs)
     
-    def specializedInit(self):
+    def specializedInit(self,**kwargs):
         # can be edited for each agent
         return None
     
@@ -207,7 +207,7 @@ class doubleAgent(dominoeAgent):
 class bestLineAgent(dominoeAgent):
     agentName = 'bestLineAgent'
     
-    def specializedInit(self):
+    def specializedInit(self,**kwargs):
         self.inLineDiscount = 0.9
         self.offLineDiscount = 0.7
         self.lineTemperature = 1
@@ -220,7 +220,7 @@ class bestLineAgent(dominoeAgent):
         optionValue = self.optionValue(locations, dominoes)
         # make and return choice
         idxChoice = self.makeChoice(optionValue)
-        return dominoes[idxChoice], dominoes[idxChoice] 
+        return dominoes[idxChoice], locations[idxChoice] 
     
     def makeChoice(self, optionValue):
         return np.argmax(optionValue)
@@ -237,7 +237,7 @@ class bestLineAgent(dominoeAgent):
             idxBestPlay = np.where((locations==0) & (dominoes==bestLine[0]))[0]
             assert len(idxBestPlay)==1, "this should always be 1 if a best line was found..."
             optionValue[idxBestPlay[0]] = bestLineValue
-            
+        
         return optionValue
     
     def dominoeLineValue(self):
@@ -283,12 +283,13 @@ class bestLineAgent(dominoeAgent):
 class valueAgent(dominoeAgent):
     # valueAgent is a mid-level class for all agents that perform TD-Lambda like value computations.
     agentName = 'valueAgent'
-    def specializedInit(self):
+    def specializedInit(self,**kwargs):
         # meta parameters
         self.learning = True
         self.lam = 0.9
         self.alpha = 1e-5
         self.trackFinalScoreError = []
+        self.finalScoreOutputDimension = 1
         
         # create binary arrays for presenting gamestate information to the RL networks
         self.binaryPlayed = np.zeros(self.numDominoes)
@@ -299,10 +300,15 @@ class valueAgent(dominoeAgent):
         # prepare value network
         self.prepareNetwork()
         
+        # Also prepare special parameters eligibility traces
+        self.extraParameters = []
+        self.extraEligibility = []
+        
+        
     def prepareNetwork(self):
         raise ValueError("It looks like you instantiated an object of the valueAgent class directly. This class is only used to provide a scaffold for complete valueAgents, see possible agents in this script!")
         
-    def activateLearning(self, learningState):
+    def setLearning(self, learningState):
         self.learning = learningState
 
     def resetBinaries(self):
@@ -345,8 +351,12 @@ class valueAgent(dominoeAgent):
             for trace,prms in zip(self.finalScoreEligibility[idx], self.finalScoreNetwork.parameters()):
                 trace *= self.lam # discount past eligibility traces by lambda
                 trace += prms.grad # add new gradient to eligibility trace
-                prms.grad[:] = 0 # reset gradients for parameters of finalScoreNetwork in between each backward call from the output
-    
+                prms.grad.zero_() # reset gradients for parameters of finalScoreNetwork in between each backward call from the output
+            for trace,prms in zip(self.extraEligibility, self.extraParameters):
+                trace *= self.lam # discount past eligibility traces by lambda
+                trace += prms.grad # add new gradient to eligibility trace
+                prms.grad.zero_()
+                    
     @torch.no_grad() # don't need to estimate any gradients here, that was done in estimatePrestateValue()!
     def updatePoststateValue(self, finalScore=None, currentPlayer=None):
         if not(self.checkTurnUpdate(currentPlayer)): return None
@@ -358,13 +368,17 @@ class valueAgent(dominoeAgent):
             tdError = self.finalScoreNetwork(self.valueNetworkInput) - self.finalScoreOutput
         else:
             # if the final score is an array, then we should shift its perspective and learn from the true difference in our penultimate estimate and the actual final score
-            finalScore = self.egocentric(finalScore)[:self.finalScoreNetwork.outputDimension]
+            finalScore = self.egocentric(finalScore)[:self.finalScoreOutputDimension]
             finalScore = torch.tensor(finalScore).to(self.device)
             tdError = finalScore - self.finalScoreOutput
+        
         for idx,td in enumerate(tdError):
             for prmIdx,prms in enumerate(self.finalScoreNetwork.parameters()):
                 assert self.finalScoreEligibility[idx][prmIdx].shape == prms.shape, "oops!"
                 prms += self.alpha * self.finalScoreEligibility[idx][prmIdx] * td # TD(lambda) update rule
+            for prmIdx,prms in enumerate(self.extraParameters):
+                assert self.extraEligibility[idx][prmIdx].shape == prms.shape, "oops!"
+                prms += self.alpha * self.extraEligibility[idx][prmIdx] * td # TD(lambda) update rule
         if finalScore is not None:
             # when the final score is provided (i.e. the game ended), then add the error between the penultimate estimate and the true final score to a list for performance monitoring
             self.trackFinalScoreError.append(torch.mean(torch.abs(finalScore-self.finalScoreOutput)).to('cpu'))
@@ -425,12 +439,12 @@ class basicValueAgent(valueAgent):
     agentName = 'basicValueAgent'    
     def prepareNetwork(self):
         # initialize valueNetwork -- predicts next hand value of each player along with final score for each player (using omniscient information to begin with...) 
-        self.finalScoreNetwork = dnn.valueNetwork(self.numPlayers,self.numDominoes,self.highestDominoe)
+        self.finalScoreNetwork = dnn.valueNetwork(self.numPlayers,self.numDominoes,self.highestDominoe,self.finalScoreOutputDimension)
         self.finalScoreNetwork.to(self.device)
         
         # Prepare Training Functions & Optimizers
-        self.finalScoreEligibility = [[torch.zeros(prms.shape).to(self.device) for prms in self.finalScoreNetwork.parameters()] for _ in range(self.finalScoreNetwork.outputDimension)]
-        
+        self.finalScoreEligibility = [[torch.zeros(prms.shape).to(self.device) for prms in self.finalScoreNetwork.parameters()] for _ in range(self.finalScoreOutputDimension)]
+    
     def prepareValueInputs(self):
         self.valueNetworkInput = self.generateValueInput().to(self.device)
         
@@ -460,19 +474,18 @@ class basicValueAgent(valueAgent):
         return finalScoreOutput[0].detach().cpu().numpy()
     
     
-    
 class lineValueAgent(valueAgent):
     agentName = 'lineValueAgent'
-    def specializedInit(self):
+    def specializedInit(self,**kwargs):
         # do general valueAgent initialization
-        super().specializedInit()
+        super().specializedInit(**kwargs)
         
         # add parameters for measuring line value (will be learned eventually?)
         self.inLineDiscount = 0.9
         self.offLineDiscount = 0.7
-        self.lineTemperature = 1
+        self.lineTemperature = 1.0
         self.maxLineLength = 10
-    
+            
     def checkTurnUpdate(self, currentPlayer):
         # if turn idx isn't zero, then don't update game state
         return True # (currentPlayer is not None) and (currentPlayer == self.agentIndex)
@@ -487,12 +500,12 @@ class lineValueAgent(valueAgent):
 
     def prepareNetwork(self):
         # initialize valueNetwork -- predicts next hand value of each player along with final score for each player (using omniscient information to begin with...) 
-        self.finalScoreNetwork = dnn.lineRepresentationNetwork(self.numPlayers,self.numDominoes,self.highestDominoe)
+        self.finalScoreNetwork = dnn.lineRepresentationNetwork(self.numPlayers,self.numDominoes,self.highestDominoe,self.finalScoreOutputDimension)
         self.finalScoreNetwork.to(self.device)
 
         # Prepare Training Functions & Optimizers
-        self.finalScoreEligibility = [[torch.zeros(prms.shape).to(self.device) for prms in self.finalScoreNetwork.parameters()] for _ in range(self.finalScoreNetwork.outputDimension)]
-
+        self.finalScoreEligibility = [[torch.zeros(prms.shape).to(self.device) for prms in self.finalScoreNetwork.parameters()] for _ in range(self.finalScoreOutputDimension)]
+        
     def prepareValueInputs(self):
         self.estimateLineValue() # estimate line value given current game state
         self.lineValueInput, self.gameStateInput = self.generateValueInput()
@@ -520,17 +533,17 @@ class lineValueAgent(valueAgent):
         offLineDominoes = np.zeros(numLines)
         lineDiscountFactors = [None]*numLines
         for line in range(numLines):
-            linePlayNumber = np.cumsum(nonDouble[lineSequence[line]])-1 # turns to play each dominoe if playing this line continuously
+            linePlayNumber = np.cumsum(nonDouble[lineSequence[line]],axis=0)-1 # turns to play each dominoe if playing this line continuously
             lineDiscountFactors[line] = self.inLineDiscount**linePlayNumber # discount factor (gamma**timeStepsInFuture)
             inLineValue[line] = lineDiscountFactors[line] @ playValue[lineSequence[line]] # total value of line, discounted for future plays
             offDiscount = self.offLineDiscount**(linePlayNumber[-1] if len(lineSequence[line])>0 else 1)
             offLineValue[line] = offDiscount*np.sum(playValue[list(set(range(numInHand)).difference(lineSequence[line]))]) # total value of remaining dominoes in hand after playing line, multiplied by a discount factor
             inLineDominoes[line] = len(lineSequence[line]) # number of dominoes in line
             offLineDominoes[line] = numInHand - len(lineSequence[line]) # number of dominoes remaining after playing this line
-
+    
         lineValue = inLineValue - offLineValue
-        lineProbability = df.softmax(lineValue/self.lineTemperature)
-
+        lineProbability = df.softmax(lineValue / self.lineTemperature)
+        
         # make grid of where all dominoes are -- then use this to get E[V] for dominoe if played in line and -E[V] for dominoe if not played
         dominoeInLine = np.zeros((numInHand,numLines))
         for dominoe in range(numInHand):
@@ -557,11 +570,10 @@ class lineValueAgent(valueAgent):
                 expOffLineDominoes[dominoe] /= inLineProbability
             if inLineProbability<1:
                 expLossValue[dominoe] /= (1-inLineProbability)
-
-        lineValue = np.stack((expInLineValue, expOffLineValue, expLossValue, expDominoeValue, expInLineDominoes, expOffLineDominoes))
-        self.lineValue = np.zeros((6,self.numDominoes))
-        self.lineValue[:,self.myHand] = lineValue
         
+        lineValue = np.stack((expInLineValue, expOffLineValue, expLossValue, expDominoeValue, expInLineDominoes, expOffLineDominoes))
+        self.lineValue = np.zeros((lineValue.shape[0],self.numDominoes))
+        self.lineValue[:, self.myHand] = lineValue
         
     def generateValueInput(self):
         lineValueInput = torch.tensor(self.lineValue).float().to(self.device)
@@ -581,8 +593,7 @@ class lineValueAgent(valueAgent):
         self.myHand = np.delete(self.myHand, self.myHand==dominoe)
         self.dominoesInHand()
         self.gameState(played, available, handSize, cantPlay, didntPlay, turnCounter, dummyAvailable, dummyPlayable) # load simulated gameState into object attributes
-        with torch.no_grad():
-            finalScoreOutput = self.finalScoreNetwork(self.valueNetworkInput)
+        with torch.no_grad(): finalScoreOutput = self.finalScoreNetwork(self.valueNetworkInput)
         # put dominoe back in hand
         self.myHand = np.append(self.myHand, dominoe)
         self.dominoesInHand()
@@ -591,6 +602,229 @@ class lineValueAgent(valueAgent):
     
     def makeChoice(self, optionValue):
         return np.argmin(optionValue)
+        
+    
+    
+        
+    
+    
+    
+    
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+# class lineValueAgentLearnSpecialParameters(valueAgent):
+#     agentName = 'lineValueAgent'
+#     def specializedInit(self,**kwargs):
+#         # do general valueAgent initialization
+#         super().specializedInit(**kwargs)
+        
+#         self.learnExtraParameters = True #('learnExtraParameters' in kwargs.keys() and kwargs['learnExtraParameters']==True)
+        
+#         # add parameters for measuring line value (will be learned eventually?)
+#         self.inLineDiscount = 0.9
+#         self.offLineDiscount = 0.7
+#         self.lineTemperature = 1.0
+#         self.maxLineLength = 10
+        
+#         if self.learnExtraParameters:
+#             self.inLineDiscount = torch.tensor(self.inLineDiscount,requires_grad=True).to(self.device)
+#             self.offLineDiscount = torch.tensor(self.offLineDiscount,requires_grad=True).to(self.device)
+#             self.lineTemperature = torch.tensor(self.lineTemperature,requires_grad=True).to(self.device)
+            
+#             # Also prepare special parameters eligibility traces
+#             self.extraParameters = [self.inLineDiscount, self.offLineDiscount, self.lineTemperature]
+#             self.extraEligibility = [torch.zeros(len(self.extraParameters)).to(self.device) for _ in range(self.finalScoreOutputDimension)]
+#             for prm in self.extraParameters: prm.retain_grad()
+            
+#     def checkTurnUpdate(self, currentPlayer):
+#         # if turn idx isn't zero, then don't update game state
+#         return True # (currentPlayer is not None) and (currentPlayer == self.agentIndex)
+    
+#     def specialParameters(self):
+#         # add a few special parameters to store and reload for this type of agent
+#         specialPrms = super().specialParameters()
+#         extraPrms = ['inLineDiscount', 'offLineDiscount', 'lineTemperature', 'maxLineLength']
+#         for key in extraPrms:
+#             specialPrms[key] = getattr(self, key)
+#         return specialPrms
+
+#     def prepareNetwork(self):
+#         # initialize valueNetwork -- predicts next hand value of each player along with final score for each player (using omniscient information to begin with...) 
+#         self.finalScoreNetwork = dnn.lineRepresentationNetwork(self.numPlayers,self.numDominoes,self.highestDominoe,self.finalScoreOutputDimension)
+#         self.finalScoreNetwork.to(self.device)
+
+#         # Prepare Training Functions & Optimizers
+#         self.finalScoreEligibility = [[torch.zeros(prms.shape).to(self.device) for prms in self.finalScoreNetwork.parameters()] for _ in range(self.finalScoreOutputDimension)]
+        
+#     def prepareValueInputs(self):
+#         self.estimateLineValue() # estimate line value given current game state
+#         self.lineValueInput, self.gameStateInput = self.generateValueInput()
+#         self.valueNetworkInput = (self.lineValueInput, self.gameStateInput)
+        
+#     def estimateLineValue(self):
+#         # First, get all possible lines that can be made on agent's own line.
+#         lineSequence = df.constructLineRecursive(self.handValues, self.available[0], maxLineLength=self.maxLineLength)[0] # don't need line direction, only need to know elements and values of each line
+#         nonDouble = torch.tensor(self.handValues[:,0]!=self.handValues[:,1])
+#         playValue = torch.sum(torch.tensor(self.handValues).float(),dim=1).to(self.device)
+        
+#         numInHand = len(self.myHand)
+#         expInLineValue = torch.zeros(numInHand).to(self.device) # average line value for lines that this dominoe is in 
+#         expOffLineValue = torch.zeros(numInHand).to(self.device) # average remaining dominoe value for lines that this dominoe is in 
+#         expLossValue = torch.zeros(numInHand).to(self.device) # probability of dominoe being out of a line * value of this dominoe (e.g. expected cost if not played) 
+#         expDominoeValue = torch.zeros(numInHand).to(self.device) # expected discounted value of this dominoe (dominoeValue * discount factor) for all lines in which it can be played 
+#         expInLineDominoes = torch.zeros(numInHand).to(self.device) # average number of dominoes in line for lines that this dominoe is in
+#         expOffLineDominoes = torch.zeros(numInHand).to(self.device) # average number of dominoes out of line for lines that this dominoe is in
+        
+#         # measure line value
+#         numLines = len(lineSequence)
+#         inLineValue = torch.zeros(numLines).to(self.device)
+#         offLineValue = torch.zeros(numLines).to(self.device)
+#         inLineDominoes = torch.zeros(numLines).to(self.device)
+#         offLineDominoes = torch.zeros(numLines).to(self.device)
+#         lineDiscountFactors = [None]*numLines
+#         for line in range(numLines):
+#             linePlayNumber = torch.cumsum(nonDouble[lineSequence[line]],dim=0).to(self.device)-1 # turns to play each dominoe if playing this line continuously
+#             lineDiscountFactors[line] = self.inLineDiscount**linePlayNumber # discount factor (gamma**timeStepsInFuture)
+#             inLineValue[line] = lineDiscountFactors[line] @ playValue[lineSequence[line]] # total value of line, discounted for future plays
+#             offDiscount = self.offLineDiscount**(linePlayNumber[-1] if len(lineSequence[line])>0 else 1)
+#             offLineValue[line] = offDiscount*torch.sum(playValue[list(set(range(numInHand)).difference(lineSequence[line]))]) # total value of remaining dominoes in hand after playing line, multiplied by a discount factor
+#             inLineDominoes[line] = len(lineSequence[line]) # number of dominoes in line
+#             offLineDominoes[line] = numInHand - len(lineSequence[line]) # number of dominoes remaining after playing this line
+    
+#         lineValue = inLineValue - offLineValue
+#         lineProbability = torch.nn.functional.softmax(lineValue / self.lineTemperature, dim=0)
+        
+#         # make grid of where all dominoes are -- then use this to get E[V] for dominoe if played in line and -E[V] for dominoe if not played
+#         dominoeInLine = torch.zeros((numInHand,numLines))
+#         for dominoe in range(numInHand):
+#             inLineProbability = 0
+#             offLineProbability = 0
+#             for line in range(numLines):
+#                 # store total probabilities, so the expected values can be scaled correctly
+#                 inLineProbability += lineProbability[line]*(dominoe in lineSequence[line])
+#                 offLineProbability += lineProbability[line]*(not(dominoe in lineSequence[line]))
+
+#                 # add up elements in expected value expressions
+#                 expInLineValue[dominoe] += inLineValue[line]*lineProbability[line]*(dominoe in lineSequence[line]) # add lineValue*lineProbability if dominoe is in line
+#                 expOffLineValue[dominoe] += offLineValue[line]*lineProbability[line]*(dominoe in lineSequence[line]) # add offLineValue*lineProbability if dominoe is in line
+#                 expInLineDominoes[dominoe] += inLineDominoes[line]*lineProbability[line]*(dominoe in lineSequence[line]) # add lineDominoes*lineProbability if dominoe is in line
+#                 expOffLineDominoes[dominoe] += offLineDominoes[line]*lineProbability[line]*(dominoe in lineSequence[line]) # add lineDominoes*lineProbability if dominoe is in line
+#                 expLossValue[dominoe] += playValue[dominoe]*lineProbability[line]*(not(dominoe in lineSequence[line])) # add dominoeValue*lineProbability if dominoe isn't in line
+#                 expDominoeValue[dominoe] += lineProbability[line]*sum([playValue[dom]*lineDiscountFactors[line][idx] for idx,dom in enumerate(lineSequence[line]) if dom==dominoe]) 
+
+#             # scale to total probability
+#             if inLineProbability>0:
+#                 expInLineValue[dominoe] /= inLineProbability
+#                 expOffLineValue[dominoe] /= inLineProbability
+#                 expInLineDominoes[dominoe] /= inLineProbability
+#                 expOffLineDominoes[dominoe] /= inLineProbability
+#             if inLineProbability<1:
+#                 expLossValue[dominoe] /= (1-inLineProbability)
+        
+#         lineValue = torch.stack((expInLineValue, expOffLineValue, expLossValue, expDominoeValue, expInLineDominoes, expOffLineDominoes))
+#         self.lineValue = torch.zeros((lineValue.shape[0],self.numDominoes)).to(self.device)
+#         index = torch.tensor(self.myHand, dtype=torch.int64).to(self.device)
+#         self.lineValue.scatter_add_(1, index.view(1,-1).expand(lineValue.shape[0],-1), lineValue)
+        
+        
+#     def generateValueInput(self):
+#         lineValueInput = self.lineValue.to(self.device)
+#         gameStateInput = torch.tensor(np.concatenate((self.binaryHand, self.binaryPlayed, self.binaryLineAvailable.flatten(), self.binaryDummyAvailable, 
+#                                             self.handsize, self.cantplay, self.didntplay, self.turncounter, np.array(self.dummyPlayable).reshape(-1)))).float().to(self.device)
+#         return lineValueInput, gameStateInput
+   
+    
+#     def optionValue(self, dominoe, location, gameEngine):
+#         # enter dominoe and location into gameEngine, return new gamestate
+#         # with new gamestate, estimate value 
+#         # return final score estimate for ~self~ only
+#         # make choice will return the argmin of option value, attempting to bring about the lowest final score possible
+#         nextState = gameEngine(dominoe, location) # enter play option (dominoe-location pair) into the gameEngine, and return simulated new gameState
+#         played, available, handSize, cantPlay, didntPlay, turnCounter, lineStarted, dummyAvailable, dummyPlayable = nextState # name the outputs 
+#         # remove dominoe from hand
+#         self.myHand = np.delete(self.myHand, self.myHand==dominoe)
+#         self.dominoesInHand()
+#         self.gameState(played, available, handSize, cantPlay, didntPlay, turnCounter, dummyAvailable, dummyPlayable) # load simulated gameState into object attributes
+#         with torch.no_grad():
+#             finalScoreOutput = self.finalScoreNetwork(self.valueNetworkInput)
+#         # put dominoe back in hand
+#         self.myHand = np.append(self.myHand, dominoe)
+#         self.dominoesInHand()
+#         # return optionValue
+#         return finalScoreOutput.detach().cpu().numpy()
+    
+#     def makeChoice(self, optionValue):
+#         return np.argmin(optionValue)
         
     
     
