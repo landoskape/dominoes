@@ -72,6 +72,11 @@ class dominoeGame:
         # serve dominoes to each agent
         for agent,assignment in zip(self.agents,assignments): 
             agent.serve(assignment)
+    
+    def agentInitHand(self):
+        # tell agents that a new hand has started
+        for agent in self.agents:
+            agent.newHand()
             
     def presentGameState(self, currentPlayer, postState=False):
         # inform each agent of the current game state
@@ -217,7 +222,8 @@ class dominoeGame:
         self.dummyPlayDirection = []
         self.dummyPlayer = []
         self.dummyPlayNumber = []
-    
+        # tell agents that a new hand has started
+        self.agentInitHand()    
         
     def doTurn(self):
         # 0. Store index of agent who's turn it is
@@ -240,9 +246,14 @@ class dominoeGame:
         playDirection, nextAvailable, moveToNextPlayer = gameState[-3:]
         
         # 5. document play
-        self.documentGameplay(dominoe, location, self.nextPlayer, playDirection, nextAvailable, moveToNextPlayer)
-    
-        # 6. implement poststateValueUpdates (if not(handActive), do "performFinalScoreUpdates() in playHand()"
+        self.documentGameplay(dominoe, location, currentPlayer, playDirection, nextAvailable, moveToNextPlayer)
+        
+        # 6. inform agents if their hand was played on (only if location isn't the dummy line and agent played on different line
+        if (location is not None) and (location!=-1):
+            lineIdx = np.mod(currentPlayer + location, self.numPlayers)
+            if currentPlayer!=lineIdx: self.agents[lineIdx].linePlayedOn()
+            
+        # 7. implement poststateValueUpdates (if not(handActive), do "performFinalScoreUpdates() in playHand()"
         if self.handActive:
             # if hand is still active, do poststate value updates
             self.presentGameState(currentPlayer, postState=True) # present game state to every agent
