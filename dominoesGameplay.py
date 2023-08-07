@@ -9,7 +9,7 @@ import dominoesAgents as da
 
 # Top Level Gameplay Object
 class dominoeGame:
-    def __init__(self, highestDominoe, numPlayers=None, agents=None, defaultAgent=da.dominoeAgent, device=None):
+    def __init__(self, highestDominoe, numPlayers=None, agents=None, defaultAgent=da.dominoeAgent, shuffleAgents=True, device=None):
         # game metaparameters
         assert (numPlayers is not None) or (agents is not None), "either numPlayers or agents need to be specified"
         if (numPlayers is not None) and (agents is not None): 
@@ -17,11 +17,11 @@ class dominoeGame:
         if numPlayers is None: numPlayers = len(agents)
         self.numPlayers = numPlayers
         self.highestDominoe = highestDominoe
+        self.shuffleAgents = shuffleAgents
         # create list of dominoes and number of dominoes for convenience
         self.dominoes = df.listDominoes(self.highestDominoe)
         self.numDominoes = df.numberDominoes(self.highestDominoe)
         self.numDominoeDistribution()
-        self.extraDominoeOffset = np.random.randint(self.numPlayers) # which player(s) start with extra dominoes (if there are any)
         self.handNumber = self.highestDominoe # which hand are we at? (initialize at highest dominoe always...)
         self.playNumber = 0
         self.handActive = True # boolean determining whether a hand is completed
@@ -29,6 +29,8 @@ class dominoeGame:
         self.terminateGameCounter = 0 # once everyone cant play, start counting this up to terminate game
         # create index to shift to next players turn (faster than np.roll()...)
         self.nextPlayerShift = np.mod(np.arange(self.numPlayers)-1,self.numPlayers) 
+        # create an index for managing shuffling of agents
+        self.originalAgentIndex = np.arange(self.numPlayers)
         
         # these are unnecessary because the math is correct, but might as well keep it as a low-cost sanity check
         assert len(self.dominoes)==self.numDominoes, "the number of dominoes isn't what is expected!"
@@ -49,7 +51,7 @@ class dominoeGame:
             else:
                 self.agents[agentIdx] = agent(numPlayers, highestDominoe, self.dominoes, self.numDominoes, agentIdx, device=device)
     
-    
+        
     # ----------------
     # -- functions used throughout a hand to communicate --
     # ----------------
@@ -60,9 +62,9 @@ class dominoeGame:
         self.dominoePerTurn = numberEach * np.ones(self.numPlayers,dtype=int)
         self.dominoePerTurn[:self.playersWithExtra] += 1
     
-    def distribute(self):
+    def distribute(self, handCounter=0):
         # randomly distribute dominoes at beginning of hand 
-        startStopIndex = [0, *np.cumsum(np.roll(self.dominoePerTurn, self.extraDominoeOffset + self.handNumber))]
+        startStopIndex = [0, *np.cumsum(np.roll(self.dominoePerTurn, handCounter*(self.shuffleAgents==False)))] # only shift dominoe assignment number if not shuffling agents each hand
         idx = np.random.permutation(self.numDominoes) # randomized dominoe order to be distributed to each player
         assignments = [idx[startStopIndex[i]:startStopIndex[i+1]] for i in range(self.numPlayers)]
         assert np.array_equal(np.arange(self.numDominoes), np.sort(np.concatenate(assignments))), "dominoe assignments are not complete" # sanity check
@@ -186,7 +188,7 @@ class dominoeGame:
     # ----------------
     # -- functions to operate a hand or game --
     # ----------------
-    def initializeHand(self):
+    def initializeHand(self, handCounter=0):
         if not self.gameActive:
             print(f"Game has already finished")
             return
@@ -194,11 +196,18 @@ class dominoeGame:
         self.playNumber = 0
         self.terminateGameCounter = 0
         self.handActive = True
+        # if shuffling agents, do it now
+        if self.shuffleAgents:
+            newIdx = np.random.permutation(self.numPlayers)
+            self.agents = [self.agents[ni] for ni in newIdx]
+            self.originalAgentIndex = [self.originalAgentIndex[ni] for ni in newIdx]
+            for idx,agent in enumerate(self.agents): agent.updateAgentIndex(idx)
+        
         # identify which dominoe is the first double
         idxFirstDouble = np.where(np.all(self.dominoes==self.handNumber,axis=1))[0]
         assert len(idxFirstDouble)==1, "more or less than 1 double identified as first..."
         idxFirstDouble = idxFirstDouble[0]
-        assignments = self.distribute() # distribute dominoes randomly
+        assignments = self.distribute(handCounter) # distribute dominoes randomly
         idxFirstPlayer = np.where([idxFirstDouble in assignment for assignment in assignments])[0][0] # find out which player has the first double
         assignments[idxFirstPlayer] = np.delete(assignments[idxFirstPlayer], assignments[idxFirstPlayer]==idxFirstDouble) # remove it from their hand
         self.assignDominoes(assignments) # serve dominoes to agents
@@ -259,17 +268,18 @@ class dominoeGame:
             self.presentGameState(currentPlayer, postState=True) # present game state to every agent
             self.performPoststateValueUpdates(currentPlayer)
         
-    def playHand(self):
+    def playHand(self, handCounter=0):
         if not self.gameActive: 
             print(f"Game has already finished.")
             return 
-        self.initializeHand()
+        self.initializeHand(handCounter=handCounter)
         while self.handActive:
             self.doTurn()
         self.performFinalScoreUpdates() # once hand is over, do final score parameter updates for each agent
             
         self.handNumber = np.mod(self.handNumber - 1, self.highestDominoe+1)
-        return np.array([df.handValue(self.dominoes, agent.myHand) for agent in self.agents], dtype=int) # return score of hand
+        handScore = np.array([df.handValue(self.dominoes, self.agents[idx].myHand) for idx in np.argsort(self.originalAgentIndex)], dtype=int)
+        return handScore # return score of hand
         
     def playGame(self, rounds=None, withUpdates=False):
         rounds = self.highestDominoe+1 if rounds is None else rounds
@@ -279,7 +289,7 @@ class dominoeGame:
         else:
             roundCounter = range(rounds)
         for idxRound in roundCounter:
-            handScore = self.playHand()
+            handScore = self.playHand(handCounter=idxRound)
             self.score[idxRound] = handScore
         self.currentScore = np.sum(self.score,axis=0)
         self.currentWinner = np.argmin(self.currentScore)

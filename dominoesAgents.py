@@ -79,6 +79,10 @@ class dominoeAgent:
             return
         return handValues
     
+    def updateAgentIndex(self, newIndex):
+        self.agentIndex = newIndex
+        self.egoShiftIdx = np.mod(np.arange(self.numPlayers)+newIndex, self.numPlayers)
+        
     def printHand(self):
         print(self.myHand)
         print(self.handValues)
