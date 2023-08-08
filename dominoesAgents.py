@@ -387,7 +387,7 @@ class valueAgent(dominoeAgent):
         binaryDummyAvailable[dummyAvailable]=1 # indicate which value is available on the dummy line
         binaryHand[newHand]=1 # indicate which dominoes are present in hand
         
-        # This needs to be here for the lineValueAgent
+        # This needs to be here for the lineValueAgents
         kwargs['myHand']=newHand
         
         # -- prepare value input in simulated future gamestate --
@@ -689,6 +689,15 @@ class lineValueAgent(valueAgent):
         
     
     
+class lineValueAgentSmall(lineValueAgent):
+    agentName = 'lineValueAgentSmall'
+    def prepareNetwork(self):
+        # initialize valueNetwork -- predicts next hand value of each player along with final score for each player (using omniscient information to begin with...) 
+        self.finalScoreNetwork = dnn.lineRepresentationNetworkSmall(self.numPlayers,self.numDominoes,self.highestDominoe,self.finalScoreOutputDimension)
+        self.finalScoreNetwork.to(self.device)
+
+        # Prepare Training Functions & Optimizers
+        self.finalScoreEligibility = [[torch.zeros(prms.shape).to(self.device) for prms in self.finalScoreNetwork.parameters()] for _ in range(self.finalScoreOutputDimension)]
         
     
     
