@@ -335,8 +335,14 @@ class valueAgent(dominoeAgent):
         self.extraParameters = []
         self.extraEligibility = []
     
+    def newHand(self):
+        self.zeroEligibility()
+        
     def prepareNetwork(self):
         raise ValueError("It looks like you instantiated an object of the valueAgent class directly. This class is only used to provide a scaffold for complete valueAgents, see possible agents in this script!")
+    
+    def zeroEligibility(self):
+        raise ValueError("It looks like you instantiated an object of the valueAgent class directly. This class is only used to provide a scaffold for complete valueAgents, see possible agents in this script!")    
         
     def setLearning(self, learningState):
         self.learning = learningState
@@ -503,6 +509,9 @@ class basicValueAgent(valueAgent):
         # Prepare Training Functions & Optimizers
         self.finalScoreEligibility = [[torch.zeros(prms.shape).to(self.device) for prms in self.finalScoreNetwork.parameters()] for _ in range(self.finalScoreOutputDimension)]
     
+    def zeroEligibility(self):
+        self.finalScoreEligibility = [[torch.zeros(prms.shape).to(self.device) for prms in self.finalScoreNetwork.parameters()] for _ in range(self.finalScoreOutputDimension)]
+        
     def prepareValueInputs(self, updateObject=True):
         self.valueNetworkInput = self.generateValueInput().to(self.device)
         
@@ -548,6 +557,7 @@ class lineValueAgent(valueAgent):
         self.playValue = np.sum(self.dominoes, axis=1)
         
     def newHand(self):
+        super().newHand()
         self.needsLineUpdate = True
         
     def linePlayedOn(self):
@@ -573,7 +583,10 @@ class lineValueAgent(valueAgent):
 
         # Prepare Training Functions & Optimizers
         self.finalScoreEligibility = [[torch.zeros(prms.shape).to(self.device) for prms in self.finalScoreNetwork.parameters()] for _ in range(self.finalScoreOutputDimension)]
-        
+    
+    def zeroEligibility(self):
+        self.finalScoreEligibility = [[torch.zeros(prms.shape).to(self.device) for prms in self.finalScoreNetwork.parameters()] for _ in range(self.finalScoreOutputDimension)]
+    
     def prepareValueInputs(self):
         # First, get all possible lines that can be made on agent's own line.
         if self.needsLineUpdate: self.lineSequence, self.lineDirection = df.constructLineRecursive(self.dominoes, self.myHand, self.available[0], maxLineLength=self.maxLineLength)
