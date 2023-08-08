@@ -30,7 +30,7 @@ class dominoeGame:
         # create index to shift to next players turn (faster than np.roll()...)
         self.nextPlayerShift = np.mod(np.arange(self.numPlayers)-1,self.numPlayers) 
         # create an index for managing shuffling of agents
-        self.originalAgentIndex = np.arange(self.numPlayers)
+        self.originalAgentIndex = [idx for idx in range(self.numPlayers)]
         
         # these are unnecessary because the math is correct, but might as well keep it as a low-cost sanity check
         assert len(self.dominoes)==self.numDominoes, "the number of dominoes isn't what is expected!"
@@ -51,7 +51,14 @@ class dominoeGame:
             else:
                 self.agents[agentIdx] = agent(numPlayers, highestDominoe, self.dominoes, self.numDominoes, agentIdx, device=device)
     
-        
+    # ----------------
+    # -- functions for managing agents --
+    # ----------------
+    def getAgent(self, agentIndex):
+        assert agentIndex in self.originalAgentIndex, "requested agent index does not exist"
+        idxAgent = self.originalAgentIndex.index(agentIndex)
+        return self.agents[idxAgent]
+    
     # ----------------
     # -- functions used throughout a hand to communicate --
     # ----------------
@@ -78,7 +85,7 @@ class dominoeGame:
     def agentInitHand(self):
         # tell agents that a new hand has started
         for agent in self.agents:
-            agent.newHand()
+            agent.initHand()
             
     def presentGameState(self, currentPlayer, postState=False):
         # inform each agent of the current game state

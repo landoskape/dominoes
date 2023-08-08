@@ -95,7 +95,7 @@ class dominoeAgent:
         self.myHand = assignment
         self.dominoesInHand()
         
-    def newHand(self):
+    def initHand(self):
         # edited on an agent by agent basis. Not needed for default agents
         return None
     
@@ -236,7 +236,7 @@ class bestLineAgent(dominoeAgent):
         self.playValue = np.sum(self.dominoes,axis=1)
         self.nonDouble = self.dominoes[:,0]!=self.dominoes[:,1]
     
-    def newHand(self):
+    def initHand(self):
         self.needsLineUpdate = True
         
     def linePlayedOn(self):
@@ -335,7 +335,7 @@ class valueAgent(dominoeAgent):
         self.extraParameters = []
         self.extraEligibility = []
     
-    def newHand(self):
+    def initHand(self):
         self.zeroEligibility()
         
     def prepareNetwork(self):
@@ -476,7 +476,8 @@ class valueAgent(dominoeAgent):
         # Handle model save number
         existingSaves = glob(str(path / modelName)+'_*.npy')
         saveNumbers = [int(re.search(r'^.*(\d+)\.npy', esave).group(1)) for esave in existingSaves]
-        modelName += f'_{max(saveNumbers)+1}'
+        saveNumber = max(saveNumbers)+1 if len(saveNumbers)>0 else 0
+        modelName += f'_{saveNumber}'
         np.save(path / modelName, parameters) 
         
     def loadAgentParameters(self, path):
@@ -556,8 +557,8 @@ class lineValueAgent(valueAgent):
         self.nonDouble = self.dominoes[:,0]!=self.dominoes[:,1]
         self.playValue = np.sum(self.dominoes, axis=1)
         
-    def newHand(self):
-        super().newHand()
+    def initHand(self):
+        super().initHand()
         self.needsLineUpdate = True
         
     def linePlayedOn(self):
