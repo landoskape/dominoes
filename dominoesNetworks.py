@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch import nn
 import dominoesFunctions as df
 
+
 class lineRepresentationNetwork(nn.Module):
     def __init__(self, numPlayers, numDominoes, highestDominoe, finalScoreOutputDimension, numOutputCNN=1000, weightPrms=(0.,0.1),biasPrms=0.,actFunc=F.relu,pDropout=0):
         super().__init__()
@@ -67,7 +68,7 @@ class lineRepresentationNetworkSmall(nn.Module):
         # then, this can be passed as an extra input into a FF network
         # the point is to use the same weights on the representations of every single dominoe, then process these transformed representations into the rest of the network
         numLineFeatures = 6
-        numOutputChannels = 3
+        numOutputChannels = 10
         numOutputValues = numOutputChannels * numDominoes
         self.cnn_c1 = nn.Conv1d(numLineFeatures, numOutputChannels, 1)
         self.cnn_f1 = nn.Linear(numOutputValues, self.numOutputCNN)
@@ -76,9 +77,9 @@ class lineRepresentationNetworkSmall(nn.Module):
         self.cnnLayer = nn.Sequential(self.cnn_c1, nn.ReLU(), nn.Flatten(start_dim=0), self.cnn_f1, nn.ReLU(), self.cnn_ln)
         
         # create ff network that integrates the standard network input with the convolutional output
-        self.fc1 = nn.Linear(self.inputDimension, 50)
-        self.fc2 = nn.Linear(50, 20)
-        self.fc3 = nn.Linear(20, 20)
+        self.fc1 = nn.Linear(self.inputDimension, 100)
+        self.fc2 = nn.Linear(100, 50)
+        self.fc3 = nn.Linear(50, 20)
         self.fc4 = nn.Linear(20, self.outputDimension)
         torch.nn.init.normal_(self.fc1.weight, mean=weightPrms[0], std=weightPrms[1])
         torch.nn.init.normal_(self.fc2.weight, mean=weightPrms[0], std=weightPrms[1])
