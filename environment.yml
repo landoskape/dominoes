@@ -1,0 +1,17 @@
+name: dominoes
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - pip
+  - numpy
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=11.7
+  - matplotlib
+  - jupyterlab
+  - tqdm
