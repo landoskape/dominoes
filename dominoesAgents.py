@@ -106,16 +106,16 @@ class dominoeAgent:
         # edited on an agent by agent basis, usually not needed unless agents use the df.constructLineRecursive function
         return None
     
-    def checkTurnUpdate(self, currentPlayer):
-        # if turn idx isn't zero, then don't update game state
-        return (currentPlayer is not None) and (currentPlayer == self.agentIndex)
+    def checkTurnUpdate(self, currentPlayer, postState=False):
+        relevantTurn = (currentPlayer is not None) and (currentPlayer == self.agentIndex) # only update gamestate when it's this agents turn by default
+        relevantState = not(postState) # only update gamestate for pre-state gamestates by default
+        return relevantTurn and relevantState
     
-    def gameState(self, played, available, handsize, cantplay, didntplay, turncounter, dummyAvailable, dummyPlayable, currentPlayer=None, postState=None):
+    def gameState(self, played, available, handsize, cantplay, didntplay, turncounter, dummyAvailable, dummyPlayable, currentPlayer=None, postState=False):
         # gamestate input, served to the agent each time it requires action (either at it's turn, or each turn for an RNN)
         # agents convert these variables to agent-centric information about the game-state
-        if not(self.checkTurnUpdate(currentPlayer)): return None
-        if postState==True: return None
-        
+        if not(self.checkTurnUpdate(currentPlayer, postState=postState)): return None
+
         self.played = played # list of dominoes that have already been played
         self.available = self.egocentric(available) # list of value available on each players line (centered on agent)
         self.handsize = self.egocentric(handsize) # list of handsize for each player (centered on agent)
@@ -124,7 +124,7 @@ class dominoeAgent:
         self.turncounter = self.egocentric(turncounter) # list of how many turns until each player is up (meaningless unless agent receives all-turn updates)
         self.dummyAvailable = dummyAvailable # index of dominoe available on dummy line
         self.dummyPlayable = dummyPlayable # bool determining whether the dummy line is playable
-        self.processGameState(postState=postState)
+        self.processGameState()
     
     def processGameState(self,*args,**kwargs):
         # edited on an agent by agent basis, nothing needed for the default agent 
@@ -317,7 +317,7 @@ class valueAgent(dominoeAgent):
     def specializedInit(self,**kwargs):
         # meta parameters
         self.learning = True
-        self.lam = 0.9
+        self.lam = 0.8
         self.alpha = 1e-5
         self.trackFinalScoreError = []
         self.finalScoreOutputDimension = 1
@@ -353,12 +353,12 @@ class valueAgent(dominoeAgent):
         self.binaryDummyAvailable[:]=0 
         self.binaryHand[:]=0 
     
-    def checkTurnUpdate(self, currentPlayer):
-        # if turn idx isn't zero, then don't update game state
-        return (currentPlayer is not None) and (currentPlayer == self.agentIndex)
+    def checkTurnUpdate(self, currentPlayer, postState=False):
+        relevantTurn = (currentPlayer is not None) and (currentPlayer == self.agentIndex)
+        relevantState = True # always update gameState even at postState
+        return relevantTurn and relevantState
     
-    def processGameState(self,postState=None):
-        if (postState is not None) and (postState==True) and not(self.learning): return None
+    def processGameState(self):
         # vectorize game state data
         self.resetBinaries() # set binaries back to 0
         self.binaryPlayed[self.played]=1 # indicate which dominoes have been played
@@ -400,9 +400,9 @@ class valueAgent(dominoeAgent):
         return self.simulateValueInputs(binaryHand, binaryPlayed, binaryLineAvailable, binaryDummyAvailable, handSize, cantPlay, didntPlay, turnCounter, dummyPlayable, **kwargs)
         
     def estimatePrestateValue(self, currentPlayer=None):
-        if not(self.checkTurnUpdate(currentPlayer)): return None
+        if not(self.checkTurnUpdate(currentPlayer, postState=False)): return None
         if not(self.learning): return None
-    
+
         # at the beginning of each turn, zero out the gradients 
         self.finalScoreNetwork.zero_grad()
         
@@ -423,9 +423,9 @@ class valueAgent(dominoeAgent):
                     
     @torch.no_grad() # don't need to estimate any gradients here, that was done in estimatePrestateValue()!
     def updatePoststateValue(self, finalScore=None, currentPlayer=None):
-        if not(self.checkTurnUpdate(currentPlayer)): return None
+        if not(self.checkTurnUpdate(currentPlayer, postState=True)): return None
         if not(self.learning): return None
-    
+
         # otherwise, do post-state value update
         if finalScore is None: 
             # if final score is none, then the game hasn't ended and we should learn from the poststate value estimate
@@ -565,9 +565,10 @@ class lineValueAgent(valueAgent):
         # if my line was played on, then recompute sequences if it's my turn
         self.needsLineUpdate = True
         
-    def checkTurnUpdate(self, currentPlayer):
-        # if turn idx isn't zero, then don't update game state
-        return True # (currentPlayer is not None) and (currentPlayer == self.agentIndex)
+    def checkTurnUpdate(self, currentPlayer, postState=False):
+        relevantTurn = True # update every turn -- #(currentPlayer is not None) and (currentPlayer == self.agentIndex)
+        relevantState = True # update gameState for pre and post states
+        return relevantTurn and relevantState
     
     def specialParameters(self):
         # add a few special parameters to store and reload for this type of agent
