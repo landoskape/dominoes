@@ -285,8 +285,7 @@ class dominoeGame:
         self.performFinalScoreUpdates() # once hand is over, do final score parameter updates for each agent
             
         self.handNumber = np.mod(self.handNumber - 1, self.highestDominoe+1)
-        handScore = np.array([df.handValue(self.dominoes, self.agents[idx].myHand) for idx in np.argsort(self.originalAgentIndex)], dtype=int)
-        return handScore # return score of hand
+        return np.array([df.handValue(self.dominoes, self.getAgent(idx).myHand) for idx in range(self.numPlayers)], dtype=int)
         
     def playGame(self, rounds=None, withUpdates=False):
         rounds = self.highestDominoe+1 if rounds is None else rounds
