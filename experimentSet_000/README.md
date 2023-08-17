@@ -2,15 +2,6 @@
 
 This repository contains a Python script for running machine learning experiments on a game of dominoes. The code simulates a dominoes game and trains and evaluates different agents using various strategies.
 
-## Table of Contents
-
-- [Requirements](#requirements)
-- [Usage](#usage)
-- [Description](#description)
-- [Examples](#examples)
-- [Contributing](#contributing)
-- [License](#license)
-
 ## Requirements
 
 To run the experiment, you need:
