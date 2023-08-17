@@ -37,7 +37,7 @@ Additionally, you need to make sure you have a directory available called "saved
 
 ## Usage
 
-python experiment.py `[-options]`
+`python experiment.py [-options]`
 
 The full list of options can be found in the experiment.py file as arguments of the ArgumentParser. 
 
@@ -94,10 +94,10 @@ in this case means the lowest expected number of points of the lineValue agent a
 
 ## Examples
 To test the code before devoting lots of computation time: 
-python experiment.py -tg 2 -pg 2 -tr 2 -pr 2 
+`python experiment.py -tg 2 -pg 2 -tr 2 -pr 2`
 
 Then to train the model fully with the default parameters: 
-python experiment.py
+`python experiment.py`
 
 On my computer, which has a NVIDIA GeForce RTX 3060, running the code with default parameters takes about 5 hours. 
 
