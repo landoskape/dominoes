@@ -90,7 +90,7 @@ To test the code before devoting lots of computation time:
 Then to train the model fully with the default parameters: 
 `python experiment.py`
 
-On my computer, which has a NVIDIA GeForce RTX 3060, running the code with default parameters takes about 5 hours. 
+On my computer, which has a NVIDIA GeForce RTX 3060, running the code with default parameters takes about 8-9 hours. 
 
 ## Contributing
 Feel free to contribute to this project by creating issues or pull requests. Suggestions and improvements are welcome!
