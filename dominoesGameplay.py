@@ -300,6 +300,9 @@ class dominoeGame:
         self.currentScore = np.sum(self.score,axis=0)
         self.currentWinner = np.argmin(self.currentScore)
 
+    def showOptionValue(self):
+        return None
+        
     def printResults(self):
         if hasattr(self, 'currentScore'):
             print(self.score)
