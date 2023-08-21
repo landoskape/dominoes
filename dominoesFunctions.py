@@ -40,7 +40,7 @@ def printDominoeList(options, dominoes, name=None, fullList=False):
 def handValue(dominoes, idxHand):
     return np.sum(dominoes[idxHand])
 
-def gameSequenceToString(dominoes, sequence, direction, player=None, playNumber=None):
+def gameSequenceToString(dominoes, sequence, direction, player=None, playNumber=None, labelLines=False):
     # take in game sequence and dominoes and convert to string, then print output
     # manage inputs -- 
     if len(sequence)==0: 
@@ -49,6 +49,14 @@ def gameSequenceToString(dominoes, sequence, direction, player=None, playNumber=
     input1d = not isinstance(sequence[0],list)
     if input1d: sequence = [sequence] # np.reshape(sequence, (1,-1)) # make iterable in the expected way
     if input1d: direction = [direction] # np.reshape(direction, (1,-1)) 
+    if labelLines:
+        if len(sequence)==1:
+            name = ["dummy: "]
+        else:
+            name = [f"player {idx}: " for idx in range(len(sequence))]
+    else:
+        name = [""]*len(sequence)
+    
     assert all([len(seq)==len(direct) for seq,direct in zip(sequence,direction)]), "sequence and direction do not have same shape"
     if input1d and player is not None:
         player = [player] # np.reshape(player, (1,-1))
@@ -64,7 +72,7 @@ def gameSequenceToString(dominoes, sequence, direction, player=None, playNumber=
             sequenceString = [seqString+f" Ag:{cplay}" for seqString,cplay in zip(sequenceString,player[idx])]
         if playNumber is not None:
             sequenceString = [seqString+f" P:{cplay}" for seqString,cplay in zip(sequenceString,playNumber[idx])]
-        print(sequenceString)
+        print(name[idx], sequenceString)
 
 def constructLineRecursive(dominoes, myHand, available, previousSequence=[], previousDirection=[], maxLineLength=None):
     # this version of the function uses absolute dominoe numbers, rather than indexing based on which order they are in the hand
