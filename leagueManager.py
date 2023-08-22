@@ -91,7 +91,7 @@ class gameTable:
         for idx, agent in enumerate(agents):
             assert isinstance(agent, da.dominoeAgent), f"Agent{idx} is not a dominoeAgent"
             assert (self.numPlayers in agent.numPlayerRange) and (self.highestDominoe in agent.highestDominoeRange), f"Agent{idx} has wrong number of parameters"
-            agent.setAgentIndex(idx)
+            agent.updateAgentIndex(idx)
     
     # ----------------
     # -- functions for managing agents --
