@@ -4,6 +4,7 @@ import numpy as np
 from tqdm import tqdm
 from copy import copy
 
+import leagueManager as lm
 import dominoesAgents as da
 import dominoesFunctions as df
 
@@ -46,7 +47,7 @@ class dominoeGame:
             if isinstance(agent, da.dominoeAgent):
                 assert (agent.numPlayers==numPlayers) and (agent.highestDominoe==highestDominoe), f"provided agent (agentIdx:{agentIdx}) did not have the correct number of players or dominoes"
                 self.agents[agentIdx] = agent
-                self.agents[agentIdx].agentIndex = agentIdx
+                self.agents[agentIdx].updateAgentIndex(agentIdx)
                 self.agents[agentIdx].device = device
             else:
                 self.agents[agentIdx] = agent(numPlayers, highestDominoe, self.dominoes, self.numDominoes, agentIdx, device=device)
@@ -311,3 +312,10 @@ class dominoeGame:
         else:
             print("Game has not begun!")
             
+
+
+class dominoeGameFromTable(dominoeGame):
+    def __init__(self, gameTable):
+        assert isinstance(gameTable, lm.gameTable), "gameTable must be a gameTable object defined in leagueManager.py"
+        super().__init__(gameTable.highestDominoe, agents=gameTable.agents, shuffleAgents=gameTable.shuffleAgents, device=gameTable.device)
+        

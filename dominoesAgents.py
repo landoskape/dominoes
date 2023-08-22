@@ -22,7 +22,7 @@ class dominoeAgent:
     agentName = 'default'
     
     # initialization function
-    def __init__(self, numPlayers, highestDominoe, dominoes, numDominoes, agentIndex, device=None, **kwargs):
+    def __init__(self, numPlayers, highestDominoe, dominoes, numDominoes, device=None, **kwargs):
         # meta-variables (includes redundant information, but if I train 1000s of networks I want it to be as fast as possible)
         self.numPlayers = numPlayers
         self.numPlayerRange = [self.numPlayers]
@@ -30,10 +30,8 @@ class dominoeAgent:
         self.highestDominoeRange = range(1, 1000)
         self.dominoes = dominoes
         self.numDominoes = numDominoes
-        self.agentIndex = agentIndex
         self.dominoeValue = np.sum(self.dominoes, axis=1).astype(float)
         self.dominoeDouble = self.dominoes[:,0]==self.dominoes[:,1]
-        self.egoShiftIdx = np.mod(np.arange(numPlayers)+agentIndex, numPlayers)
         self.device = device if device is not None else "cpu"
         
         # game-play related variables

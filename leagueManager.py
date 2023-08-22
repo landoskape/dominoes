@@ -1,3 +1,4 @@
+import random
 import torch.cuda as torchCuda
 import dominoesAgents as da
 import dominoesFunctions as df
@@ -23,21 +24,21 @@ class leagueManager:
         self.numAgents = 0
         self.device = device if device is not None else "cuda" if torchCuda.is_available() else "cpu"
         
-    def addAgents(self, agents):
+    def addAgents(self, agentList):
         # Wrapper for "addAgent" when there are multiple pre-instantiated agents to add
-        for idx, agent in enumerate(agents): 
+        for idx, agent in enumerate(agentList): 
             # Check if all agents in list are valid first
             assert self.checkAgent(agent), f"Agent #{idx} is not a dominoe agent"
             assert isinstance(agent, da.dominoeAgent), f"Agent #{idx} must be an instantiated object of a dominoe agent"
             assert self.checkParameters(agent), f"Agent #{idx} has the wrong game parameters (either numPlayers or highestDominoe)"
-        for agent in agents:
+        for agent in agentList:
             # Then once you know they are valid, add all of them (double assertions are worth it for expected behavior)
             self.addAgent(agent)
         
     def addAgent(self, agent):
         # This method adds a single instantiated agent to the league
         assert self.checkAgent(agent), "agent is not a dominoe agent"
-        assert isinstance(agent,da.dominoeAgent), "agent must be an instantiated object of a dominoe agent
+        assert isinstance(agent,da.dominoeAgent), "agent must be an instantiated object of a dominoe agent"
         assert self.checkParameters(agent), "agent has the wrong game parameters (either numPlayers or highestDominoe"
         agent.device = self.device # update device of agent
         self.agents.append(agent)
@@ -64,31 +65,38 @@ class leagueManager:
         
     def createGameTable(self, numPlayers=None):
         # This method creates a game table using the agents in the league
-        numPlayers = numPlayers is numPlayers is not None else self.numPlayers
+        numPlayers = numPlayers if numPlayers is not None else self.numPlayers
         if self.replace:
             leagueIndex = random.choices(range(self.numAgents), k=numPlayers)
         else:
             leagueIndex = random.sample(range(self.numAgents), k=numPlayers)
-        agentList = [self.agents[idx] for idx in agentIndex]
+        agentList = [self.agents[idx] for idx in leagueIndex]
         return gameTable(self.highestDominoe, agentList, self.shuffleAgents), leagueIndex
 
     def updateElo(self, leagueIndex, gameResults):
         # This method updates the ELO ratings of the agents in the game based on the gameResults
         None
 
+    def getAgent(self, agentIndex):
+        assert agentIndex in self.originalAgentIndex, "requested agent index does not exist"
+        idxAgent = self.originalAgentIndex.index(agentIndex)
+        return self.agents[idxAgent]
+
 
 class gameTable:
-    def __init__(self, highestDominoe, agentList, shuffleAgents=False):
+    def __init__(self, highestDominoe, agentList, shuffleAgents=False, device=None):
         self.numPlayers = len(agentList)
         self.highestDominoe = highestDominoe
         self.dominoes = df.listDominoes(highestDominoe)
-        self.numDominoes = len(self.numDominoes)
+        self.numDominoes = len(self.dominoes)
         self.shuffleAgents = shuffleAgents
+        self.device = device if device is not None else "cuda" if torchCuda.is_available() else "cpu"
+        self.agents = agentList
         
         # create an index for managing shuffling of agents
         self.originalAgentIndex = [idx for idx in range(self.numPlayers)]
         
-        for idx, agent in enumerate(agents):
+        for idx, agent in enumerate(self.agents):
             assert isinstance(agent, da.dominoeAgent), f"Agent{idx} is not a dominoeAgent"
             assert (self.numPlayers in agent.numPlayerRange) and (self.highestDominoe in agent.highestDominoeRange), f"Agent{idx} has wrong number of parameters"
             agent.updateAgentIndex(idx)
