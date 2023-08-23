@@ -28,30 +28,59 @@ conda env create -f environment.yml
 Note: I have tested and developed this code on a Windows 10 machine so cannot 
 guarantee that it works on other machines. I think the main issue will be 
 downloading pytorch and nvidia tools, so if the environment creation fails, 
-I would recommend creating an environment the basic way, then adding each 
-package manually. For everything above pytorch, just type `pip install 
-<package_name>`. Then, for the pytorch/torch packages, use the recommended
-command from the [pytorch website](https://pytorch.org/get-started/locally/).
+I would recommend creating an environment called "dominoes", then adding each 
+package manually. For everything above pytorch in the `environment.yml` file, 
+just type `pip install <package_name>`. Then, for the pytorch/torch packages, 
+use the recommended command from the 
+[pytorch website](https://pytorch.org/get-started/locally/).
 
 ```
-conda env create -n dominoes
+conda create -n dominoes
+conda activate dominoes
+pip install <package_name> # go in order through the environment.yml file, ignore the pytorch packages
+# use whatever line of code is suggested from the pytorch website:
+conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
 ```
 
-## Usage
+## Standard usage
 
-`python experiment.py [-options]`
+### Imports
+The code depends on several modules written in this repository. In all the
+code examples below, I assume that you have already run the following import
+statements: 
+```
+import leagueManager as lm
+import dominoesGameplay as dg
+import dominoesAgents as da
+import dominoesNetworks as dn
+import dominoesFunctions as df
+```
 
-The full list of options can be found in the experiment.py file as arguments of the ArgumentParser. 
+### Creating a league, running a game, updating ELO scores
+```
+# Start by creating a league
+highestDominoe = 9 # Choose what the highest dominoe value is (usually 9 or 12)
+numPlayers = 4 # Choose how many players per game
+league = lm.leagueManager(highestDominoe, numPlayers, shuffleAgents=True, replace=False)
 
-Key arguments: 
+# Add four agents (if replace=False, there needs to be more agents than numPlayers)
+league.addAgentType(da.bestLineAgent)
+league.addAgentType(da.doubleAgent)
+league.addAgentType(da.greedyAgent)
+league.addAgentType(da.dominoeAgent)
 
- - num-players: how many players to create in the game (currently not active!)
- - highest-dominoe: which is the highest dominoe value to use (default is 9, typically either 6, 9, or 12)
- - training/performance games: how many games of dominoes to play for each block of training or performance testing.
-     - note that training and performance are each performed twice
- - training/performance rounds: how many hands to play per game for each block of training or performance testing.
-     - note that the more rounds you use, the more accurate the estimate of performance is.
-     - For training, games and rounds are interchangeable and generally serve as the "trainingEpochs" parameter.
+# Create a game table (this specifies which agents from the league will play
+against each other)
+gameTable, leagueIndex = league.createGameTable()
+
+# Then create a game object and play the game
+game = dg.dominoeGameFromTable(gameTable)
+game.playGame()
+game.printResults()
+
+# Finally, return the results to the leagueManager to update ELO scores
+league.updateElo(leagueIndex, game.currentScore)
+```
 
 ## Description
 
