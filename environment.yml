@@ -9,10 +9,10 @@ dependencies:
   - pip
   - numpy
   - scipy
+  - matplotlib
+  - jupyterlab
+  - tqdm
   - pytorch
   - torchvision
   - torchaudio
   - pytorch-cuda=11.7
-  - matplotlib
-  - jupyterlab
-  - tqdm

@@ -7,7 +7,10 @@ agents that play the game with different strategies, and a league manager,
 which is used to manage a group of agents that play games with each other. 
 
 I developed the repository to accomplish two main goals: 
-1. 
+1. Create a dominoes agent that plays the game better than me, and hopefully
+   better than most humans!
+2. Teach myself about deep reinforcement learning tools and standard coding
+   practices. 
 
 ## Requirements
 
@@ -20,6 +23,18 @@ environment.
 ```
 cd /path/to/cloned/repository
 conda env create -f environment.yml
+```
+
+Note: I have tested and developed this code on a Windows 10 machine so cannot 
+guarantee that it works on other machines. I think the main issue will be 
+downloading pytorch and nvidia tools, so if the environment creation fails, 
+I would recommend creating an environment the basic way, then adding each 
+package manually. For everything above pytorch, just type `pip install 
+<package_name>`. Then, for the pytorch/torch packages, use the recommended
+command from the [pytorch website](https://pytorch.org/get-started/locally/).
+
+```
+conda env create -n dominoes
 ```
 
 ## Usage
