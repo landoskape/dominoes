@@ -26,12 +26,12 @@ conda env create -f environment.yml
 ```
 
 Note: I have tested and developed this code on a Windows 10 machine so cannot 
-guarantee that it works on other operating systems. I think the main issue will
-be downloading pytorch and nvidia tools, so if the environment creation fails, 
-I would recommend creating an environment called "dominoes", then adding each 
-package manually. For everything above pytorch in the `environment.yml` file, 
-just type `pip install <package_name>`. Then, for the pytorch/torch packages, 
-use the recommended command from the 
+guarantee that it works on other operating systems. I think most compatibility
+issues will relate to pytorch and nvidia tools, so if the environment creation 
+fails, I would recommend creating an environment called "dominoes", then adding 
+each package manually. For everything above pytorch in the `environment.yml` 
+file, just type `pip install <package_name>`. Then, for the pytorch/torch 
+packages, use the recommended command from the 
 [pytorch website](https://pytorch.org/get-started/locally/).
 
 ```
