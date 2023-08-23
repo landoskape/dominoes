@@ -57,47 +57,53 @@ import dominoesFunctions as df
 ```
 
 ### Creating a league, running a game, updating ELO scores
+Start by creating a league with a pre-specified highest dominoe (e.g. which
+set to use), and the number of players per game:
 ```
 # Start by creating a league
 highestDominoe = 9 # Choose what the highest dominoe value is (usually 9 or 12)
 numPlayers = 4 # Choose how many players per game
 league = lm.leagueManager(highestDominoe, numPlayers, shuffleAgents=True, replace=False)
+```
 
-# Add four agents (if replace=False, there needs to be more agents than numPlayers)
+Add agents by class type (this is not the only way, see leagueManager for an
+explanation of how to add agents to a league).:
+```
 league.addAgentType(da.bestLineAgent)
 league.addAgentType(da.doubleAgent)
 league.addAgentType(da.greedyAgent)
 league.addAgentType(da.dominoeAgent)
+```
 
-# Create a game table of N=numPlayers agents to play against each other
+Create a game table from the league which specifies which players in 
+the league will play a game against each other. Create a game object from the 
+table to operate the gameplay. Play the game and print the results.
+```
 gameTable, leagueIndex = league.createGameTable()
-
-# Then create a game object and play the game
 game = dg.dominoeGameFromTable(gameTable)
 game.playGame()
 game.printResults()
+```
 
-# Finally, return the results to the leagueManager to update ELO scores
+Finally, return the results to the league manager to update ELO scores.
+```
 league.updateElo(leagueIndex, game.currentScore)
 ```
 
 ### Running a game and showing the results: 
+Start by creating a game object from a gameTable. Then, play game with a 
+specified number of rounds. Usually, the number of rounds is equal to the 
+highest dominoe plus 1 (e.g. for 9s, play from 0-9). But for training or 
+statistics purposes, it is useful to set rounds to a high number.
 ```
-# Create a game object from a gameTable (gameTable instructions above)
-game = dg.dominoeGameFromTable(gameTable)
+game = dg.dominoeGameFromTable(gameTable) 
+game.playGame(rounds=3) # Play the game 
+```
 
-# You can specify how many rounds to play. Usually, the number of rounds is
-equal to the highest dominoe plus 1 (e.g. for 9s, play from 0-9). But for
-training or statistics purposes, it is useful to set rounds to a high number.
-
-# Play the game 
-game.playGame(rounds=3)
-
-# Show the scores for each round
+Show the scores for each round: 
+```
 game.printResults()
-```
 
-```
 # output: 
 Scores for each round:
 [[14 35  0 19]
@@ -113,23 +119,23 @@ The winner is agent: 2 with a score of 7, they went out in 2/3 rounds.
 Then, you can display a record of the events in the gameplay with the
 following lines: 
 ```
+df.gameSequenceToString(game.dominoes, game.lineSequence, game.linePlayDirection, player=None, playNumber=None, labelLines=True)
+df.gameSequenceToString(game.dominoes, game.dummySequence, game.dummyPlayDirection, player=None, playNumber=None, labelLines=True) 
+
+output:
+player 0:  [' 4|8 ', ' 8|2 ', ' 2|9 ', ' 9|9 ', ' 9|5 ', ' 5|5 ', ' 5|0 ', ' 0|4 ', ' 4|1 ', ' 1|2 ', ' 2|0 ', ' 0|1 ']
+player 1:  [' 4|7 ', ' 7|7 ', ' 7|5 ', ' 5|6 ', ' 6|1 ', ' 1|9 ', ' 9|8 ', ' 8|8 ', ' 8|1 ', ' 1|3 ', ' 3|4 ']
+player 2:  [' 4|6 ', ' 6|3 ', ' 3|5 ', ' 5|1 ']
+player 3:  [' 4|9 ', ' 9|6 ', ' 6|6 ', ' 6|8 ', ' 8|5 ', ' 5|2 ', ' 2|6 ', ' 6|7 ', ' 7|0 ', ' 0|0 ', ' 0|6 ']
+dummy:  [' 4|2 ', ' 2|3 ', ' 3|8 ', ' 8|0 ', ' 0|9 ', ' 9|3 ', ' 3|7 ', ' 7|9 ']
+```
+
+Or, for a more verbose output, set `player` and `playNumber` as follows.
+```
 df.gameSequenceToString(game.dominoes, game.lineSequence, game.linePlayDirection, player=game.linePlayer, playNumber=game.linePlayNumber, labelLines=True)
 df.gameSequenceToString(game.dominoes, game.dummySequence, game.dummyPlayDirection, player=game.dummyPlayer, playNumber=game.dummyPlayNumber, labelLines=True) 
 ```
 
-Or, for a less verbose output, set `player` and `playNumber` to `None`.
-```
-df.gameSequenceToString(game.dominoes, game.lineSequence, game.linePlayDirection, player=None, playNumber=None, labelLines=False)
-df.gameSequenceToString(game.dominoes, game.dummySequence, game.dummyPlayDirection, player=None, playNumber=None, labelLines=False) 
-```
-```
-output:
-[' 4|8 ', ' 8|2 ', ' 2|9 ', ' 9|9 ', ' 9|5 ', ' 5|5 ', ' 5|0 ', ' 0|4 ', ' 4|1 ', ' 1|2 ', ' 2|0 ', ' 0|1 ']
-[' 4|7 ', ' 7|7 ', ' 7|5 ', ' 5|6 ', ' 6|1 ', ' 1|9 ', ' 9|8 ', ' 8|8 ', ' 8|1 ', ' 1|3 ', ' 3|4 ']
-[' 4|6 ', ' 6|3 ', ' 3|5 ', ' 5|1 ']
-[' 4|9 ', ' 9|6 ', ' 6|6 ', ' 6|8 ', ' 8|5 ', ' 5|2 ', ' 2|6 ', ' 6|7 ', ' 7|0 ', ' 0|0 ', ' 0|6 ']
-[' 4|2 ', ' 2|3 ', ' 3|8 ', ' 8|0 ', ' 0|9 ', ' 9|3 ', ' 3|7 ', ' 7|9 ']
-```
 
 ## Description
 
