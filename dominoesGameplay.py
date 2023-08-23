@@ -306,9 +306,16 @@ class dominoeGame:
         
     def printResults(self):
         if hasattr(self, 'currentScore'):
+            print("Scores for each round:")
             print(self.score)
+            print("")
+            print("Final score:")
             print(self.currentScore)
-            print(f"The current winner is agent: {self.currentWinner} with a score of {self.currentScore[self.currentWinner]}!")
+            print("")
+            numTimesOut = sum(self.score[:,self.currentWinner]==0)
+            print(f"The winner is agent: {self.currentWinner}"
+                  f" with a score of {self.currentScore[self.currentWinner]},"
+                  f" they went out in {numTimesOut}/{len(self.score)} rounds.")
         else:
             print("Game has not begun!")
             

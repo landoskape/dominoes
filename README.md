@@ -38,6 +38,7 @@ use the recommended command from the
 conda create -n dominoes
 conda activate dominoes
 pip install <package_name> # go in order through the environment.yml file, ignore the pytorch packages
+
 # use whatever line of code is suggested from the pytorch website:
 conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
 ```
@@ -45,9 +46,8 @@ conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvi
 ## Standard usage
 
 ### Imports
-The code depends on several modules written in this repository. In all the
-code examples below, I assume that you have already run the following import
-statements: 
+The code depends on several modules written in this repository. To try all the
+code examples below, first run the following import statements: 
 ```
 import leagueManager as lm
 import dominoesGameplay as dg
@@ -69,8 +69,7 @@ league.addAgentType(da.doubleAgent)
 league.addAgentType(da.greedyAgent)
 league.addAgentType(da.dominoeAgent)
 
-# Create a game table (this specifies which agents from the league will play
-against each other)
+# Create a game table of N=numPlayers agents to play against each other
 gameTable, leagueIndex = league.createGameTable()
 
 # Then create a game object and play the game
@@ -80,6 +79,56 @@ game.printResults()
 
 # Finally, return the results to the leagueManager to update ELO scores
 league.updateElo(leagueIndex, game.currentScore)
+```
+
+### Running a game and showing the results: 
+```
+# Create a game object from a gameTable (gameTable instructions above)
+game = dg.dominoeGameFromTable(gameTable)
+
+# You can specify how many rounds to play. Usually, the number of rounds is
+equal to the highest dominoe plus 1 (e.g. for 9s, play from 0-9). But for
+training or statistics purposes, it is useful to set rounds to a high number.
+
+# Play the game 
+game.playGame(rounds=3)
+
+# Show the scores for each round
+game.printResults()
+```
+
+```
+# output: 
+Scores for each round:
+[[14 35  0 19]
+ [ 8 17  0  7]
+ [ 0  9  7  1]]
+
+Final score:
+[22 61  7 27]
+
+The winner is agent: 2 with a score of 7, they went out in 2/3 rounds.
+```
+
+Then, you can display a record of the events in the gameplay with the
+following lines: 
+```
+df.gameSequenceToString(game.dominoes, game.lineSequence, game.linePlayDirection, player=game.linePlayer, playNumber=game.linePlayNumber, labelLines=True)
+df.gameSequenceToString(game.dominoes, game.dummySequence, game.dummyPlayDirection, player=game.dummyPlayer, playNumber=game.dummyPlayNumber, labelLines=True) 
+```
+
+Or, for a less verbose output, set `player` and `playNumber` to `None`.
+```
+df.gameSequenceToString(game.dominoes, game.lineSequence, game.linePlayDirection, player=None, playNumber=None, labelLines=False)
+df.gameSequenceToString(game.dominoes, game.dummySequence, game.dummyPlayDirection, player=None, playNumber=None, labelLines=False) 
+```
+```
+output:
+[' 4|8 ', ' 8|2 ', ' 2|9 ', ' 9|9 ', ' 9|5 ', ' 5|5 ', ' 5|0 ', ' 0|4 ', ' 4|1 ', ' 1|2 ', ' 2|0 ', ' 0|1 ']
+[' 4|7 ', ' 7|7 ', ' 7|5 ', ' 5|6 ', ' 6|1 ', ' 1|9 ', ' 9|8 ', ' 8|8 ', ' 8|1 ', ' 1|3 ', ' 3|4 ']
+[' 4|6 ', ' 6|3 ', ' 3|5 ', ' 5|1 ']
+[' 4|9 ', ' 9|6 ', ' 6|6 ', ' 6|8 ', ' 8|5 ', ' 5|2 ', ' 2|6 ', ' 6|7 ', ' 7|0 ', ' 0|0 ', ' 0|6 ']
+[' 4|2 ', ' 2|3 ', ' 3|8 ', ' 8|0 ', ' 0|9 ', ' 9|3 ', ' 3|7 ', ' 7|9 ']
 ```
 
 ## Description
