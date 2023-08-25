@@ -44,8 +44,8 @@ conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvi
 
 ## Documentation
 1. Agents
-   - [Basic Functionality](docs/agent.md)
-   - [Hand-crafted strategies](docs/basicAgent.md)
+   - [Basic Functionality](docs/agents.md)
+   - [Hand-crafted strategies](docs/basicAgents.md)
 
 
 ## Tutorials and Basic Usage
