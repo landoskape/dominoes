@@ -43,9 +43,9 @@ pip install <package_name> # go in order through the environment.yml file, ignor
 conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
 ```
 
-## Standard usage
+## Tutorials
 
-### Imports
+### Standard Imports
 The code depends on several modules written in this repository. To try all the
 code examples below, first run the following import statements: 
 ```
@@ -57,8 +57,8 @@ import dominoesFunctions as df
 ```
 
 ### Creating a league, running a game, updating ELO scores
-Start by creating a league with a pre-specified highest dominoe (e.g. which
-set to use), and the number of players per game:
+Start by creating a league. Specify which set of dominoes to use (e.g. the
+highest dominoe and the number of players per game). 
 ```
 # Start by creating a league
 highestDominoe = 9 # Choose what the highest dominoe value is (usually 9 or 12)
@@ -66,8 +66,8 @@ numPlayers = 4 # Choose how many players per game
 league = lm.leagueManager(highestDominoe, numPlayers, shuffleAgents=True, replace=False)
 ```
 
-Add agents by class type (this is not the only way, see leagueManager for an
-explanation of how to add agents to a league).:
+Add agents by class type (see leagueManager documentation for a full
+explanation of how to add agents to a league):
 ```
 league.addAgentType(da.bestLineAgent)
 league.addAgentType(da.doubleAgent)
@@ -75,9 +75,9 @@ league.addAgentType(da.greedyAgent)
 league.addAgentType(da.dominoeAgent)
 ```
 
-Create a game table from the league which specifies which players in 
-the league will play a game against each other. Create a game object from the 
-table to operate the gameplay. Play the game and print the results.
+Create a game table from the league to specify which players in the league
+will play a game against each other. Create a game object from the table to
+operate the gameplay. Play the game and print the results.
 ```
 gameTable, leagueIndex = league.createGameTable()
 game = dg.dominoeGameFromTable(gameTable)
@@ -130,65 +130,20 @@ player 3:  [' 4|9 ', ' 9|6 ', ' 6|6 ', ' 6|8 ', ' 8|5 ', ' 5|2 ', ' 2|6 ', ' 6|7
 dummy:  [' 4|2 ', ' 2|3 ', ' 3|8 ', ' 8|0 ', ' 0|9 ', ' 9|3 ', ' 3|7 ', ' 7|9 ']
 ```
 
-Or, for a more verbose output, set `player` and `playNumber` as follows.
+Or, for a more verbose output, set `player` and `playNumber` as follows. This 
+appends the player index and the play number to each dominoe listed, which is 
+a lot of text to look at, but contains all the information needed to 
+understand what happened each game. 
 ```
 df.gameSequenceToString(game.dominoes, game.lineSequence, game.linePlayDirection, player=game.linePlayer, playNumber=game.linePlayNumber, labelLines=True)
 df.gameSequenceToString(game.dominoes, game.dummySequence, game.dummyPlayDirection, player=game.dummyPlayer, playNumber=game.dummyPlayNumber, labelLines=True) 
 ```
 
 
-## Description
-
-This experiment is based off a custom toolbox for running dominoes games in python. It has a "gameplay" object, which
-runs a game of dominoes and manages the agents that are in the game, and "agent" objects which follow certain rules for 
-playing the game. In this experiment, the focus is on the lineValueAgent, which is a TD-lambda based reinforcement 
-learning agent. The experiment has two stages: first the lineValueAgent is initialized randomly and learns to play against
-greedyAgents (explanation following). Then, the performance is monitored and recorded, and the lineValueAgent's network 
-parameters are saved. After this, a new game is created where the same lineValueAgent now has to play against bestLine 
-agents (explanation following). It trains against bestLine agents and is tested a while later. 
-
-The idea is to demonstrate that this agent can learn to play dominoes well, and to demonstrate that it learns much better
-when starting it's play against an easy opponent and then honing it's value function while playing against a much stronger
-opponent. 
-
-### greedyAgent
-The greedy agent plays whatever dominoe has the highest value (e.g. the 7/9 dominoe has a higher value than the 6/9 dominoe), 
-independent of which location that play is available on. 
-
-### bestLineAgent
-The bestLineAgent uses a brute-force algorithm to construct all possible legal sequences of dominoes that it can play 
-starting on it's own line. This way, it knows how the dominoes "fit together", so to speak, so that it can decide what to play
-based on this information. It picks a "bestLine" based on the discounted value of each dominoe in each possible sequence. 
-Then, it assigns the full (discounted) value of the sequence to the first dominoe of that sequence. For every other dominoe, 
-it simply measures how many points are on that dominoe (e.g., the 7/9 dominoe has 16 points). For double dominoes, which allow
-you to play again, it assigns an infinite value. Then, the bestLine agent plays whatever dominoe has the highest value, 
-therefore playing a double if it can, then usually it's own best line, unless a different play has more value than the entire
-best sequence playing on it's own line. 
-
-### lineValueAgent
-The lineValueAgent learns a value function based on the current observable game state as well as some hand-crafted features
-that help it to decide which move to play based on the way the dominoes in it's hand sequence together. In short, all possible
-sequences of dominoes are computed (same as in the bestLineAgent). Then, the probability of each sequence is computed by taking
-a softmax over the discounted value in the sequence minus all dominoes not in that sequence. (This way, the probability of each
-line is based on the positive minus the negative value of the line). Then, each dominoe in the agents hand is associated with 
-"lineFeatures" which include information about the value of each sequence it's a part of (weighted by sequence probability), 
-and a few other line features that you can inspect in the agents.py file. 
-
-To choose moves, the lineValueAgent simulates the future game state after all possible legal moves it can make (dominoes is 
-deterministic) and measures the "post-state" value function. Then, it picks whichever move has the highest post-state value, which
-in this case means the lowest expected number of points of the lineValue agent at the end of the hand. 
-
-## Examples
-To test the code before devoting lots of computation time: 
-`python experiment.py -tg 2 -pg 2 -tr 2 -pr 2`
-
-Then to train the model fully with the default parameters: 
-`python experiment.py`
-
-On my computer, which has a NVIDIA GeForce RTX 3060, running the code with default parameters takes about 8-9 hours. 
-
 ## Contributing
-Feel free to contribute to this project by creating issues or pull requests. Suggestions and improvements are welcome!
+Feel free to contribute to this project by creating issues or pull requests.
+I'm doing this to learn about RL and ML so suggestions, improvements, and 
+collaborations are more than welcome!
 
 ## License
 This project is licensed under the MIT License.
