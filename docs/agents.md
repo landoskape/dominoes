@@ -75,58 +75,28 @@ players turn.
    perform various functions at the pre- and post- state stage to update their
    value function. This is present in the top-level agent class to simplify
    the `doTurn` function in the gameplay code.
-9. `updatePoststateValue`: same as `estimatePrestateValue`, but calls post-
-    state value updates for TD-lambda agents.
+9. `updatePoststateValue`: same as `estimatePrestateValue`, but calls
+    post-state value updates for TD-lambda agents.
 
 #### Choosing an option to play
-def play(self, gameEngine=None):
-        # this function is called by the gameplay object
-        # it is what's used to play a dominoe when it's this agents turn
-        dominoe, location = self.selectPlay(gameEngine=gameEngine)
-        if dominoe is not None:
-            assert dominoe in self.myHand, "dominoe selected to be played is not in hand"
-            self.myHand = np.delete(self.myHand, self.myHand==dominoe)
-            self.dominoesInHand()
-        return dominoe, location
-
-    def selectPlay(self, gameEngine=None):
-        locations, dominoes = self.playOptions()
-        if len(locations)==0: return None, None
-        optionValue = self.optionValue(locations, dominoes)
-        idxChoice = self.makeChoice(optionValue) # make and return choice
-        return dominoes[idxChoice], locations[idxChoice]
-
-    def playOptions(self):
-        # generates list of playable options given game state 
-        # it produces a (numPlayers x numDominoes) array with True's indicating viable dominoe-location pairings
-        # (and also a (numDominoes,) array for the dummy line
-        lineOptions = np.full((self.numPlayers, self.numDominoes), False)
-        for idx,value in enumerate(self.available):
-            if idx==0 or self.cantplay[idx]:
-                idxPlayable = np.where(np.any(self.handValues==value,axis=1))[0]
-                lineOptions[idx,self.myHand[idxPlayable]]=True
-        dummyOptions = np.full(self.numDominoes, False)
-        idxPlayable = np.where(np.any(self.handValues==self.dummyAvailable,axis=1))[0]
-        dummyOptions[self.myHand[idxPlayable]]=True*self.dummyPlayable
-        
-        idxPlayer, idxDominoe = np.where(lineOptions) # find where options are available
-        idxDummyDominoe = np.where(dummyOptions)[0]
-        idxDummy = -1 * np.ones(len(idxDummyDominoe), dtype=int)
-        
-        # concatenate locations, dominoes
-        locations = np.concatenate((idxPlayer, idxDummy))
-        dominoes = np.concatenate((idxDominoe, idxDummyDominoe))
-        return locations, dominoes
-    
-    def optionValue(self, locations, dominoes):
-        # convert option to play value using simplest method possible - value is 1 if option available
-        return np.ones_like(dominoes)
-
-    def makeChoice(self, optionValue):
-        # default behavior is to use thompson sampling (picking a dominoe to play randomly, weighted by value of dominoe)
-        return random.choices(range(len(optionValue)), k=1, weights=optionValue)[0]
-    
-
+Choosing a play is divided into several modular methods that make it easy to 
+explore different strategies for agents. The `play` method should not be 
+changed for most agents, as it is contains the basic requirements for playing
+a dominoe. However, each of the following methods are useful for exploring 
+new strategies. 
+1. `play`: this method is called by the game object to request a play. The
+   agent selects a dominoe to play, removes it from its own hand, and then
+   returns the dominoe index and location to the game object.
+2. `selectPlay`: selects which dominoe to play given the options that are
+   available. Optionally accepts a "gameEngine" method which is primarily used
+   by the TD-lambda agents.
+3. `playOptions`: returns two paired lists indicating all legal play options.
+   Locations 0-n indicate plays that are on an agent's line, with this agent
+   being location 0. The dummy line is represented as location -1.
+4. `optionValue`: returns the option value for each possible option. For
+   simple agents, this is usually a straightforward function (for example),
+   the default "`dominoeAgent`" just assigns a value of `1` to each dominoe.
+5. `makeChoice`: chooses which dominoe to play given the optionValues.
 
 
 

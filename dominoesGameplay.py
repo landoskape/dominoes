@@ -50,7 +50,8 @@ class dominoeGame:
                 self.agents[agentIdx].updateAgentIndex(agentIdx)
                 self.agents[agentIdx].device = device
             else:
-                self.agents[agentIdx] = agent(numPlayers, highestDominoe, self.dominoes, self.numDominoes, agentIdx, device=device)
+                self.agents[agentIdx] = agent(numPlayers, highestDominoe, self.dominoes, self.numDominoes, device=device)
+                self.agents[agentIdx].updateAgentIndex(agentIdx)
     
     # ----------------
     # -- functions for managing agents --
