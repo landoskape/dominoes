@@ -4,9 +4,8 @@ import numpy as np
 from tqdm import tqdm
 from copy import copy
 
-import leagueManager as lm
-import dominoesAgents as da
-import dominoesFunctions as df
+from . import agents as da
+from . import functions as df
 
 # Top Level Gameplay Object
 class dominoeGame:

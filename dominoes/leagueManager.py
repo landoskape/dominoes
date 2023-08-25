@@ -1,8 +1,8 @@
 import random
 import torch.cuda as torchCuda
-import dominoesGameplay as dg
-import dominoesAgents as da
-import dominoesFunctions as df
+from . import gameplay as dg
+from .agents import dominoeAgent as dominoeAgent
+from . import functions as df
 
 # league manager is an object that can contain a mutable list of dominoes agents
 # the agents should be instantiated objects that are all instances of the dominoeAgent class
@@ -32,7 +32,7 @@ class leagueManager:
         for idx, agent in enumerate(agentList): 
             # Check if all agents in list are valid first
             assert self.checkAgent(agent), f"Agent #{idx} is not a dominoe agent"
-            assert isinstance(agent, da.dominoeAgent), f"Agent #{idx} must be an instantiated object of a dominoe agent"
+            assert isinstance(agent, dominoeAgent), f"Agent #{idx} must be an instantiated object of a dominoe agent"
             assert self.checkParameters(agent), f"Agent #{idx} has the wrong game parameters (either numPlayers or highestDominoe)"
         for agent in agentList:
             # Then once you know they are valid, add all of them (double assertions are worth it for expected behavior)
@@ -41,7 +41,7 @@ class leagueManager:
     def addAgent(self, agent):
         # This method adds a single instantiated agent to the league
         assert self.checkAgent(agent), "agent is not a dominoe agent"
-        assert isinstance(agent,da.dominoeAgent), "agent must be an instantiated object of a dominoe agent"
+        assert isinstance(agent,dominoeAgent), "agent must be an instantiated object of a dominoe agent"
         assert self.checkParameters(agent), "agent has the wrong game parameters (either numPlayers or highestDominoe"
         agent.device = self.device # update device of agent
         self.agents.append(agent)
@@ -54,7 +54,7 @@ class leagueManager:
         # Can add multiple instantiations of this agent by changing the num2add parameter
         assert isinstance(num2add, int) and num2add>0, "num2add must be a positive integer"
         assert self.checkAgent(agentType), "agentType is not a dominoe agent"
-        assert not(isinstance(agentType,da.dominoeAgent)), "agentType must be a class definition of a dominoeAgent, not an instantiated object"
+        assert not(isinstance(agentType,dominoeAgent)), "agentType must be a class definition of a dominoeAgent, not an instantiated object"
         for _ in range(num2add):
             self.agents.append(agentType(self.numPlayers, self.highestDominoe, self.dominoes, self.numDominoes, device=self.device))
             self.elo.append(self.elo_base)

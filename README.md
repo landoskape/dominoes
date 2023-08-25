@@ -54,11 +54,10 @@ conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvi
 The code depends on several modules written in this repository. To try all the
 code examples below, first run the following import statements: 
 ```
-import leagueManager as lm
-import dominoesGameplay as dg
-import dominoesAgents as da
-import dominoesNetworks as dn
-import dominoesFunctions as df
+from dominoes import leagueManager as lm
+from dominoes import gameplay as dg
+from dominoes import agents as da
+from dominoes import functions as df
 ```
 
 ### Creating a league, running a game, updating ELO scores

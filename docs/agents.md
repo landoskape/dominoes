@@ -12,7 +12,7 @@ Every dominoe agent is a subclass of the `dominoeAgent` class found in the
 all the methods and parameters required for playing legal moves with a
 particular strategy in a dominoes game. 
 
-#### Initialization
+### Initialization
 Dominoes agents are initialized to play dominoes in matches with a pre-
 specified number of players and domiones set (i.e. the highest dominoe to
 play, usually 9s or 12s). Some agents can play with a range of players or 
@@ -23,7 +23,7 @@ allocated in the `__init__` function). These are updated each time it's an
 agents turn to play, or for value agents, they can be updated each for each 
 players turn. 
 
-#### Top-level methods
+### Top-level methods
 1. `agentParameters`: returns a dictionary of key parameters for the agent,
    primarily the number of players and the dominoes set (highest dominoe). If
    an agent has any special parameters (see below), these are added.
@@ -41,7 +41,7 @@ players turn.
 5. `printHand`: convenience function for printing the dominoes in an agent's
    hand to the command prompt.
 
-#### Processing the game state
+### Processing the game state
 1. `serve`: receives a list of indices corresponding to the dominoes in the
    agent's hand at the beginning of a round. The game object randomly assigns
    dominoes to each agent and then "serves" it to the agent.
@@ -104,15 +104,15 @@ and analyzing how well they perform. This section of the documentation shows
 the basic steps to develop an agent strategy by explaining the strategies used
 by the hand-crafted agents in this repository. 
 
-#### Dominoe Agent
+### Dominoe Agent
 The default dominoe agent (e.g. the top-level class found in the 
-[`dominoesAgents.py`](../dominoesAgents.py) file) uses the simplest strategy: 
-it plays a random option out of all legal plays. To accomplish this, it
-assigns an optionValue of `1` to each legal move (see above), then chooses an
-option in proportion to the optionValue (i.e. randomly with a uniform 
-distribution). 
+[`dominoesAgents.py`](../dominoes/agents/dominoesAgent.py) file) uses the 
+simplest strategy: it plays a random option out of all legal plays. To 
+accomplish this, it assigns an optionValue of 1 to each legal move (see 
+above), then chooses an option in proportion to the optionValue (i.e. 
+randomly with a uniform distribution). 
 
-#### Greedy Agent 
+### Greedy Agent 
 Greedy agents set the option value of each legal option to the total number of
 points on each legal dominoe. For example, the dominoe (3|4) will be assigned 
 a value of 7. To accomplish this: it overwrites the `optionValue` function as 
@@ -128,7 +128,7 @@ def makeChoice(self, optionValue):
     return np.argmax(optionValue)
 ```
 
-#### Stupid Agent
+### Stupid Agent
 Stupid agents work just like the greedy agent, except they play the dominoe 
 with the least value by using `np.argmin` rather than `np.argmax`. 
 
