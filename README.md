@@ -62,7 +62,7 @@ highest dominoe and the number of players per game).
 # Start by creating a league
 highestDominoe = 9 # Choose what the highest dominoe value is (usually 9 or 12)
 numPlayers = 4 # Choose how many players per game
-league = lm.leagueManager(highestDominoe, numPlayers, shuffleAgents=True, replace=False)
+league = lm.leagueManager(highestDominoe, numPlayers, shuffleAgents=True)
 ```
 
 Add agents by class type (see leagueManager documentation for a full
@@ -89,6 +89,17 @@ thank you to [Tom Kerrigan](http://www.tckerrigan.com/Misc/Multiplayer_Elo/)
 for an efficient method for multiplayer ELO. 
 ```
 league.updateElo(leagueIndex, game.currentScore)
+```
+
+### Adding a trained agent to the league manager
+If you have trained an agent and saved the agents parameters, then you can 
+instantiate the agent, load its parameters, and add the agent to a league. 
+```
+parameterFile = r'/path/to/parameterFile.npy'
+lineValueAgent = da.lineValueAgent(numPlayers, highestDominoe, league.dominoes, league.numDominoes, device=league.device)
+lineValueAgent.loadAgentParameters(parameterFile)
+lineValueAgent.setLearning(False) # For testing the agent, set learning to False
+league.addAgent(lineValueAgent)
 ```
 
 ### Running a game and showing the results: 
