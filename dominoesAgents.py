@@ -47,8 +47,6 @@ class dominoeAgent:
         self.dummyAvailable = [] # index of dominoe available on dummy
         self.dummyPlayable = False # boolean indicating whether the dummyline has been started
         
-        self.requireUpdates = False
-        
         # specialized initialization functions 
         self.specializedInit(**kwargs)
     
@@ -141,14 +139,23 @@ class dominoeAgent:
     # ------------------
     # -- functions to choose and play a dominoe --
     # ------------------
-    def makeChoice(self, optionValue):
-        # default behavior is to use thompson sampling (picking a dominoe to play randomly, weighted by value of dominoe)
-        return random.choices(range(len(optionValue)), k=1, weights=optionValue)[0]
-    
-    def optionValue(self, locations, dominoes):
-        # convert option to play value using simplest method possible - value is 1 if option available
-        return np.ones_like(dominoes)
-    
+    def play(self, gameEngine=None):
+        # this function is called by the gameplay object
+        # it is what's used to play a dominoe when it's this agents turn
+        dominoe, location = self.selectPlay(gameEngine=gameEngine)
+        if dominoe is not None:
+            assert dominoe in self.myHand, "dominoe selected to be played is not in hand"
+            self.myHand = np.delete(self.myHand, self.myHand==dominoe)
+            self.dominoesInHand()
+        return dominoe, location
+
+    def selectPlay(self, gameEngine=None):
+        locations, dominoes = self.playOptions()
+        if len(locations)==0: return None, None
+        optionValue = self.optionValue(locations, dominoes)
+        idxChoice = self.makeChoice(optionValue) # make and return choice
+        return dominoes[idxChoice], locations[idxChoice]
+
     def playOptions(self):
         # generates list of playable options given game state 
         # it produces a (numPlayers x numDominoes) array with True's indicating viable dominoe-location pairings
@@ -171,22 +178,14 @@ class dominoeAgent:
         dominoes = np.concatenate((idxDominoe, idxDummyDominoe))
         return locations, dominoes
     
-    def selectPlay(self, gameEngine=None):
-        locations, dominoes = self.playOptions()
-        if len(locations)==0: return None, None
-        optionValue = self.optionValue(locations, dominoes)
-        idxChoice = self.makeChoice(optionValue) # make and return choice
-        return dominoes[idxChoice], locations[idxChoice]
+    def optionValue(self, locations, dominoes):
+        # convert option to play value using simplest method possible - value is 1 if option available
+        return np.ones_like(dominoes)
+
+    def makeChoice(self, optionValue):
+        # default behavior is to use thompson sampling (picking a dominoe to play randomly, weighted by value of dominoe)
+        return random.choices(range(len(optionValue)), k=1, weights=optionValue)[0]
     
-    def play(self, gameEngine=None):
-        # this function is called by the gameplay object
-        # it is what's used to play a dominoe when it's this agents turn
-        dominoe, location = self.selectPlay(gameEngine=gameEngine)
-        if dominoe is not None:
-            assert dominoe in self.myHand, "dominoe selected to be played is not in hand"
-            self.myHand = np.delete(self.myHand, self.myHand==dominoe)
-            self.dominoesInHand()
-        return dominoe, location
     
 # ----------------------------------------------------------------------------
 # --------------------------- simple rule agents -----------------------------
