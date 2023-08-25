@@ -1,5 +1,6 @@
 import random
 import torch.cuda as torchCuda
+import dominoesGameplay as dg
 import dominoesAgents as da
 import dominoesFunctions as df
 
@@ -62,48 +63,20 @@ class leagueManager:
     def checkParameters(self, agent):
         # for instantiated agents, check that their metaparameters are consistent with the league parameters
         return (self.highestDominoe in agent.highestDominoeRange) and (self.numPlayers in agent.numPlayerRange)
-        
-    def createGameTable(self, numPlayers=None):
-        # This method creates a game table using the agents in the league
-        numPlayers = numPlayers if numPlayers is not None else self.numPlayers
+    
+    def createGame(self):
         if self.replace:
-            leagueIndex = random.choices(range(self.numAgents), k=numPlayers)
+            leagueIndex = random.choice(range(self.numAgents), k=self.numPlayers)
         else:
-            leagueIndex = random.sample(range(self.numAgents), k=numPlayers)
+            leagueIndex = random.sample(range(self.numAgents), k=self.numPlayers)
         agentList = [self.agents[idx] for idx in leagueIndex]
-        return gameTable(self.highestDominoe, agentList, self.shuffleAgents), leagueIndex
+        gameTable = dg.dominoeGame(self.highestDominoe, agents=agentList, shuffleAgents=self.shuffleAgents, device=self.device)
+        return gameTable, leagueIndex
 
     def updateElo(self, leagueIndex, gameResults):
         # This method updates the ELO ratings of the agents in the game based on the gameResults
         None
 
-    def getAgent(self, agentIndex):
-        assert agentIndex in self.originalAgentIndex, "requested agent index does not exist"
-        idxAgent = self.originalAgentIndex.index(agentIndex)
-        return self.agents[idxAgent]
-
-
-class gameTable:
-    def __init__(self, highestDominoe, agentList, shuffleAgents=False, device=None):
-        self.numPlayers = len(agentList)
-        self.highestDominoe = highestDominoe
-        self.dominoes = df.listDominoes(highestDominoe)
-        self.numDominoes = len(self.dominoes)
-        self.shuffleAgents = shuffleAgents
-        self.device = device if device is not None else "cuda" if torchCuda.is_available() else "cpu"
-        self.agents = agentList
-        
-        # create an index for managing shuffling of agents
-        self.originalAgentIndex = [idx for idx in range(self.numPlayers)]
-        
-        for idx, agent in enumerate(self.agents):
-            assert isinstance(agent, da.dominoeAgent), f"Agent{idx} is not a dominoeAgent"
-            assert (self.numPlayers in agent.numPlayerRange) and (self.highestDominoe in agent.highestDominoeRange), f"Agent{idx} has wrong number of parameters"
-            agent.updateAgentIndex(idx)
-    
-    # ----------------
-    # -- functions for managing agents --
-    # ----------------
     def getAgent(self, agentIndex):
         assert agentIndex in self.originalAgentIndex, "requested agent index does not exist"
         idxAgent = self.originalAgentIndex.index(agentIndex)

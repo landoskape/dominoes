@@ -1,9 +1,8 @@
 # Dominoes ML Repository
 
 This repository contains a package for running the game of dominoes with 
-python code. It has several key components, all explained in detail below.
-Overall, it contains a gameplay engine that can manage a game, a library of
-agents that play the game with different strategies, and a league manager, 
+python code. It contains a gameplay engine that can manage a game, a library 
+of agents that play the game with different strategies, and a league manager, 
 which is used to manage a group of agents that play games with each other. 
 
 I developed the repository to accomplish two main goals: 
@@ -16,8 +15,8 @@ I developed the repository to accomplish two main goals:
 
 This repository requires several packages that are available for download via
 the standard methods, including conda or pip. First, clone this repository to 
-your computer. Then, in a terminal, change directory to wherever you cloned
-the repository and use the `environment.yml` file to create a new conda 
+your computer. Then, in a command window, change directory to wherever you 
+cloned the repository and use the `environment.yml` file to create a new conda 
 environment. 
 
 ```
@@ -43,7 +42,7 @@ pip install <package_name> # go in order through the environment.yml file, ignor
 conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
 ```
 
-## Tutorials
+## Tutorials and Basic Usage
 
 ### Standard Imports
 The code depends on several modules written in this repository. To try all the
@@ -75,12 +74,11 @@ league.addAgentType(da.greedyAgent)
 league.addAgentType(da.dominoeAgent)
 ```
 
-Create a game table from the league to specify which players in the league
-will play a game against each other. Create a game object from the table to
-operate the gameplay. Play the game and print the results.
+Create a gameplay object from the league to specify which players will play
+against each other and to operate the gameplay. Play the game and print the 
+results.
 ```
-gameTable, leagueIndex = league.createGameTable()
-game = dg.dominoeGameFromTable(gameTable)
+game, leagueIndex = league.createGame()
 game.playGame()
 game.printResults()
 ```
@@ -96,9 +94,12 @@ specified number of rounds. Usually, the number of rounds is equal to the
 highest dominoe plus 1 (e.g. for 9s, play from 0-9). But for training or 
 statistics purposes, it is useful to set rounds to a high number.
 ```
-game = dg.dominoeGameFromTable(gameTable) 
+highestDominoe = 9
+numPlayers = 4
+game = dg.dominoeGame(highestDominoe, numPlayers=numPlayers) 
 game.playGame(rounds=3) # Play the game 
 ```
+ highestDominoe, numPlayers=None, agents=None, defaultAgent=da.dominoeAgent, shuffleAgents=True, device=None):
 
 Show the scores for each round: 
 ```

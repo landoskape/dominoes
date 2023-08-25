@@ -319,10 +319,4 @@ class dominoeGame:
         else:
             print("Game has not begun!")
             
-
-
-class dominoeGameFromTable(dominoeGame):
-    def __init__(self, gameTable):
-        assert isinstance(gameTable, lm.gameTable), "gameTable must be a gameTable object defined in leagueManager.py"
-        super().__init__(gameTable.highestDominoe, agents=gameTable.agents, shuffleAgents=gameTable.shuffleAgents, device=gameTable.device)
         
