@@ -42,6 +42,12 @@ pip install <package_name> # go in order through the environment.yml file, ignor
 conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
 ```
 
+## Documentation
+1. Agents
+   - [Basic Functionality](docs/agent.md)
+   - [Hand-crafted strategies](docs/basicAgent.md)
+
+
 ## Tutorials and Basic Usage
 
 ### Standard Imports

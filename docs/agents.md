@@ -1,4 +1,4 @@
-# Documentation: Agent Library
+# Documentation: Agent Functionality
 
 This file explains how to manage agents and discusses the strategies of some
 agents available in the agent library. This file focuses on managing agents, 
@@ -29,10 +29,9 @@ players turn.
    an agent has any special parameters (see below), these are added.
 2. `specialParameters`: returns a dictionary of special parameters for the
    agent, coded in each subclass definition.
-3. `dominoesInhand`: each agent has a list of dominoes in their hand
+3. `dominoesInHand`: each agent has a list of dominoes in their hand
    (`self.myHand`), which is an index of the dominoes in the set.
-   `dominoesInHand` converts this list of indices to the values of each
-   dominoe.
+   This method converts this list of indices to the values of each dominoe.
 4. `updateAgentIndex`: for each hand within a game, each agent has an agent
    index indicating which "chair" the agent is sitting at a game table. Agents
    play in order (counter-clockwise in real life). The game object feeds each
@@ -99,5 +98,44 @@ new strategies.
 5. `makeChoice`: chooses which dominoe to play given the optionValues.
 
 
+## Developing Strategies
+The central focus of this repository is developing strategies (i.e. a policy)
+and analyzing how well they perform. This section of the documentation shows
+the basic steps to develop an agent strategy by explaining the strategies used
+by the hand-crafted agents in this repository. 
 
-## ELO
+#### Dominoe Agent
+The default dominoe agent (e.g. the top-level class found in the 
+[`dominoesAgents.py`](../dominoesAgents.py) file) uses the simplest strategy: 
+it plays a random option out of all legal plays. To accomplish this, it
+assigns an optionValue of `1` to each legal move (see above), then chooses an
+option in proportion to the optionValue (i.e. randomly with a uniform 
+distribution). 
+
+#### Greedy Agent 
+Greedy agents set the option value of each legal option to the total number of
+points on each legal dominoe. For example, the dominoe (3|4) will be assigned 
+a value of 7. To accomplish this: it overwrites the `optionValue` function as 
+follows: 
+```
+def optionValue(self, locations, dominoes):
+    return self.dominoeValue[dominoes]
+```
+Then, the greedy agent simply plays whichever option has the highest value by 
+overwriting the `makeChoice` function: 
+```
+def makeChoice(self, optionValue):
+    return np.argmax(optionValue)
+```
+
+#### Stupid Agent
+Stupid agents work just like the greedy agent, except they play the dominoe 
+with the least value by using `np.argmin` rather than `np.argmax`. 
+
+#### Double Agent
+Double agents assign an infinite value to any double option (because it 
+allows) the agent to play again. Then, to any other option that isn't a 
+double, the value is set to the number of points on the option, just like
+for greedy agents. 
+    
+
