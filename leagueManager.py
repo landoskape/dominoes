@@ -14,12 +14,11 @@ import dominoesFunctions as df
 # then the league manager will update ELOs and 
 # I want to equip the agent manager with some methods for measuring the ELO of each agent 
 class leagueManager:
-    def __init__(self, highestDominoe, numPlayers, shuffleAgents=True, replace=False, elo_k=16, device=None):
+    def __init__(self, highestDominoe, numPlayers, shuffleAgents=True, elo_k=32, device=None):
         self.highestDominoe = highestDominoe
         self.numPlayers = numPlayers
         self.dominoes = df.listDominoes(highestDominoe)
         self.numDominoes = len(self.dominoes)
-        self.replace = replace
         self.shuffleAgents = shuffleAgents
         self.elo_k = elo_k
         self.elo_base = 1500
@@ -70,10 +69,7 @@ class leagueManager:
         return (self.highestDominoe in agent.highestDominoeRange) and (self.numPlayers in agent.numPlayerRange)
     
     def createGame(self):
-        if self.replace:
-            leagueIndex = random.choice(range(self.numAgents), k=self.numPlayers)
-        else:
-            leagueIndex = random.sample(range(self.numAgents), k=self.numPlayers)
+        leagueIndex = random.sample(range(self.numAgents), k=self.numPlayers)
         agentList = [self.agents[idx] for idx in leagueIndex]
         gameTable = dg.dominoeGame(self.highestDominoe, agents=agentList, shuffleAgents=self.shuffleAgents, device=self.device)
         return gameTable, leagueIndex
