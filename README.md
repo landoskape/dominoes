@@ -72,6 +72,7 @@ league.addAgentType(da.bestLineAgent)
 league.addAgentType(da.doubleAgent)
 league.addAgentType(da.greedyAgent)
 league.addAgentType(da.dominoeAgent)
+league.addAgentType(da.stupidAgent)
 ```
 
 Create a gameplay object from the league to specify which players will play
@@ -83,15 +84,17 @@ game.playGame()
 game.printResults()
 ```
 
-Finally, return the results to the league manager to update ELO scores.
+Finally, return the results to the league manager to update ELO scores. Note: 
+thank you to [Tom Kerrigan](http://www.tckerrigan.com/Misc/Multiplayer_Elo/) 
+for an efficient method for multiplayer ELO. 
 ```
 league.updateElo(leagueIndex, game.currentScore)
 ```
 
 ### Running a game and showing the results: 
-Start by creating a game object from a gameTable. Then, play game with a 
-specified number of rounds. Usually, the number of rounds is equal to the 
-highest dominoe plus 1 (e.g. for 9s, play from 0-9). But for training or 
+Start by creating a game object using the default agent type. Then, play game
+with a specified number of rounds. Usually, the number of rounds is equal to 
+the highest dominoe plus 1 (e.g. for 9s, play from 0-9). But for training or 
 statistics purposes, it is useful to set rounds to a high number.
 ```
 highestDominoe = 9
@@ -99,7 +102,6 @@ numPlayers = 4
 game = dg.dominoeGame(highestDominoe, numPlayers=numPlayers) 
 game.playGame(rounds=3) # Play the game 
 ```
- highestDominoe, numPlayers=None, agents=None, defaultAgent=da.dominoeAgent, shuffleAgents=True, device=None):
 
 Show the scores for each round: 
 ```
@@ -142,9 +144,9 @@ df.gameSequenceToString(game.dominoes, game.dummySequence, game.dummyPlayDirecti
 
 
 ## Contributing
-Feel free to contribute to this project by creating issues or pull requests.
-I'm doing this to learn about RL and ML so suggestions, improvements, and 
-collaborations are more than welcome!
+Feel free to contribute to this project by opening issues or submitting pull 
+requests. I'm doing this to learn about RL and ML so suggestions, 
+improvements, and collaborations are more than welcome!
 
 ## License
 This project is licensed under the MIT License.

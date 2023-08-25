@@ -14,14 +14,17 @@ import dominoesFunctions as df
 # then the league manager will update ELOs and 
 # I want to equip the agent manager with some methods for measuring the ELO of each agent 
 class leagueManager:
-    def __init__(self, highestDominoe, numPlayers, shuffleAgents=True, replace=False, device=None):
+    def __init__(self, highestDominoe, numPlayers, shuffleAgents=True, replace=False, elo_k=16, device=None):
         self.highestDominoe = highestDominoe
         self.numPlayers = numPlayers
         self.dominoes = df.listDominoes(highestDominoe)
         self.numDominoes = len(self.dominoes)
         self.replace = replace
         self.shuffleAgents = shuffleAgents
+        self.elo_k = elo_k
+        self.elo_base = 1500
         self.agents = []
+        self.elo = []
         self.numAgents = 0
         self.device = device if device is not None else "cuda" if torchCuda.is_available() else "cpu"
         
@@ -43,6 +46,7 @@ class leagueManager:
         assert self.checkParameters(agent), "agent has the wrong game parameters (either numPlayers or highestDominoe"
         agent.device = self.device # update device of agent
         self.agents.append(agent)
+        self.elo.append(self.elo_base)
         self.numAgents += 1
         
     def addAgentType(self, agentType, num2add=1):
@@ -54,6 +58,7 @@ class leagueManager:
         assert not(isinstance(agentType,da.dominoeAgent)), "agentType must be a class definition of a dominoeAgent, not an instantiated object"
         for _ in range(num2add):
             self.agents.append(agentType(self.numPlayers, self.highestDominoe, self.dominoes, self.numDominoes, device=self.device))
+            self.elo.append(self.elo_base)
             self.numAgents += 1
 
     def checkAgent(self, agent):
@@ -75,7 +80,27 @@ class leagueManager:
 
     def updateElo(self, leagueIndex, gameResults):
         # This method updates the ELO ratings of the agents in the game based on the gameResults
-        None
+        updates = [0]*len(leagueIndex)
+        idxScoreOrder = df.argsort(gameResults) # scores in order
+        sLeagueIndex = [leagueIndex[i] for i in idxScoreOrder]
+        sGameResults = [gameResults[i] for i in idxScoreOrder]
+        for idx in range(len(sLeagueIndex)-1):
+            # Retrieve ELOs
+            Ra, Rb = self.elo[sLeagueIndex[idx]], self.elo[sLeagueIndex[idx+1]]
+            Ea = df.eloExpected(Ra, Rb) # eloExpected score (probability of winning)
+            Eb = 1 - Ea 
+            rUpdate = round(df.eloUpdate(1, Ea, self.elo_k),2) # Calculate ELO update
+            updates[idx] += rUpdate # add update
+            updates[idx+1] -= rUpdate
+        # Go through elo updates and update elo for each agent that played
+        for idx, sli in enumerate(sLeagueIndex):
+            self.elo[sli] += updates[idx]
+            
+def eloExpected(Ra, Rb):
+    return 1/(1+10**((Rb-Ra)/400))
+
+def eloUpdate(S, E, k=16):
+    return k*(S-E)
 
     def getAgent(self, agentIndex):
         assert agentIndex in self.originalAgentIndex, "requested agent index does not exist"
