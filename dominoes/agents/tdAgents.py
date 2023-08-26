@@ -163,14 +163,17 @@ class valueAgent(dominoeAgent):
     def makeChoice(self, optionValue):
         return np.argmin(optionValue)
     
-    def saveAgentParameters(self, path, description=True):
+    def saveAgentParameters(self, path, description=None):
         # generate parameters to save
         networkParameters = self.finalScoreNetwork.state_dict()
         agentParameters = self.agentParameters()
-        if description:
+        if description is None: 
             modelDescription = input("Describe this model briefly: ")
-        else:
+        elif description==False:
             modelDescription = "lineValueNetwork parameters"
+        else: 
+            assert isinstance(description, str)
+            modelDescription = description
         parameters = np.array([agentParameters, networkParameters, modelDescription])
         
         saveDate = datetime.now().strftime('%y%m%d')
@@ -182,6 +185,7 @@ class valueAgent(dominoeAgent):
         saveNumber = max(saveNumbers)+1 if len(saveNumbers)>0 else 0
         modelName += f'_{saveNumber}'
         np.save(path / modelName, parameters) 
+        return str(path / modelName)+'.npy'
         
     def loadAgentParameters(self, path):
         parameters = np.load(path,allow_pickle=True)

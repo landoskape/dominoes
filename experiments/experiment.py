@@ -1,16 +1,17 @@
 # mainExperiment at checkpoint 1
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 import argparse
 from pathlib import Path
 from tqdm import tqdm
 import numpy as np
-import torch
+import torch.cuda as torchCuda
 
-
-import gameplay as dg
-import agents as da
-import networks as dn
-import functions as df
+from dominoes import gameplay as dg
+from dominoes import agents as da
+from dominoes import functions as df
 
 parser = argparse.ArgumentParser(description='Run dominoes experiment.')
 parser.add_argument('-e','--experiment',type=int, default=0, help='the experiment ID, see file for list of experiments')
@@ -26,9 +27,9 @@ parser.add_argument('-pr','--performance-rounds',type=int, default=50, help='the
 args = parser.parse_args()
 
 # can edit this for each machine it's being used on
-savePath = Path('.') / 'savedNetworks'
+savePath = Path('.') / 'experiments' / 'savedNetworks'
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda" if torchCuda.is_available() else "cpu"
 print(f"Using device: {device}")
 
 def experiment0(numPlayers, highestDominoe, shuffleAgents, trainingGames, trainingRounds, performanceGames, performanceRounds):

@@ -8,9 +8,9 @@ require trained RL networks).
 
 ## Features of an Agent
 Every dominoe agent is a subclass of the `dominoeAgent` class found in the 
-[`dominoesAgents.py`](../dominoes/agents/dominoeAgent.py) file. Dominoes 
-agents contain all the methods and parameters required for playing legal moves
-with a particular strategy in a dominoes game. 
+[`dominoeAgent.py`](../dominoes/agents/dominoeAgent.py) file. Dominoes agents 
+contain all the methods and parameters required for playing legal moves with a
+particular strategy in a dominoes game. 
 
 ### Initialization
 Dominoes agents are initialized to play dominoes in matches with a pre-
@@ -106,7 +106,7 @@ by the hand-crafted agents in this repository.
 
 ### Dominoe Agent
 The default dominoe agent (e.g. the top-level class found in the 
-[`dominoesAgents.py`](../dominoes/agents/dominoeAgent.py) file) uses the 
+[`dominoeAgent.py`](../dominoes/agents/dominoeAgent.py) file) uses the 
 simplest strategy: it plays a random option out of all legal plays. To 
 accomplish this, it assigns an optionValue of 1 to each legal move (see 
 above), then chooses an option in proportion to the optionValue (i.e. 
