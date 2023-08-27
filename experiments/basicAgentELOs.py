@@ -3,86 +3,85 @@ import sys
 import os
 
 # add path that contains the dominoes package
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
+mainPath = os.path.dirname(os.path.abspath(__file__)) + "/.."
+sys.path.append(mainPath)
 
+
+from copy import copy
 import argparse
 from pathlib import Path
 from tqdm import tqdm
 import numpy as np
-import torch.cuda as torchCuda
+import matplotlib.pyplot as plt
 
+from dominoes import leagueManager as lm
 from dominoes import gameplay as dg
 from dominoes import agents as da
 from dominoes import functions as df
 
 parser = argparse.ArgumentParser(description='Run dominoes experiment.')
-parser.add_argument('-e','--experiment',type=int, default=0, help='the experiment ID, see file for list of experiments')
-parser.add_argument('-n','--num-players', type=int, default=4, help='the number of agents in the game of dominoes')
-parser.add_argument('-hd','--highest-dominoe', type=int, default=9, help='the highest dominoe in the board')
-parser.add_argument('-s','--shuffle-agents', type=bool, default=True, help='whether to shuffle the order of the agents each hand')
-parser.add_argument('-tg','--training-games',type=int, default=500, help='the number of training games')
-parser.add_argument('-tr','--training-rounds',type=int, default=50, help='the number of training rounds')
-parser.add_argument('-pg','--performance-games',type=int, default=10, help='the number of performance games')
-parser.add_argument('-pr','--performance-rounds',type=int, default=50, help='the number of performance rounds')
-# parser.add_argument('-sv','--save-networks',type=bool, default=True, help='whether or not to save intermediate agents')
+parser.add_argument('-np','--num-players',type=int, default=4, help='the number of players for each game')
+parser.add_argument('-hd','--highest-dominoe',type=int, default=9, help='highest dominoe value in the set')
+parser.add_argument('-ng','--num-games',type=int, default=10000, help='how many games to play to estimate ELO')
+parser.add_argument('-nr','--num-rounds',type=int, default=None, help='how many rounds to play for each game')
+parser.add_argument('-ne','--num-each',type=int, default=4, help='how many copies of each agent type to include in the league')
+parser.add_argument('-fe','--fraction-estimate',type=float, default=0.05, help='final fraction of elo estimates to use')
 
 args = parser.parse_args()
+assert 0 < args.fraction_estimate < 1, "fraction-estimate needs to be a float between 0 and 1"
 
-# can edit this for each machine it's being used on
-savePath = Path('.') / 'experiments' / 'savedNetworks'
-
-device = "cuda" if torchCuda.is_available() else "cpu"
-print(f"Using device: {device}")
-
-def experiment0(numPlayers, highestDominoe, shuffleAgents, trainingGames, trainingRounds, performanceGames, performanceRounds):
-    game = dg.dominoeGame(highestDominoe, numPlayers=numPlayers, shuffleAgents=shuffleAgents, agents=(da.lineValueAgent, da.greedyAgent, da.greedyAgent, da.greedyAgent), device=device)
-    game.getAgent(0).setLearning(True)
-    
-    # run training rounds
-    trainingWinnerCount0 = np.zeros(numPlayers)
-    trainingScoreTally0 = np.zeros((trainingGames,numPlayers))
-    for gameIdx in tqdm(range(trainingGames)):
-        game.playGame(rounds=trainingRounds)
-        trainingWinnerCount0[game.currentWinner] += 1
-        trainingScoreTally0[gameIdx] += game.currentScore
-    
-    # measure performance
-    game.getAgent(0).setLearning(False)
-    performanceWinnerCount0 = np.zeros(numPlayers)
-    performanceScoreTally0 = np.zeros(numPlayers)
-    for _ in tqdm(range(performanceGames)):
-        game.playGame(rounds=performanceRounds)
-        performanceWinnerCount0[game.currentWinner] += 1 
-        performanceScoreTally0 += game.currentScore
-
-    savePath0 = game.getAgent(0).saveAgentParameters(savePath, description="lineValueAgent trained from initialization against greedyAgents")
-    
-    # create a new game with bestLineAgents
-    game = dg.dominoeGame(highestDominoe, numPlayers=numPlayers, shuffleAgents=shuffleAgents, agents=(da.lineValueAgent, da.bestLineAgent, da.bestLineAgent, da.bestLineAgent), device=device)
-    game.getAgent(0).loadAgentParameters(savePath0)
-    
-    # run training rounds
-    trainingWinnerCount1 = np.zeros(numPlayers)
-    trainingScoreTally1 = np.zeros((trainingGames,numPlayers))
-    for gameIdx in tqdm(range(trainingGames)):
-        game.playGame(rounds=trainingRounds)
-        trainingWinnerCount1[game.currentWinner] += 1
-        trainingScoreTally1[gameIdx] += game.currentScore
-    
-    # measure performance
-    game.getAgent(0).setLearning(False)
-    performanceWinnerCount1 = np.zeros(numPlayers)
-    performanceScoreTally1 = np.zeros(numPlayers)
-    for _ in tqdm(range(performanceGames)):
-        game.playGame(rounds=performanceRounds)
-        performanceWinnerCount1[game.currentWinner] += 1 
-        performanceScoreTally1 += game.currentScore
-
-    # store the agent
-    savePath1 = game.getAgent(0).saveAgentParameters(savePath, description="lineValueAgent pretrained against greedyAgents then trained against bestLineAgents")
+savePath = Path(mainPath) / 'docs' / 'media'
 
 if __name__=='__main__':
-    experiment0(args.num_players, args.highest_dominoe, args.shuffle_agents, args.training_games, args.training_rounds, args.performance_games, args.performance_rounds)
+    numPlayers = args.num_players
+    highestDominoe = args.highest_dominoe
+    
+    league = lm.leagueManager(highestDominoe, numPlayers, shuffleAgents=True)
+    
+    numEach = args.num_each
+    league.addAgentType(da.bestLineAgent, num2add=numEach)
+    league.addAgentType(da.doubleAgent, num2add=numEach)
+    league.addAgentType(da.greedyAgent, num2add=numEach)
+    league.addAgentType(da.dominoeAgent, num2add=numEach)
+    league.addAgentType(da.stupidAgent, num2add=numEach)
+
+    assert numPlayers <= league.numAgents, "the number of players must be less than the number of agents in the league!"
+    
+    numGames = args.num_games
+    num2EstimateWith = int(numGames * args.fraction_estimate)
+    
+    trackElo = np.zeros((numGames, league.numAgents))
+    for gameIdx in tqdm(range(numGames)):
+        game, leagueIndex = league.createGame()
+        game.playGame()
+        league.updateElo(leagueIndex, game.currentScore) # update ELO
+        trackElo[gameIdx] = copy(league.elo)
+    
+    avgEloPerAgentType = np.mean(trackElo.T.reshape(5,numEach,numGames),axis=1)
+    agentTypeNames = [agent.agentName for agent in league.agents[::numEach]]
+
+    eloEstimate = np.mean(avgEloPerAgentType[:,-num2EstimateWith:],axis=1)
+    for name, elo in zip(agentTypeNames, eloEstimate):
+        print(f"Agent {name} has a final ELO of {elo}")
+    
+    avgEloPerAgentType = np.mean(trackElo.T.reshape(5,numEach,numGames),axis=1)
+    agentTypeNames = [agent.agentName for agent in league.agents[::numEach]]
+    
+    fig,ax = plt.subplots(1,2, figsize=(12,4))
+    for name, elo in zip(agentTypeNames, avgEloPerAgentType):
+        ax[0].plot(range(numGames), elo, label=name, linewidth=2)
+    ax[0].set_xlabel('Number of games')
+    ax[0].set_ylabel('Average ELO')
+    ax[0].set_ylim(0, 2000)
+    ax[0].legend(fontsize=12, loc='lower left')
+    
+    ax[1].bar(range(5), eloEstimate, color='k', tick_label=agentTypeNames)
+    plt.xticks(rotation=45)
+    ax[1].set_ylabel('ELO')
+    ax[1].set_ylim(0, 2000)
+    plt.show()
+    plt.savefig(str(savePath/'basicAgentELOs.png'))
+
     
     
     
