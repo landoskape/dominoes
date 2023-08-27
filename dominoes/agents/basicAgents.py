@@ -56,10 +56,22 @@ class bestLineAgent(dominoeAgent):
     def linePlayedOn(self):
         # if my line was played on, then recompute sequences if it's my turn
         self.needsLineUpdate = True
-    
-    def makeChoice(self, optionValue):
-        return np.argmax(optionValue)
-    
+
+    def selectPlay(self, gameEngine=None):
+        # select dominoe to play, for the default class, the selection is random based on available plays
+        locations, dominoes = self.playOptions() # get options that are available
+        # if there are no options, return None
+        if len(locations)==0: return None, None
+        # if there are options, then measure their value
+        optionValue = self.optionValue(locations, dominoes)
+        # make choice of which dominoe to play
+        idxChoice = self.makeChoice(optionValue)
+        # update possible line sequences based on choice
+        self.lineSequence,self.lineDirection = df.updateLine(self.lineSequence, self.lineDirection, dominoes[idxChoice], locations[idxChoice]==0)
+        self.needsLineUpdate = False if self.useSmartUpdate else True
+        # return choice to game play object
+        return dominoes[idxChoice], locations[idxChoice]
+
     def dominoeLineValue(self):
         # if we need a line update, then run constructLineRecursive
         # (this should only ever happen if it's the first turn or if the line was played on by another agent)
@@ -91,7 +103,7 @@ class bestLineAgent(dominoeAgent):
         lineProbability = df.softmax(lineValue/self.lineTemperature)
         bestLine = np.argmax(lineProbability)
         return self.lineSequence[bestLine], notInSequence[bestLine], lineValue[bestLine]
-    
+
     def optionValue(self, locations, dominoes):
         optionValue = self.dominoeValue[dominoes] # start with just dominoe value
         optionValue[self.dominoeDouble[dominoes]]=np.inf # always play a double
@@ -105,20 +117,10 @@ class bestLineAgent(dominoeAgent):
             assert len(idxBestPlay)==1, "this should always be 1 if a best line was found..."
             optionValue[idxBestPlay[0]] = bestLineValue
         return optionValue
+        
+    def makeChoice(self, optionValue):
+        return np.argmax(optionValue)
+
     
-    def selectPlay(self, gameEngine=None):
-        # select dominoe to play, for the default class, the selection is random based on available plays
-        locations, dominoes = self.playOptions() # get options that are available
-        # if there are no options, return None
-        if len(locations)==0: return None, None
-        # if there are options, then measure their value
-        optionValue = self.optionValue(locations, dominoes)
-        # make choice of which dominoe to play
-        idxChoice = self.makeChoice(optionValue)
-        # update possible line sequences based on choice
-        self.lineSequence,self.lineDirection = df.updateLine(self.lineSequence, self.lineDirection, dominoes[idxChoice], locations[idxChoice]==0)
-        self.needsLineUpdate = False if self.useSmartUpdate else True
-        # return choice to game play object
-        return dominoes[idxChoice], locations[idxChoice]
         
 

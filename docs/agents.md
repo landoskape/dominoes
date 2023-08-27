@@ -1,4 +1,4 @@
-# Documentation: Agent Functionality
+# Documentation: Basic anatomy of an agent
 
 This file explains how to manage agents and discusses the strategies of some
 agents available in the agent library. This file focuses on managing agents, 
@@ -14,14 +14,16 @@ particular strategy in a dominoes game.
 
 ### Initialization
 Dominoes agents are initialized to play dominoes in matches with a pre-
-specified number of players and domiones set (i.e. the highest dominoe to
+specified number of players and domiones set (i.e. the highest dominoe to 
 play, usually 9s or 12s). Some agents can play with a range of players or 
-different dominoes sets, but the RL agents are not usually coded this way due
-to constraints on the input array to their networks. Dominoes agents keep
-lists and arrays that represent information about the game state (all 
-allocated in the `__init__` function). These are updated each time it's an 
-agents turn to play, or for value agents, they can be updated each for each 
-players turn. 
+different dominoe sets, but some RL agents are not usually coded this way due
+to constraints on the input array to their networks. 
+```
+agent = dominoes.agents.dominoeAgent(numPlayers, highestDominoe, dominoes, numDominoes, device=None)
+```
+At initialization, dominoes agents also preallocate several lists that 
+represent information about the game state. These are updated each time the 
+agent needs to perform game-state related computations. 
 
 ### Top-level methods
 1. `agentParameters`: returns a dictionary of key parameters for the agent,
@@ -77,7 +79,7 @@ players turn.
 9. `updatePoststateValue`: same as `estimatePrestateValue`, but calls
     post-state value updates for TD-lambda agents.
 
-#### Choosing an option to play
+### Choosing an option to play
 Choosing a play is divided into several modular methods that make it easy to 
 explore different strategies for agents. The `play` method should not be 
 changed for most agents, as it is contains the basic requirements for playing
@@ -98,44 +100,5 @@ new strategies.
 5. `makeChoice`: chooses which dominoe to play given the optionValues.
 
 
-## Developing Strategies
-The central focus of this repository is developing strategies (i.e. a policy)
-and analyzing how well they perform. This section of the documentation shows
-the basic steps to develop an agent strategy by explaining the strategies used
-by the hand-crafted agents in this repository. 
-
-### Dominoe Agent
-The default dominoe agent (e.g. the top-level class found in the 
-[`dominoeAgent.py`](../dominoes/agents/dominoeAgent.py) file) uses the 
-simplest strategy: it plays a random option out of all legal plays. To 
-accomplish this, it assigns an optionValue of 1 to each legal move (see 
-above), then chooses an option in proportion to the optionValue (i.e. 
-randomly with a uniform distribution). 
-
-### Greedy Agent 
-Greedy agents set the option value of each legal option to the total number of
-points on each legal dominoe. For example, the dominoe (3|4) will be assigned 
-a value of 7. To accomplish this: it overwrites the `optionValue` function as 
-follows: 
-```
-def optionValue(self, locations, dominoes):
-    return self.dominoeValue[dominoes]
-```
-Then, the greedy agent simply plays whichever option has the highest value by 
-overwriting the `makeChoice` function: 
-```
-def makeChoice(self, optionValue):
-    return np.argmax(optionValue)
-```
-
-### Stupid Agent
-Stupid agents work just like the greedy agent, except they play the dominoe 
-with the least value by using `np.argmin` rather than `np.argmax`. 
-
-#### Double Agent
-Double agents assign an infinite value to any double option (because it 
-allows) the agent to play again. Then, to any other option that isn't a 
-double, the value is set to the number of points on the option, just like
-for greedy agents. 
     
 

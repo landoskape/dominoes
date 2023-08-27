@@ -1,7 +1,7 @@
 import random
 import torch.cuda as torchCuda
 from . import gameplay as dg
-from .agents import dominoeAgent as dominoeAgent
+from .agents import dominoeAgent
 from . import functions as df
 
 # league manager is an object that can contain a mutable list of dominoes agents
