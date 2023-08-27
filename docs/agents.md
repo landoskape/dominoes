@@ -13,17 +13,23 @@ contain all the methods and parameters required for playing legal moves with a
 particular strategy in a dominoes game. 
 
 ### Initialization
-Dominoes agents are initialized to play dominoes in matches with a pre-
-specified number of players and domiones set (i.e. the highest dominoe to 
+Dominoes agents are initialized to play dominoes in matches with a 
+pre-specified number of players and domiones set (i.e. the highest dominoe to 
 play, usually 9s or 12s). Some agents can play with a range of players or 
 different dominoe sets, but some RL agents are not usually coded this way due
-to constraints on the input array to their networks. 
+to constraints on the input array to their networks. At initialization, 
+dominoes agents also preallocate several lists that represent information 
+about the game state. These are updated each time the agent needs to perform 
+game-state related computations. 
+
+Usage:
 ```
+numPlayers = 4
+highestDominoe = 9
+dominoes = df.listDominoes(highestDominoe) # get a list of all dominoes
+numDominoes = len(dominoes)
 agent = dominoes.agents.dominoeAgent(numPlayers, highestDominoe, dominoes, numDominoes, device=None)
 ```
-At initialization, dominoes agents also preallocate several lists that 
-represent information about the game state. These are updated each time the 
-agent needs to perform game-state related computations. 
 
 ### Top-level methods
 1. `agentParameters`: returns a dictionary of key parameters for the agent,
