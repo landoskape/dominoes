@@ -3,7 +3,8 @@
 The central focus of this repository is developing strategies (i.e. a policy)
 and analyzing how well they perform. This section of the documentation shows
 the basic steps to develop an agent strategy by explaining the strategies used
-by the hand-crafted agents in this repository.
+by the hand-crafted agents in this repository. In another documentation file, 
+I will explain and explore how to craft deep RL agents. 
 
 For an analysis of how well these hand-crafted agents perform, see the 
 [section](multiplayerElo.md) discussing multi-player ELO. 
@@ -19,7 +20,8 @@ In general, the only methods that need overwriting are the `optionValue`
 method, which assigns a value to each legal play, and the `makeChoice` method,
 which chooses a dominoe based on the option values of each legal play.
 However, `selectPlay` sometimes needs overwriting, in particular for the 
-TD-lambda agents, which have to measure option value in sequence. 
+TD-lambda agents, which cannot measure option value in parallel as is done
+by the basic hand-crafted agents. 
 
 ## Basic policies employed by hand-crafted agents
 This repository contains several hand-crafted agents that play the game with 
@@ -56,7 +58,7 @@ with the least value by using `np.argmin` rather than `np.argmax`.
 
 #### Double Agent
 Double agents assign an infinite value to any double option (because it 
-allows) the agent to play again. Then, to any other option that isn't a 
+allows the agent to play again). Then, to any other option that isn't a 
 double, the value is set to the number of points on the option, just like
 for greedy agents. 
 
@@ -69,7 +71,7 @@ that are used in the default dominoe agent.
 
 ### Best-line Agent strategy
 Identifying a set of dominoes that form a sequence of legal plays, starting at
-whatever number is available to play on an agent's own line is fundamental to 
+whatever number is available to play on an agent's own line, is fundamental to 
 success in dominoes. This is a challenging computation, related to the 
 traveling salesman problem. The best-line agent solves this with an 
 abbreviated brute-force search, in which it stops sampling unique sequences 
@@ -81,15 +83,16 @@ Once all sequences are computed, it picks the "best one" based on several
 meta-parameters. To do this, it measures the total discounted value of each
 sequence based on how many turns it will take to play each dominoe in the 
 sequence, then subtracts the discounted value of each dominoe in the agent's
-hand that isn't in a particular sequence. 
+hand that isn't in that sequence. 
 
 Finally, the agent assigns the full sequence value to the first dominoe of the
 "best" sequence, assigns an infinite value to any double, and assigns the 
 standard dominoe value to all other dominoes (e.g. the total number of points 
 on the dominoe). Then, it chooses the play with the highest value. This means 
-that the bestLine agent will always play a double, then will greedily hold on 
-to any dominoe in it's best "line", and only play a different dominoe if it 
-has a higher value than all dominoes in it's best line. 
+that the bestLine agent will always play a double, then will usually play 
+dominoes according to the best sequence on its own line, and only plays a 
+different dominoe if that dominoe has a higher value than all dominoes in it's
+best line. 
 
 This strategy is good (it's the best out of all the hand-crafted agents, see
 the [section](multiplayerElo.md) on ELO), but is missing several key ideas for
@@ -134,5 +137,15 @@ components: the inLineValue and the offLineValue.
   particular sequence (where the offLineDiscount is applied as many times as
   there are turns in each sequence). 
 
-
-
+### Supporting Functions
+The best line agent depends on some supporting functions in the 
+[functions.py](../dominoes/functions.py) file:
+- constructLineRecursive: takes as input the list of dominoes in the current
+  set, the list of indices of dominoes in an agent's hand, and whatever value
+  is available on the agent's line, and recursively creates a list of lists of
+  every possible sequence that the agent can play on it's own line. It stops
+  at a certain line length if the "maxLineLength" input is specified.
+- updateLine: takes as input the previously computed list of sequences, along
+  with the index of the dominoe that was just played and a boolean "onOwn"
+  indicating whether the dominoe was played on the agent's own line. It then
+  updates each sequence within lineSequence if it includes the "nextPlay". 
