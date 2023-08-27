@@ -6,7 +6,6 @@ import os
 mainPath = os.path.dirname(os.path.abspath(__file__)) + "/.."
 sys.path.append(mainPath)
 
-
 from copy import copy
 import argparse
 from pathlib import Path
@@ -79,8 +78,8 @@ if __name__=='__main__':
     plt.xticks(rotation=45)
     ax[1].set_ylabel('ELO')
     ax[1].set_ylim(0, 2000)
-    plt.show()
     plt.savefig(str(savePath/'basicAgentELOs.png'))
+    plt.show()
 
     
     
