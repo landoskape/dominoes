@@ -14,14 +14,14 @@ from . import functions as df
 # then the league manager will update ELOs and 
 # I want to equip the agent manager with some methods for measuring the ELO of each agent 
 class leagueManager:
-    def __init__(self, highestDominoe, numPlayers, shuffleAgents=True, elo_k=32, device=None):
+    def __init__(self, highestDominoe, numPlayers, shuffleAgents=True, elo_k=32, elo_base=1500, device=None):
         self.highestDominoe = highestDominoe
         self.numPlayers = numPlayers
         self.dominoes = df.listDominoes(highestDominoe)
         self.numDominoes = len(self.dominoes)
         self.shuffleAgents = shuffleAgents
         self.elo_k = elo_k
-        self.elo_base = 1500
+        self.elo_base = elo_base
         self.agents = []
         self.elo = []
         self.numAgents = 0

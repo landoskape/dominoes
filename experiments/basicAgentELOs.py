@@ -61,21 +61,25 @@ if __name__=='__main__':
 
     eloEstimate = np.mean(avgEloPerAgentType[:,-num2EstimateWith:],axis=1)
     for name, elo in zip(agentTypeNames, eloEstimate):
-        print(f"Agent {name} has a final ELO of {elo}")
+        print(f"Agent {name} has a final ELO of {elo:.1f}")
     
     avgEloPerAgentType = np.mean(trackElo.T.reshape(5,numEach,numGames),axis=1)
     agentTypeNames = [agent.agentName for agent in league.agents[::numEach]]
+
+    prop_cycle = plt.rcParams['axes.prop_cycle']
+    colors = prop_cycle.by_key()['color']
+    colors = [colors[i] for i in range(len(eloEstimate))]
     
-    fig,ax = plt.subplots(1,2, figsize=(12,4))
-    for name, elo in zip(agentTypeNames, avgEloPerAgentType):
-        ax[0].plot(range(numGames), elo, label=name, linewidth=2)
+    fig,ax = plt.subplots(1,2, figsize=(12,5))
+    for idx, (name, elo) in enumerate(zip(agentTypeNames, avgEloPerAgentType)):
+        ax[0].plot(range(numGames), elo, label=name, linewidth=2, c=colors[idx])
     ax[0].set_xlabel('Number of games')
     ax[0].set_ylabel('Average ELO')
     ax[0].set_ylim(0, 2000)
     ax[0].legend(fontsize=12, loc='lower left')
     
-    ax[1].bar(range(5), eloEstimate, color='k', tick_label=agentTypeNames)
-    plt.xticks(rotation=45)
+    ax[1].bar(range(5), eloEstimate, color=colors, tick_label=agentTypeNames)
+    plt.xticks(rotation=15)
     ax[1].set_ylabel('ELO')
     ax[1].set_ylim(0, 2000)
     plt.savefig(str(savePath/'basicAgentELOs.png'))
