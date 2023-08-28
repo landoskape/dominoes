@@ -6,6 +6,7 @@ import os
 mainPath = os.path.dirname(os.path.abspath(__file__)) + "/.."
 sys.path.append(mainPath)
 
+# standard imports
 from copy import copy
 import argparse
 from pathlib import Path
@@ -13,11 +14,13 @@ from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 
+# dominoes package
 from dominoes import leagueManager as lm
 from dominoes import gameplay as dg
 from dominoes import agents as da
 from dominoes import functions as df
 
+# input arguments
 parser = argparse.ArgumentParser(description='Run dominoes experiment.')
 parser.add_argument('-np','--num-players',type=int, default=4, help='the number of players for each game')
 parser.add_argument('-hd','--highest-dominoe',type=int, default=9, help='highest dominoe value in the set')
@@ -29,14 +32,23 @@ parser.add_argument('-fe','--fraction-estimate',type=float, default=0.05, help='
 args = parser.parse_args()
 assert 0 < args.fraction_estimate < 1, "fraction-estimate needs to be a float between 0 and 1"
 
+# path for saving .png 
 savePath = Path(mainPath) / 'docs' / 'media'
 
 if __name__=='__main__':
     numPlayers = args.num_players
     highestDominoe = args.highest_dominoe
-    
+
+    # create a league manager with the requested parameters
     league = lm.leagueManager(highestDominoe, numPlayers, shuffleAgents=True)
+
+    # add copies of each agent type
     
+    # Note: adding copies allow some matches to be played between agents of the same type,
+    # which I think is important for achieving a balanced estimate of ELO scores. This is
+    # important because the average dominoe score is dependent on the other agents that 
+    # are playing (e.g. it will be higher if an agent is good at going out fast). At the 
+    # end, this experiment averages the ELO for each agent type.
     numEach = args.num_each
     league.addAgentType(da.bestLineAgent, num2add=numEach)
     league.addAgentType(da.doubleAgent, num2add=numEach)
@@ -48,28 +60,30 @@ if __name__=='__main__':
     
     numGames = args.num_games
     num2EstimateWith = int(numGames * args.fraction_estimate)
-    
+
+    # Run lots of games, update and track ELO scores 
     trackElo = np.zeros((numGames, league.numAgents))
     for gameIdx in tqdm(range(numGames)):
         game, leagueIndex = league.createGame()
         game.playGame()
         league.updateElo(leagueIndex, game.currentScore) # update ELO
         trackElo[gameIdx] = copy(league.elo)
-    
+
+    # average ELO scores across agent type, and get agentType names
     avgEloPerAgentType = np.mean(trackElo.T.reshape(5,numEach,numGames),axis=1)
     agentTypeNames = [agent.agentName for agent in league.agents[::numEach]]
 
+    # use last fraction of ELO estimates to get an averaged estimate of ELO
     eloEstimate = np.mean(avgEloPerAgentType[:,-num2EstimateWith:],axis=1)
     for name, elo in zip(agentTypeNames, eloEstimate):
         print(f"Agent {name} has a final ELO of {elo:.1f}")
-    
-    avgEloPerAgentType = np.mean(trackElo.T.reshape(5,numEach,numGames),axis=1)
-    agentTypeNames = [agent.agentName for agent in league.agents[::numEach]]
 
+    # Get these colors to coordinate across subplots
     prop_cycle = plt.rcParams['axes.prop_cycle']
     colors = prop_cycle.by_key()['color']
     colors = [colors[i] for i in range(len(eloEstimate))]
-    
+
+    # Plot ELO trajectory and final ELO estimates for each agent type
     fig,ax = plt.subplots(1,2, figsize=(12,5))
     for idx, (name, elo) in enumerate(zip(agentTypeNames, avgEloPerAgentType)):
         ax[0].plot(range(numGames), elo, label=name, linewidth=2, c=colors[idx])
@@ -82,7 +96,7 @@ if __name__=='__main__':
     plt.xticks(rotation=15)
     ax[1].set_ylabel('ELO')
     ax[1].set_ylim(0, 2000)
-    plt.savefig(str(savePath/'basicAgentELOs.png'))
+    plt.savefig(str(savePath/'basicAgentELOs.png')) # save figure and show to user
     plt.show()
 
     
