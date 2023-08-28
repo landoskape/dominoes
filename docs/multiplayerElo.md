@@ -12,7 +12,9 @@ multiplayer ELO works by treating a match of N agents as N-1 head-to-head
 matches, in which ELO is updated for each pair of agents with neighboring 
 scores as if the game was only between those two agents. For example, suppose
 three agents were playing dominoes and had scores of 0, 10, and 15. Then, 
-we assume that agent 0 beat agent 1, and assume that agent 1 beat agent 2.
+we assume that agent 0 beat agent 1, and assume that agent 1 beat agent 2. 
+Therefore, agents 0 and 2 receive one ELO update, and agent 1 receives two 
+updates.
 
 ## ELO Updates
 ELO updates are coded in the [`leagueManager`](../dominoes/leagueManager.py)
@@ -27,7 +29,9 @@ Then, ELO scores are updated based on the true winner and a "k" parameter,
 which is set by the league manager and determines how much an agents ELO can 
 change for any particular game. The baseline ELO is set to 1500, which is an 
 arbitrary choice, and can be changed to whatever range of values you are most
-comfortable with. 
+comfortable with. The specific equations used for ELO are coded in the 
+[`functions`](../dominoes/functions.py) module, named `eloExpected` and 
+`eloUpdate`. 
 
 ## Measuring ELO of basic agents
 To test the multiplayer ELO system and evaluate the policies of basic 
@@ -49,8 +53,8 @@ The main result of the experiment is shown here:
 ![elo figure](media/basicAgentELOs.png)
 
 To summarize, ELO ratings stablize quickly (after about 1000 games, which 
-takes 5 minutes on my computer), and indicate that the best hand-crafted 
-policy is that of the best-line agent, followed closely by the double agent.
-As expected, agents that play randomly or play dominoes with the lowest point
-value perform worse than other agents. 
+takes about 5 minutes of wall time on my computer), and indicate that the best
+hand-crafted policy is that of the best-line agent, followed closely by the 
+double agent. As expected, agents that play randomly or play dominoes with the 
+lowest point value perform worse than other agents. 
 
