@@ -42,7 +42,7 @@ savePath = Path(mainPath) / 'docs' / 'media'
 if __name__=='__main__':
     numPlayers = args.num_players
     highestDominoe = args.highest_dominoe
-    maxLineLengths = [6, 8, 10, 12]
+    maxLineLengths = [6, 8, 10]
     
     # create a league manager with the requested parameters
     league = lm.leagueManager(highestDominoe, numPlayers, shuffleAgents=True)
