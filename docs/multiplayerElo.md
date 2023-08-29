@@ -55,9 +55,9 @@ The main result of the experiment is shown here:
 
 To summarize, ELO ratings stablize quickly (after about 1000 games, which 
 takes about 5 minutes of wall time on my computer), and indicate that the best
-hand-crafted policy is that of the best-line agent, followed closely by the 
-double agent. As expected, agents that play randomly or play dominoes with the 
-lowest point value perform worse than other agents. 
+hand-crafted policy is that of the persistent-line agent, followed closely by 
+the double agent. As expected, agents that play randomly or play dominoes with 
+the lowest point value perform worse than other agents. 
 
 ## Measuring ELO of best line agents with different maxLineLength parameters
 To measure how important the maxLineLength parameter is for the best line 

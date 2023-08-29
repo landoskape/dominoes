@@ -9,6 +9,14 @@ I will explain and explore how to craft deep RL agents.
 For an analysis of how well these hand-crafted agents perform, see the 
 [documentation](multiplayerElo.md) discussing multi-player ELO. 
 
+Note: in my standard import of the agents package: 
+```
+from dominoes import agents as da
+```
+it is assumed that all agents are imported in the 
+[`__init__.py`](../dominoes/agents/__init__.py) file. If you want this to 
+work, make sure you add any agents you code to those imports.
+
 ## Coding a policy
 Coding a new policy requires overwriting the default dominoes agent functions.
 For simple agents (examples below), this only requires overwriting the methods

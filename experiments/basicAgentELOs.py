@@ -54,7 +54,10 @@ if __name__=='__main__':
     # are playing (e.g. it will be higher if an agent is good at going out fast). At the 
     # end, this experiment averages the ELO for each agent type.
     numEach = args.num_each
-    league.addAgentType(da.bestLineAgent, num2add=numEach)
+    league.addAgentType(da.persistentLineAgent, num2add=numEach)
+    for agent in league.agents:
+        # ensure that the persistent line agents look for long lines
+        agent.maxLineLength = 12
     league.addAgentType(da.doubleAgent, num2add=numEach)
     league.addAgentType(da.greedyAgent, num2add=numEach)
     league.addAgentType(da.dominoeAgent, num2add=numEach)
