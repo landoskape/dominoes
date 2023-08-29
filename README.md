@@ -53,6 +53,7 @@ repository and presents analyses of the agents I have developed.
    - [Basic policies](docs/basicPolicies.md)
 4. [Multiplayer ELO System](docs/multiplayerElo.md)
 5. [Tutorials and basic usage](docs/tutorials.md)
+6. [Experiments](experiments)
 
 
 ## Contributing
