@@ -46,14 +46,13 @@ conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvi
 In lieu of a wiki (which I found out about after writing all these md files),
 this table of contents links to documentation that explains how to use this 
 repository and presents analyses of the agents I have developed. 
-1. The dominoes game
-   - [Rules of the game](docs/dominoeRules.md)
-   - [Gameplay object](docs/gameplay.md)
-2. Agents
+1. [Rules of the game](docs/dominoeRules.md)
+2. [Gameplay object](docs/gameplay.md)
+3. Dominoe Agents
    - [Anatomy of a dominoe agent](docs/agents.md)
    - [Basic policies](docs/basicPolicies.md)
-3. [Multiplayer ELO System](docs/multiplayerElo.md)
-4. [Tutorials and basic usage](docs/tutorials.md)
+4. [Multiplayer ELO System](docs/multiplayerElo.md)
+5. [Tutorials and basic usage](docs/tutorials.md)
 
 
 ## Contributing
