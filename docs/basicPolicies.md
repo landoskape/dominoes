@@ -7,7 +7,7 @@ by the hand-crafted agents in this repository. In another documentation file,
 I will explain and explore how to craft deep RL agents. 
 
 For an analysis of how well these hand-crafted agents perform, see the 
-[section](multiplayerElo.md) discussing multi-player ELO. 
+[documentation](multiplayerElo.md) discussing multi-player ELO. 
 
 ## Coding a policy
 Coding a new policy requires overwriting the default dominoes agent functions.
@@ -56,7 +56,7 @@ def makeChoice(self, optionValue):
 Stupid agents work just like the greedy agent, except they play the dominoe 
 with the least value by using `np.argmin` rather than `np.argmax`. 
 
-#### Double Agent
+### Double Agent
 Double agents assign an infinite value to any double option (because it 
 allows the agent to play again). Then, to any other option that isn't a 
 double, the value is set to the number of points on the option, just like
@@ -157,6 +157,6 @@ computation to recalculate all the possible lines, even with the efficient
 `updateLine` method), it chooses a best line once (at the beginning), and only
 updates it if the line is disrupted. This is a little bit faster (~20% faster
 when highestDominoe=9 and maxLineLength=12) and results in small variation in 
-policy. For a comparison of their policy performance, see this 
+policy. For a comparison of their policy performance, see the 
 [experiment](multiplayerElo.md) where their ELOs are compared in a special 
 league. 

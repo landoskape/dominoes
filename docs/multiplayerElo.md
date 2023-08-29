@@ -59,3 +59,24 @@ hand-crafted policy is that of the best-line agent, followed closely by the
 double agent. As expected, agents that play randomly or play dominoes with the 
 lowest point value perform worse than other agents. 
 
+## Measuring ELO of best line agents with different maxLineLength parameters
+To measure how important the maxLineLength parameter is for the best line 
+agents, as well as comparing the policy differences between the best line
+agent and the persistent line agent (see [Basic policies](basicPolicies.md)),
+I ran an additional experiment that is very similar to the basic agent ELO 
+experiment, but using a league with exclusively best/persistent line agents. 
+This code is found in 
+[`bestLineAgentELOs`](../experiments/bestLineAgentELOs.py). The choice of max
+line lengths is hard coded in the file, and is set to `[6,8,10,12]`. The 
+league contains multiple copies of best line agents and persistent line agents
+with each possible max line length. 
+
+The main result of the experiment is shown here: 
+![bestline elo figure](media/bestLineAgentELOs.png)
+
+Best line agents perform a little better when they perform a deeper recursive
+search for their line: note that the agents that looks for maximum lines of 10
+or 12 perform better than those that cutoff at 6 or 8. Interestingly, the
+persistent line agent performs a little better than the best line agent. I'm 
+not exactly sure why this is true, but it probably relates to changes in the 
+valuation of different lines due to discounting factors. 
