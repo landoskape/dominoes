@@ -148,4 +148,15 @@ The best line agent depends on some supporting functions in the
 - updateLine: takes as input the previously computed list of sequences, along
   with the index of the dominoe that was just played and a boolean "onOwn"
   indicating whether the dominoe was played on the agent's own line. It then
-  updates each sequence within lineSequence if it includes the "nextPlay". 
+  updates each sequence within lineSequence if it includes the "nextPlay".
+
+## Advanced Strategy: Persistent-line Agent
+The persistent line agent is a slight variation of the best line agent. 
+Instead of choosing the best line on every turn (which requires lots of
+computation to recalculate all the possible lines, even with the efficient
+`updateLine` method), it chooses a best line once (at the beginning), and only
+updates it if the line is disrupted. This is a little bit faster (~20% faster
+when highestDominoe=9 and maxLineLength=12) and results in small variation in 
+policy. For a comparison of their policy performance, see this 
+[experiment](multiplayerElo.md) where their ELOs are compared in a special 
+league. 

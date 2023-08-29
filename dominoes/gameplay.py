@@ -269,10 +269,12 @@ class dominoeGame:
             print("Final score:")
             print(self.currentScore)
             print("")
-            numTimesOut = sum(self.score[:,self.currentWinner]==0)
+            print("Number times going out:")
+            numTimesOut = np.sum(self.score==0,axis=0)
+            print(numTimesOut)
+            print("")
             print(f"The winner is agent: {self.currentWinner}"
-                  f" with a score of {self.currentScore[self.currentWinner]},"
-                  f" they went out in {numTimesOut}/{len(self.score)} rounds.")
+                  f" with an average hand score of {self.currentScore[self.currentWinner]/len(self.score)}.")
         else:
             print("Game has not begun!")
             
