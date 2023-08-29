@@ -1,4 +1,14 @@
 # Documentation: Tutorials and Basic Usage
+This section of the documentation provides examples of standard usage for this
+repository. It is useful for anyone looking for instructions for how to run
+dominoes games, create or load agents, analyze ELO scores, and print 
+results and updates about gameplay and agent policy. 
+
+For more examples on how to perform experiments and analyses, see the
+[experiments](../experiments) folder, which contains python scripts with fully
+fledged programs. The readme file in the experiments folder contains a table 
+of contents explaining what each experiment does. 
+
 
 ## Standard Imports
 The code depends on several modules written in this repository. To try all the
