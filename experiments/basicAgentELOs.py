@@ -25,9 +25,13 @@ parser = argparse.ArgumentParser(description='Run dominoes experiment.')
 parser.add_argument('-np','--num-players',type=int, default=4, help='the number of players for each game')
 parser.add_argument('-hd','--highest-dominoe',type=int, default=9, help='highest dominoe value in the set')
 parser.add_argument('-ng','--num-games',type=int, default=10000, help='how many games to play to estimate ELO')
+# note: ELO is probability based, so increasing the number of rounds will usually exaggerate differences in ELO
 parser.add_argument('-nr','--num-rounds',type=int, default=None, help='how many rounds to play for each game')
+# adding copies of agents allows ELO to include estimates based on agents playing with themselves in the league - 
+# this is important because the game dynamics change depending on what agents are present
 parser.add_argument('-ne','--num-each',type=int, default=4, help='how many copies of each agent type to include in the league')
 parser.add_argument('-fe','--fraction-estimate',type=float, default=0.05, help='final fraction of elo estimates to use')
+parser.add_argument('--nosave',default=False,action='store_true')
 
 args = parser.parse_args()
 assert 0 < args.fraction_estimate < 1, "fraction-estimate needs to be a float between 0 and 1"
@@ -96,7 +100,8 @@ if __name__=='__main__':
     plt.xticks(rotation=15)
     ax[1].set_ylabel('ELO')
     ax[1].set_ylim(0, 2000)
-    plt.savefig(str(savePath/'basicAgentELOs.png')) # save figure and show to user
+    if not(args.nosave):
+        plt.savefig(str(savePath/'basicAgentELOs.png')) # save figure and show to user
     plt.show()
 
     

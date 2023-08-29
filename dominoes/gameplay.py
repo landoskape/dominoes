@@ -73,7 +73,7 @@ class dominoeGame:
         idx = np.random.permutation(self.numDominoes) # randomized dominoe order to be distributed to each player
         assignments = [idx[startStopIndex[i]:startStopIndex[i+1]] for i in range(self.numPlayers)]
         assert np.array_equal(np.arange(self.numDominoes), np.sort(np.concatenate(assignments))), "dominoe assignments are not complete" # sanity check
-        return assignment
+        return assignments
             
     # ----------------
     # -- functions to operate a hand or game --

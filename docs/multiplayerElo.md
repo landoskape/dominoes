@@ -2,7 +2,7 @@
 
 Evaluating an agent's policy requires a method of comparing the skill level
 and win probability of each agent in comparison with the other agents. A good
-choice for this problem is ELO ratings, which are used to determine the 
+choice for this problem is the ELO system, which is used to determine the 
 probability one agent will win against another agent given their ELO ratings. 
 
 The ELO rating system was developed for head-to-head zero-sum matchups (like 
@@ -24,7 +24,7 @@ league index of each agent are fed back to the league manager to update the
 ELO scores of those agents. 
 
 First, the expected score for each agent pair in the game is measured, where 
-agent score is equal to the probability of winning (not the dominoe score). 
+expected score is equal to the probability of winning (not the dominoe score). 
 Then, ELO scores are updated based on the true winner and a "k" parameter, 
 which is set by the league manager and determines how much an agents ELO can 
 change for any particular game. The baseline ELO is set to 1500, which is an 
@@ -38,7 +38,8 @@ To test the multiplayer ELO system and evaluate the policies of basic
 hand-crafted agents, I wrote a script called 
 [`basicAgentELOs`](../experiments/basicAgentELOs.py) that creates a league of
 basic agents and plays many games between agents, updating their ELO ratings 
-until they stabilize. 
+until they stabilize. For details on the parameters of the experiment, see the
+ArgumentParser help statements and read the comments in the main function. 
 
 From the top-level directory of this repository, you can run this experiment
 on your own computer with the following command:

@@ -38,7 +38,7 @@ game = dg.dominoeGame(highestDominoe, agents=agents, defaultAgent=da.dominoeAgen
    the agents in the `agents` list and keep track of the original agent index.
 2. `numDominoeDistribution`: at the beginning of each hand, dominoes are
    assigned to each player evenly and randomly. However, if the number of
-   dominoes is not divisible by the number of players, then the remained is
+   dominoes is not divisible by the number of players, then the remainder is
    handed out to as many players as needed such that no player has 2 more
    dominoes than any other player. This method determines how many dominoes to
    assign to each player.
@@ -73,7 +73,7 @@ game = dg.dominoeGame(highestDominoe, agents=agents, defaultAgent=da.dominoeAgen
      simulate the next game state for each possible move. Basic agents ignore
      the gameEngine input.
    - Updates the game state based on what the agent's next play was.
-   - Docuemnts the gameplay so the user can assess what happened after the
+   - Documents the gameplay so the user can assess what happened after the
      hand is completed (these variables are reset whenever a new hand starts).
    - Inform agents if their hand was played on (important for agents that
      process line sequences because it tells them they need to update their
