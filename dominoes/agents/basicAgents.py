@@ -130,11 +130,11 @@ class persistentLineAgent(bestLineAgent):
         self.maxLineLength = 12 # set this larger because the agent will keep a line for longer
 
     def initHand(self):
-        super().initHand(self)
+        super().initHand()
         self.hasBestLine = False
         
     def linePlayedOn(self):
-        super().linePlayedOn(self)
+        super().linePlayedOn()
         self.hasBestLine = False
         
     def selectPlay(self, gameEngine=None):

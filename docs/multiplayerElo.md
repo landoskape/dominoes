@@ -81,3 +81,26 @@ or 12 perform better than those that cutoff at 6 or 8. Interestingly, the
 persistent line agent performs a little better than the best line agent. I'm 
 not exactly sure why this is true, but it probably relates to changes in the 
 valuation of different lines due to discounting factors. 
+
+## Measuring ELO of a highly trained RL Agent
+This is a quick preview of an RL agent's ELO. It's a preview because the RL 
+agents are the point of this repository, so will receive extensive analysis in
+their own dedicated sections of the documentation. Here, I just wanted to 
+demonstrate that the RL agents can be trained to be better than any of the 
+hand-crafted agents. The code can be found in 
+[`lineValueELOs`](../experiments/lineValueELOs.py). 
+
+I extended the first ELO experiment (the one titled `basicAgentELOs`) by 
+adding a fully trained line-value agent to the league (along with the 5 other
+agent types from the original experiment). Just like the other agent types, 
+there are several copies of the line-value agent. The results are here: 
+![linevalue elo figure](media/lineValueAgentELOs.png)
+
+Clearly, the RL agent outperforms all other agent types. For reference, ELO 
+differences of this magnitude means the line-value agent has a 72% chance of 
+winning against the persistent-line agent, an 84% chance against the double 
+agent, a 92% chance against the greedy agent, and a 99% chance against the 
+default & stupid agents. Not bad! Detailed analysis of exactly why will
+follow...
+
+

@@ -32,3 +32,4 @@ have a question about an experiment or an idea for a new one, let me know!
 
 ### [Training a Line Value Agent](experiment.py)
 
+### [Line Value Agent ELOs](lineValueELOs.py)

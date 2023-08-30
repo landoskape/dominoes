@@ -91,17 +91,9 @@ class leagueManager:
         # Go through elo updates and update elo for each agent that played
         for idx, sli in enumerate(sLeagueIndex):
             self.elo[sli] += updates[idx]
-            
-def eloExpected(Ra, Rb):
-    return 1/(1+10**((Rb-Ra)/400))
-
-def eloUpdate(S, E, k=16):
-    return k*(S-E)
 
     def getAgent(self, agentIndex):
-        assert agentIndex in self.originalAgentIndex, "requested agent index does not exist"
-        idxAgent = self.originalAgentIndex.index(agentIndex)
-        return self.agents[idxAgent]
+        return self.agents[agentIndex]
 
 
 
