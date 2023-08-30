@@ -48,12 +48,15 @@ this table of contents links to documentation that explains how to use this
 repository and presents analyses of the agents I have developed. 
 1. [Rules of the game](docs/dominoeRules.md)
 2. [Gameplay object](docs/gameplay.md)
-3. Dominoe Agents
+3. Dominoe Agents (Code structure and hand-crafted policies) 
    - [Anatomy of a dominoe agent](docs/agents.md)
    - [Basic policies](docs/basicPolicies.md)
 4. [Multiplayer ELO System](docs/multiplayerElo.md)
 5. [Tutorials and basic usage](docs/tutorials.md)
 6. [Experiments](experiments)
+7. [Basic Analysis](docs/basicAnalysis.md)
+8. Reinforcement Learning Agents
+   - to be populated...
 
 
 ## Contributing

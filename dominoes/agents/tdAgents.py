@@ -245,7 +245,9 @@ class basicValueAgent(valueAgent):
         # return optionValue
         return finalScoreOutput[0].detach().cpu().numpy()
     
-    
+
+
+
 class lineValueAgent(valueAgent):
     agentName = 'lineValueAgent'
     def specializedInit(self,**kwargs):
