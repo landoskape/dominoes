@@ -65,6 +65,9 @@ if __name__=='__main__':
         scorePerHand[idx] = game.currentScore[1:] / args.num_rounds
 
     colors = 'krb'
+    minScore = np.min(scorePerHand)
+    maxScore = np.max(scorePerHand)
+    yAxis = (minScore - (maxScore-minScore), maxScore+1)
     
     # Plot ELO trajectory and final ELO estimates for each agent type
     fig = plt.figure()
@@ -72,7 +75,7 @@ if __name__=='__main__':
         plt.plot(range(numPlayers-1), scorePerHand[idx], color=colors[idx], marker='.', markersize=10, linewidth=2.5, label=f"Against {agentsForComparison[idx].agentName}")
     plt.xlabel('Distance from better agent')
     plt.ylabel('Average Score Per Hand')
-    plt.ylim(0)
+    plt.ylim(yAxis[0], yAxis[1])
     plt.legend(fontsize=12, loc='lower left')
     
     if not(args.nosave):
