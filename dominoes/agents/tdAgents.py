@@ -164,12 +164,7 @@ class valueAgent(dominoeAgent):
         if len(locations)==0: return None, None
         # for each play option, simulate future gamestate and estimate value from it (without gradients)
         optionValue = [self.optionValue(dominoe, location, gameEngine) for (dominoe,location) in zip(dominoes, locations)]
-        print(f"locations: {locations}")
-        print(f"dominoes: {dominoes}")
-        print(f"dominoeValues: {self.dominoes[dominoes]}")
-        print(f"optionValue: {optionValue}")
         idxChoice = self.makeChoice(optionValue) # make choice and return
-        print(f"idxChoice: {idxChoice}")
         return dominoes[idxChoice], locations[idxChoice] 
     
     def makeChoice(self, optionValue):
