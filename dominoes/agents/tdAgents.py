@@ -119,10 +119,17 @@ class valueAgent(dominoeAgent):
                 trace *= self.lam # discount past eligibility traces by lambda
                 trace += prms.grad # add new gradient to eligibility trace
                 prms.grad.zero_() # reset gradients for parameters of finalScoreNetwork in between each backward call from the output
+                if torch.any(torch.isnan(trace)):
+                    print('shit!!')
+                    raise ValueError('oops')
+                    
             for trace,prms in zip(self.extraEligibility, self.extraParameters):
                 trace *= self.lam # discount past eligibility traces by lambda
                 trace += prms.grad # add new gradient to eligibility trace
                 prms.grad.zero_()
+                if torch.any(torch.isnan(trace)):
+                    print('shit!!')
+                    raise ValueError('oops')
                     
     @torch.no_grad() # don't need to estimate any gradients here, that was done in estimatePrestateValue()!
     def updatePoststateValue(self, finalScore=None, currentPlayer=None):
@@ -149,7 +156,7 @@ class valueAgent(dominoeAgent):
         if finalScore is not None:
             # when the final score is provided (i.e. the game ended), then add the error between the penultimate estimate and the true final score to a list for performance monitoring
             self.trackFinalScoreError.append(torch.mean(torch.abs(finalScore-self.finalScoreOutput)).to('cpu'))
-        return None   
+        return None
     
     def selectPlay(self, gameEngine):      
         # first, identify valid play options
@@ -157,13 +164,18 @@ class valueAgent(dominoeAgent):
         if len(locations)==0: return None, None
         # for each play option, simulate future gamestate and estimate value from it (without gradients)
         optionValue = [self.optionValue(dominoe, location, gameEngine) for (dominoe,location) in zip(dominoes, locations)]
+        print(f"locations: {locations}")
+        print(f"dominoes: {dominoes}")
+        print(f"dominoeValues: {self.dominoes[dominoes]}")
+        print(f"optionValue: {optionValue}")
         idxChoice = self.makeChoice(optionValue) # make choice and return
+        print(f"idxChoice: {idxChoice}")
         return dominoes[idxChoice], locations[idxChoice] 
     
     def makeChoice(self, optionValue):
         return np.argmin(optionValue)
     
-    def saveAgentParameters(self, path, description=None):
+    def saveAgentParameters(self, path, modelName=None, description=None):
         # generate parameters to save
         networkParameters = self.finalScoreNetwork.state_dict()
         agentParameters = self.agentParameters()
@@ -175,15 +187,19 @@ class valueAgent(dominoeAgent):
             assert isinstance(description, str)
             modelDescription = description
         parameters = np.array([agentParameters, networkParameters, modelDescription])
-        
-        saveDate = datetime.now().strftime('%y%m%d')
-        modelName = f"lineValueAgentParameters_{saveDate}"
-        
-        # Handle model save number
-        existingSaves = glob(str(path / modelName)+'_*.npy')
-        saveNumbers = [int(re.search(r'^.*(\d+)\.npy', esave).group(1)) for esave in existingSaves]
-        saveNumber = max(saveNumbers)+1 if len(saveNumbers)>0 else 0
-        modelName += f'_{saveNumber}'
+
+        if modelName is None:
+            saveDate = datetime.now().strftime('%y%m%d')
+            modelName = f"lineValueAgentParameters_{saveDate}"
+            
+            # Handle model save number
+            existingSaves = glob(str(path / modelName)+'_*.npy')
+            saveNumbers = [int(re.search(r'^.*(\d+)\.npy', esave).group(1)) for esave in existingSaves]
+            saveNumber = max(saveNumbers)+1 if len(saveNumbers)>0 else 0
+            modelName += f'_{saveNumber}'
+        else:
+            assert isinstance(modelName, str), "requested model name is not a string"
+            
         np.save(path / modelName, parameters) 
         return str(path / modelName)+'.npy'
         
@@ -204,9 +220,8 @@ class valueAgent(dominoeAgent):
             specialPrms[key] = getattr(self, key)
         return specialPrms
     
-    
-    
-    
+
+
 class basicValueAgent(valueAgent):
     agentName = 'basicValueAgent'    
     def prepareNetwork(self):
@@ -229,7 +244,7 @@ class basicValueAgent(valueAgent):
         return valueNetworkInput    
     
     def simulateValueInputs(self, binaryHand, binaryPlayed, binaryLineAvailable, binaryDummyAvailable, handSize, cantPlay, didntPlay, turnCounter, dummyPlayable, **kwargs):
-        return torch.tensor(np.concatenate((binaryHand, binaryPlayed, binaryLineAvailable.flatten(), binaryDummyAvailable, handSize, cantPlay, didntPlay, turnCounter, np.array(dummyPlayable).reshape(-1)))).float()
+        return torch.tensor(np.concatenate((binaryHand, binaryPlayed, binaryLineAvailable.flatten(), binaryDummyAvailable, handSize, cantPlay, didntPlay, turnCounter, np.array(dummyPlayable).reshape(-1)))).float().to(self.device)
         
     def optionValue(self, dominoe, location, gameEngine):
         # enter dominoe and location into gameEngine, return new gamestate
