@@ -119,9 +119,7 @@ if __name__=='__main__':
     highestDominoe = args.highest_dominoe
     shuffleAgents = args.shuffle_agents
     trainGames = args.train_games
-    trainRounds = args.train_rounds
-    testGames = args.test_games
-    testRounds = args.test_rounds if args.test_rounds is not None else highestDominoe+1
+    trainRounds = args.train_rounds if args.train_rounds is not None else highestDominoe+1
 
     # if just plotting, load data. Otherwise, run training and testing
     if not(args.justplot):
@@ -134,7 +132,6 @@ if __name__=='__main__':
     print("Train winner count: ", results['trainWinnerCount'])
     tenPercent = int(np.ceil(trainGames*0.1))
     print(f"Average score per round in last 10% of training: {np.mean(results['trainScoreTally'][-tenPercent:]/trainRounds,axis=0)}")
-    print(f"Average score per round in testing: {results['testScoreTally']/testGames/testRounds}")
 
     # Plot results of experiment (and save if requested)
     plotResults(results)
