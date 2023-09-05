@@ -105,7 +105,7 @@ class valueAgent(dominoeAgent):
     def estimatePrestateValue(self, currentPlayer=None):
         if not(self.checkTurnUpdate(currentPlayer, postState=False)): return None
         if not(self.learning): return None
-
+        
         # at the beginning of each turn, zero out the gradients 
         self.finalScoreNetwork.zero_grad()
         
@@ -119,23 +119,16 @@ class valueAgent(dominoeAgent):
                 trace *= self.lam # discount past eligibility traces by lambda
                 trace += prms.grad # add new gradient to eligibility trace
                 prms.grad.zero_() # reset gradients for parameters of finalScoreNetwork in between each backward call from the output
-                if torch.any(torch.isnan(trace)):
-                    print('shit!!')
-                    raise ValueError('oops')
-                    
             for trace,prms in zip(self.extraEligibility, self.extraParameters):
                 trace *= self.lam # discount past eligibility traces by lambda
                 trace += prms.grad # add new gradient to eligibility trace
                 prms.grad.zero_()
-                if torch.any(torch.isnan(trace)):
-                    print('shit!!')
-                    raise ValueError('oops')
                     
     @torch.no_grad() # don't need to estimate any gradients here, that was done in estimatePrestateValue()!
     def updatePoststateValue(self, finalScore=None, currentPlayer=None):
         if not(self.checkTurnUpdate(currentPlayer, postState=True)): return None
         if not(self.learning): return None
-
+        
         # otherwise, do post-state value update
         if finalScore is None: 
             # if final score is none, then the game hasn't ended and we should learn from the poststate value estimate
@@ -145,7 +138,7 @@ class valueAgent(dominoeAgent):
             finalScore = self.egocentric(finalScore)[:self.finalScoreOutputDimension]
             finalScore = torch.tensor(finalScore).to(self.device)
             tdError = finalScore - self.finalScoreOutput
-        
+
         for idx,td in enumerate(tdError):
             for prmIdx,prms in enumerate(self.finalScoreNetwork.parameters()):
                 assert self.finalScoreEligibility[idx][prmIdx].shape == prms.shape, "oops!"
@@ -153,6 +146,7 @@ class valueAgent(dominoeAgent):
             for prmIdx,prms in enumerate(self.extraParameters):
                 assert self.extraEligibility[idx][prmIdx].shape == prms.shape, "oops!"
                 prms += self.alpha * self.extraEligibility[idx][prmIdx] * td # TD(lambda) update rule
+                    
         if finalScore is not None:
             # when the final score is provided (i.e. the game ended), then add the error between the penultimate estimate and the true final score to a list for performance monitoring
             self.trackFinalScoreError.append(torch.mean(torch.abs(finalScore-self.finalScoreOutput)).to('cpu'))
@@ -219,6 +213,11 @@ class valueAgent(dominoeAgent):
 
 class basicValueAgent(valueAgent):
     agentName = 'basicValueAgent'    
+    def checkTurnUpdate(self, currentPlayer, postState=False):
+        relevantTurn = True # update every turn -- #(currentPlayer is not None) and (currentPlayer == self.agentIndex)
+        relevantState = True # update gameState for pre and post states
+        return relevantTurn and relevantState
+        
     def prepareNetwork(self):
         # initialize valueNetwork -- predicts next hand value of each player along with final score for each player (using omniscient information to begin with...) 
         self.finalScoreNetwork = dnn.valueNetwork(self.numPlayers,self.numDominoes,self.highestDominoe,self.finalScoreOutputDimension)
@@ -253,6 +252,8 @@ class basicValueAgent(valueAgent):
         simulatedValueInput = self.sampleFutureGamestate(nextState, newHand)
         with torch.no_grad(): finalScoreOutput = self.finalScoreNetwork(simulatedValueInput)
         # return optionValue
+        # if torch.any(torch.isnan(finalScoreOutput)):
+        #     pdb.set_trace()
         return finalScoreOutput[0].detach().cpu().numpy()
     
 

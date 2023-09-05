@@ -56,7 +56,7 @@ repository and presents analyses of the agents I have developed.
 6. [Experiments](experiments)
 7. [Basic Analysis](docs/basicAnalysis.md)
 8. Reinforcement Learning Agents
-   - to be populated...
+   - [Basic TD-Lambda Agent](docs/basicTDLambdaAgent.md)
 
 
 ## Contributing

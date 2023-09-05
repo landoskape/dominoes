@@ -38,7 +38,8 @@ args = parser.parse_args()
 assert 0 < args.fraction_estimate < 1, "fraction-estimate needs to be a float between 0 and 1"
 
 # path for saving .png 
-networkPath = Path(mainPath) / 'experiments' / 'savedNetworks' / 'lineValueAgentParameters_230817_1.npy'
+networkPathLine = Path(mainPath) / 'experiments' / 'savedNetworks' / 'lineValueAgentParameters_230817_1.npy'
+networkPathBasic = Path(mainPath) / 'experiments' / 'savedNetworks' / 'trainBasicValueAgent_withOpponent_dominoeAgent.npy'
 savePath = Path(mainPath) / 'docs' / 'media'
 device = 'cuda' if torchCuda.is_available() else 'cpu'
 
@@ -60,13 +61,20 @@ if __name__=='__main__':
     for _ in range(numEach):
         # instantiate lineValueAgent
         cAgent = da.lineValueAgent(numPlayers, highestDominoe, league.dominoes, league.numDominoes, device=league.device)
-        cAgent.loadAgentParameters(networkPath) # load parameters of a highly-trained agent
+        cAgent.loadAgentParameters(networkPathLine) # load parameters of a highly-trained agent
         cAgent.setLearning(False) # I don't want these agents to update their parameters anymore
         league.addAgent(cAgent) # add agent to league
 
+    for _ in range(numEach):
+        # instantiate basicValueAgent
+        cAgent = da.basicValueAgent(numPlayers, highestDominoe, league.dominoes, league.numDominoes, device=league.device)
+        cAgent.loadAgentParameters(networkPathBasic)
+        cAgent.setLearning(False)
+        league.addAgent(cAgent)
+        
     # Then add all the other agent types
     league.addAgentType(da.persistentLineAgent, num2add=numEach)
-    for agentIdx in range(numEach,2*numEach):
+    for agentIdx in range(2*numEach,3*numEach):
         league.getAgent(agentIdx).maxLineLength = 12
     league.addAgentType(da.doubleAgent, num2add=numEach)
     league.addAgentType(da.greedyAgent, num2add=numEach)

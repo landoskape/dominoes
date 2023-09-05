@@ -1,7 +1,6 @@
 # mainExperiment at checkpoint 1
 import sys
 import os
-import pdb
 
 # add path that contains the dominoes package
 mainPath = os.path.dirname(os.path.abspath(__file__)) + "/.."
@@ -57,12 +56,12 @@ print(f"Using device: {device}")
 
 # method for returning the name of the saved network parameters (different save for each possible opponent)
 def getFileName():
-    return f"trainBasicValueAgent_withOpponent_{args.opponent}"
+    return f"trainLineValueAgent_withOpponent_{args.opponent}"
 
 # method for training agent
 def trainBasicValueAgent(numPlayers, highestDominoe, shuffleAgents, trainGames, trainRounds, testGames, testRounds):
     # open game with basic value agent playing against three default dominoe agents 
-    agents=(da.basicValueAgent, None, None, None)
+    agents=(da.lineValueAgent, None, None, None)
     game = dg.dominoeGame(highestDominoe, numPlayers=numPlayers, shuffleAgents=shuffleAgents, agents=agents, defaultAgent=opponents[args.opponent], device=device)
     game.getAgent(0).setLearning(True)
     
@@ -85,7 +84,7 @@ def trainBasicValueAgent(numPlayers, highestDominoe, shuffleAgents, trainGames, 
     # save results if requested
     if not(args.nosave):
         # Save agent parameters
-        fullSavePath = game.getAgent(0).saveAgentParameters(savePath, modelName=getFileName(), description=f"basicValueAgent trained against {args.opponent}")
+        fullSavePath = league.getAgent(0).saveAgentParameters(savePath, modelName=getFileName(), description=f"LineValueAgent trained against {args.opponent}")
         np.save(prmsPath / getFileName(), vars(args))
         np.save(resPath / getFileName(), results)
     
@@ -108,7 +107,7 @@ def plotResults(results):
     ax[1].legend(loc='lower left')
     
     if not(args.nosave):
-        plt.savefig(str(figsPath/'trainBasicValueAgent.png'))
+        plt.savefig(str(figsPath/'trainLineValueAgent.png'))
     
     plt.show()
 
@@ -125,15 +124,15 @@ if __name__=='__main__':
 
     # if just plotting, load data. Otherwise, run training and testing
     if not(args.justplot):
-        results = trainBasicValueAgent(numPlayers, highestDominoe, shuffleAgents, trainGames, trainRounds, testGames, testRounds)
+        results = trainLineValueAgent(numPlayers, highestDominoe, shuffleAgents, trainGames, trainRounds, testGames, testRounds)
     else:
         print("Need to check if args match saved args!!!")
         results = np.load(resPath / (getFileName()+'.npy'), allow_pickle=True).item()
 
     # Print results of experiment
     print("Train winner count: ", results['trainWinnerCount'])
-    tenPercent = int(np.ceil(trainGames*0.1))
-    print(f"Average score per round in last 10% of training: {np.mean(results['trainScoreTally'][-tenPercent:]/trainRounds,axis=0)}")
+    print("Test winner count: ", results['testWinnerCount'])
+    print("ELO in testing: ", results['elo'])
     print(f"Average score per round in testing: {results['testScoreTally']/testGames/testRounds}")
 
     # Plot results of experiment (and save if requested)
