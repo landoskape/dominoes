@@ -22,16 +22,16 @@ The foundation of the TD-Lambda algorithm is
 [Temporal Difference Learning](https://en.wikipedia.org/wiki/Temporal_difference_learning).
 In temporal-difference learning, a value function $V(S)$ is used to predict 
 the value ($V$) of the current state ($S$). The value function is adjusted by
-any rewards (or punishments) that are received, denoted $r$, and the predicted
+any rewards (or punishments) that are received ($r$), and the predicted
 value of the next observed state. 
 
-$$\Large V(S_t) &larr; V(S_t) + \alpha (r_{t+1} + V(S_{t+1}) - V(S_t))$$
+$$\large V(S_t) &larr; V(S_t) + \alpha (r_{t+1} + V(S_{t+1}) - V(S_t))$$
 
 The term in the parentheses is called the temporal difference error because it
 reflects the error in predicting the next states reward from the previous 
 state. It is denoted as $\delta$:
 
-$$\Large \delta_t = (r_{t+1} + V(S_{t+1}) - V(S_t))$$ 
+$$\large \delta_t = (r_{t+1} + V(S_{t+1}) - V(S_t))$$ 
 
 Suppose the value function is defined as a neural network $f$ with parameters 
 $\theta$: $f_V(S, \theta)$. To implement an update of the value function, we 
@@ -39,7 +39,7 @@ need to determine how the parameters of the network affect the estimate of the
 value. For this, we need the gradient of the value with respect to $\theta$
 which we call the "eligibility trace", denoted $z$:
 
-$$\Large z = \frac{\partial}{\partial \theta} f_V(S, \theta)$$
+$$\large z = \frac{\partial}{\partial \theta} f_V(S, \theta)$$
 
 We can't just add the eligibility trace to the networks parameters, we have to
 make sure that we update the parameters such that the value function will 
@@ -51,7 +51,7 @@ estimate. And of course, everything is scaled by a learning rate $\alpha$. So,
 here we have it, looking at the update to a specific parameter $\theta_i$, 
 associated with its own elgibility trace $z_i$:
 
-$$\Large \theta_i &larr; \theta_i + \alpha \delta_t z_i$$
+$$\large \theta_i &larr; \theta_i + \alpha \delta_t z_i$$
 
 #### TD-Lambda Algorithm Applied to Dominoes
 In a game of dominoes, the goal of the game is to end each hand with as few
@@ -69,10 +69,10 @@ occurs (i.e. the post-state estimate minus the pre-state estimate). However,
 once the hand is over, then the post-state's prediction is replaced with the 
 true final score. 
 
-$$\Large
+$$\large
 \delta_t = \begin{cases}
-R_{final} - f_V(S_t, \theta) \text{if hand is over} \\
-f_V(S_{t+}, \theta) - f_V(S_t, \theta) \text{if hand is not over} \\
+R_{final} - f_V(S_t, \theta) &\text{if hand is over} \\[1cm]
+f_V(S_{t+}, \theta) - f_V(S_t, \theta) &\text{if hand is not over} \\
 \end{cases}
 $$
 
