@@ -30,9 +30,7 @@ have a question about an experiment or an idea for a new one, let me know!
 
 ### [Best Line Agent ELOs](bestLineAgentELOs.py)
 
-### [Training a Basic TD-Lambda Agent](trainBasicValueAgent.py)
-
-### [Training a Line Value Agent](experiment.py)
+### [Training a TD-Lambda Agent](trainValueAgent.py)
 
 ### [Line Value Agent ELOs](lineValueELOs.py)
 
