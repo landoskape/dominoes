@@ -70,10 +70,10 @@ once the hand is over, then the post-state's prediction is replaced with the
 true final score. 
 
 $$\Large
-\delta_t = \left{\begin{array}{ll}
+\delta_t = \begin{cases}
 R_{final} - f_V(S_t, \theta) \text{if hand is over} \\
-f_V(S_{t+}, \theta) \text{if hand is not over} \\
-\end{array}
+f_V(S_{t+}, \theta) - f_V(S_t, \theta) \text{if hand is not over} \\
+\end{cases}
 $$
 
 
