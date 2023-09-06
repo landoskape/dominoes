@@ -71,11 +71,26 @@ true final score.
 
 $$\large
 \delta_t = \begin{cases}
-    R_{\text{final}} - f_V(S_t, \theta) & \text{if hand is over} \\ [10pt]
+    R_{\text{final}} - f_V(S_t, \theta) & \text{if hand is over} \\
     f_V(S_{t+}, \theta) - f_V(S_t, \theta) & \text{if hand is not over} \\
 \end{cases}
 $$
 
+\[
+X(m,n) = \left\{\begin{array}{lr}
+    x(n), & \text{for } 0\leq n\leq 1\\
+    x(n-1), & \text{for } 0\leq n\leq 1\\
+    x(n-1), & \text{for } 0\leq n\leq 1
+    \end{array}\right\} = xy
+\]
+
+\[
+X(m,n) = \begin{array}{lr}
+    x(n), & \text{for } 0\leq n\leq 1\\[10pt]
+    x(n-1), & \text{for } 0\leq n\leq 1\\
+    x(n-1), & \text{for } 0\leq n\leq 1
+    \end{array} = xy
+\]
 
 
 
