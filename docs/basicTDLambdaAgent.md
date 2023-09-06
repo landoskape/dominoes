@@ -57,7 +57,8 @@ $$\Large \theta_i &larr; \theta_i + \alpha \delta_t z_i$$
 In a game of dominoes, the goal of the game is to end each hand with as few
 points as possible. Therefore, an agent's value function is defined as its
 estimate of its final score at the end of the game (the sum of the points in
-its hand when a player goes out - see the [rules](dominoeRules.md)). 
+its hand when a player goes out - see the [rules](dominoeRules.md)). Final 
+score is denoted by $R_{final}$. 
 
 Following the convention of the influential 
 [TD-Gammon](https://en.wikipedia.org/wiki/TD-Gammon) model of TD-Lambda 
@@ -68,11 +69,11 @@ occurs (i.e. the post-state estimate minus the pre-state estimate). However,
 once the hand is over, then the post-state's prediction is replaced with the 
 true final score. 
 
-$$ 
-\delta_t = \left[\begin{array}{ll}
-finalScore - f_V(S_t, \theta) \text{if hand is over} \\
+$$\Large
+\delta_t = \left{\begin{array}{ll}
+R_{final} - f_V(S_t, \theta) \text{if hand is over} \\
 f_V(S_{t+}, \theta) \text{if hand is not over} \\
-\end{array}\right]
+\end{array}
 $$
 
 
