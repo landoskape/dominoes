@@ -27,16 +27,23 @@ state. It is denoted as $\delta$:
 $$\large \delta_t = (r_{t+1} + V(S_{t+1}) - V(S_t))$$ 
 
 Suppose the value function is defined as a neural network $f$ with parameters 
-$\theta$: $f_V(S, \theta)$. To implement an update of the value function, we 
-need to determine how the parameters of the network affect the estimate of the
-value. For this, we need the gradient of the value with respect to the 
-parameters $\theta$. However, in autocorrelated games like dominoes, it makes 
-sense to keep track of how the parameters have been influencing the estimate 
-of the final score throughout each hand. This value is a temporally discounted
-accumulation of gradients referred to as the eligibility trace, because it 
-represents the "eligibility" of each parameter to be updated by temporal 
-difference errors. The eligibility trace is denoted $Z$ and is measured as 
-follows:
+$\theta$: 
+
+$$\large V(S) = f_V(S, \theta)$$ 
+
+How does one implement an update of the value function? To do so, we need to
+determine how the parameters of the network affect the estimate of the value.
+For this, we need the gradient of the value with respect to the parameters 
+$\theta$:
+
+$$\large \nabla_{\theta}f_V(S, \theta)$$
+
+However, in autocorrelated games like dominoes, it makes sense to keep track
+of how the parameters have been influencing the estimate of the final score
+throughout each hand. This value is a temporally discounted accumulation of
+gradients that is referred to as the eligibility trace, because it represents
+the "eligibility" of each parameter to be updated by temporal difference 
+errors. The eligibility trace is denoted $Z$ and is measured as follows:
 
 $$\large z = \frac{\partial}{\partial \theta} f_V(S, \theta)$$
 
