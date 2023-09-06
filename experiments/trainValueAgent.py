@@ -12,6 +12,7 @@ import argparse
 from pathlib import Path
 from tqdm import tqdm
 import numpy as np
+from scipy.signal import savgol_filter
 import torch.cuda as torchCuda
 import matplotlib.pyplot as plt
 
@@ -100,19 +101,28 @@ def trainValueAgent(numPlayers, highestDominoe, shuffleAgents, trainGames, train
 
 # And a function for plotting results
 def plotResults(results):
+    filter = lambda x : savgol_filter(x, 20, 1)
     trainRounds = args.train_rounds if args.train_rounds is not None else highestDominoe+1
     fig,ax = plt.subplots(1,2,figsize=(8,4))
-    ax[0].plot(range(args.train_games), results['trainScoreTally'][:,0]/trainRounds, c='b', label=args.value_agent)
-    ax[0].plot(range(args.train_games), np.mean(results['trainScoreTally'][:,1:],axis=1)/trainRounds, c='k', label=f"{args.opponent}")
+    ax[0].plot(range(args.train_games), 
+               filter(results['trainScoreTally'][:,0]/trainRounds), 
+               c='b', label=args.value_agent)
+    ax[0].plot(range(args.train_games), 
+               filter(np.mean(results['trainScoreTally'][:,1:],axis=1)/trainRounds),
+               c='k', label=f"{args.opponent}")
     ax[0].set_xlabel('Training Games')
     ax[0].set_ylabel('Training Score Per Hand')
-    ax[0].legend(loc='lower left')
+    ax[0].legend(loc='best')
 
-    ax[1].plot(range(args.train_games), results['trainHandWinnerCount'][:,0], c='b', label=args.value_agent)
-    ax[1].plot(range(args.train_games), np.mean(results['trainHandWinnerCount'][:,1:],axis=1), c='k', label=f"{args.opponent}")
+    ax[1].plot(range(args.train_games), 
+               filter(results['trainHandWinnerCount'][:,0]), 
+               c='b', label=args.value_agent)
+    ax[1].plot(range(args.train_games), 
+               filter(np.mean(results['trainHandWinnerCount'][:,1:],axis=1)), 
+               c='k', label=f"{args.opponent}")
     ax[1].set_xlabel('Training Games')
     ax[1].set_ylabel('Training Num Won Hands')
-    ax[1].legend(loc='lower left')
+    ax[1].legend(loc='best')
     
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName()))
