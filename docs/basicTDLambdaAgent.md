@@ -71,7 +71,7 @@ true final score.
 
 $$\large
 \delta_t = \begin{cases}
-    R_{\text{final}} - f_V(S_t, \theta) & \text{if hand is over} \\[10pt]
+    R_{\text{final}} - f_V(S_t, \theta) & \text{if hand is over} \\ [10pt]
     f_V(S_{t+}, \theta) - f_V(S_t, \theta) & \text{if hand is not over} \\
 \end{cases}
 $$
