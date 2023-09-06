@@ -29,7 +29,7 @@ $$\Large V(S_t) &larr; V(S_t) + \alpha (r_{t+1} + V(S_{t+1}) - V(S_t))$$
 
 The term in the parentheses is called the temporal difference error because it
 reflects the error in predicting the next states reward from the previous 
-state ( $TD_t = (r_{t+1} + V(S_{t+1}) - V(S_t))$ ). 
+state ($ TD_t = (r_{t+1} + V(S_{t+1}) - V(S_t)) $). 
 
 Suppose the value function is defined as a neural network $f$ with parameters 
 $\theta$: $f_V(S, \theta)$. To implement an update of the value function, we 
