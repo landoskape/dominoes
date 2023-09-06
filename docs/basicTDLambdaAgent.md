@@ -10,14 +10,7 @@ This documentation file explores the first few architectures and training
 programs. It starts by explaining the core of how TD-lambda agents work, then
 shows some initial results of TD-lambda agent performance. 
 
-## Features of TD-Lambda Agents
-Here, I explain the code (and algorithm) underlying how TD-lambda agents
-learn to play dominoes. This section provides an overview with a few key
-details; for futher information see the [code](../dominoes/agents/tdAgents.py)
-defining TD-lambda agents and the 
-[network architectures](../dominoes/networks.py) that are used by them. 
-
-### The TD-Lambda Algorithm
+## The TD-Lambda Algorithm
 The foundation of the TD-Lambda algorithm is 
 [Temporal Difference Learning](https://en.wikipedia.org/wiki/Temporal_difference_learning).
 In temporal-difference learning, a value function $V(S)$ is used to predict 
@@ -53,7 +46,9 @@ associated with its own elgibility trace $z_i$:
 
 $$\large \theta_i &larr; \theta_i + \alpha \delta_t z_i$$
 
-#### TD-Lambda Algorithm Applied to Dominoes
+ -- need section here explaining how the eligibility is updated --
+
+## Application of TD-Lambda Learning to Dominoes
 In a game of dominoes, the goal of the game is to end each hand with as few
 points as possible. Therefore, an agent's value function is defined as its
 estimate of its final score at the end of the game (the sum of the points in
@@ -71,16 +66,24 @@ on the game state.
   prediction. For mathematical notation, I will refer to these as $f_V(S_t)$ for
   pre-state and $f_V(S_{t+})$ for post-state.
 
-$$\large \text{if hand is not over:} \hspace{10pt}
+$$\large \text{if hand is not over:} \hspace{30pt}
 \delta_t = f_V(S_{t+}, \theta) - f_V(S_t, \theta)$$
 
 - If the hand is over, then the temporal difference is defined as the
   difference between the true final score ($R_{final}$) and the model
   prediction from the previous game state.
   
-$$\large \text{if hand is over:} \hspace{10pt}
+$$\large \text{if hand is over:} \hspace{30pt}
 \delta_t = R_{final} - f_V(S_t, \theta)$$
 
+
+
+## Features of TD-Lambda Agents
+Here, I explain the code (and algorithm) underlying how TD-lambda agents
+learn to play dominoes. This section provides an overview with a few key
+details; for futher information see the [code](../dominoes/agents/tdAgents.py)
+defining TD-lambda agents and the 
+[network architectures](../dominoes/networks.py) that are used by them. 
 
 
 
