@@ -24,4 +24,10 @@ In temporal-difference learning, a value function $V(S)$ is used to predict
 the value ($V$) of the current state ($S$). The value function is adjusted by
 any rewards (or punishments) that are received, denoted $r$, and the predicted
 value of the next observed state. 
-$$V(s_t) &larr; V(s_t) + \alpha (r_t + V(S_{t+1}) - V(s_t))$$. 
+$$V(S_t) &larr; V(S_t) + \alpha (r_t + V(S_{t+1}) - V(S_t))$$. 
+Suppose the value function is defined as a neural network $f$ with parameters 
+$\theta$: $f_V(S, \theta)$. To implement an update of the value function, we 
+need to determine how the parameters of the network affect the estimate of the
+value. For this, we need the gradient of the value with respect to $\theta$, 
+which we call the "eligibility trace", denoted $E$. 
+$$E = \frac{\partial}{\partial \theta} f_V(S, \theta)$$
