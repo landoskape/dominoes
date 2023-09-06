@@ -33,8 +33,8 @@ $$\large V(S) = f_V(S, \theta)$$
 
 How does one implement an update of the value function? To do so, we need to
 determine how the parameters of the network affect the estimate of the value.
-For this, we need the gradient of the value with respect to the parameters 
-$\theta$:
+For this, we need the gradient of the value network with respect to the 
+parameters $\theta$:
 
 $$\large \nabla_{\theta}f_V(S, \theta)$$
 
