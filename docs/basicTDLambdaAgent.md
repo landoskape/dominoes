@@ -29,10 +29,18 @@ $$\large \delta_t = (r_{t+1} + V(S_{t+1}) - V(S_t))$$
 Suppose the value function is defined as a neural network $f$ with parameters 
 $\theta$: $f_V(S, \theta)$. To implement an update of the value function, we 
 need to determine how the parameters of the network affect the estimate of the
-value. For this, we need the gradient of the value with respect to $\theta$
-which we call the "eligibility trace", denoted $z$:
+value. For this, we need the gradient of the value with respect to the 
+parameters $\theta$. However, in autocorrelated games like dominoes, it makes 
+sense to keep track of how the parameters have been influencing the estimate 
+of the final score throughout each hand. This value is a temporally discounted
+accumulation of gradients referred to as the eligibility trace, because it 
+represents the "eligibility" of each parameter to be updated by temporal 
+difference errors. The eligibility trace is denoted $Z$ and is measured as 
+follows:
 
 $$\large z = \frac{\partial}{\partial \theta} f_V(S, \theta)$$
+
+ -- update for full form --
 
 We can't just add the eligibility trace to the networks parameters, we have to
 make sure that we update the parameters such that the value function will 
@@ -45,8 +53,6 @@ here we have it, looking at the update to a specific parameter $\theta_i$,
 associated with its own elgibility trace $z_i$:
 
 $$\large \theta_i &larr; \theta_i + \alpha \delta_t z_i$$
-
- -- need section here explaining how the eligibility is updated --
 
 ## Application of TD-Lambda Learning to Dominoes
 In a game of dominoes, the goal of the game is to end each hand with as few
