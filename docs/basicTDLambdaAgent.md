@@ -29,23 +29,58 @@ $$\Large V(S_t) &larr; V(S_t) + \alpha (r_{t+1} + V(S_{t+1}) - V(S_t))$$
 
 The term in the parentheses is called the temporal difference error because it
 reflects the error in predicting the next states reward from the previous 
-state $TD_t = (r_{t+1} + V(S_{t+1}) - V(S_t))$. 
+state. It is denoted as $\delta$:
+
+$$\Large \delta_t = (r_{t+1} + V(S_{t+1}) - V(S_t))$$ 
 
 Suppose the value function is defined as a neural network $f$ with parameters 
 $\theta$: $f_V(S, \theta)$. To implement an update of the value function, we 
 need to determine how the parameters of the network affect the estimate of the
-value. For this, we need the gradient of the value with respect to $\theta$, 
-which we call the "eligibility trace", denoted $E$:
+value. For this, we need the gradient of the value with respect to $\theta$
+which we call the "eligibility trace", denoted $z$:
 
-$$\Large E = \frac{\partial}{\partial \theta} f_V(S, \theta)$$
+$$\Large z = \frac{\partial}{\partial \theta} f_V(S, \theta)$$
 
 We can't just add the eligibility trace to the networks parameters, we have to
 make sure that we update the parameters such that the value function will 
 become progressively more accurate over time. To do that, the eligibility 
-trace needs to be scaled by the temporal difference error ($TD$), which makes
-sure that the sign of the update is right, and also ensures that the scale of 
-the update is proportional to how much error there was in the estimate. And of
-course, everything is scaled by a learning rate $\alpha$. So, here we have it,
-looking at the update to a specific parameter $\theta_i$:
+trace needs to be scaled by the temporal difference error ($\delta$), which 
+makes sure that the sign of the update is right, and also ensures that the 
+scale of the update is proportional to how much error there was in the 
+estimate. And of course, everything is scaled by a learning rate $\alpha$. So,
+here we have it, looking at the update to a specific parameter $\theta_i$, 
+associated with its own elgibility trace $z_i$:
 
-$$\Large \theta_i &larr; \theta_i + \alpha TD_t E_i$$
+$$\Large \theta_i &larr; \theta_i + \alpha \delta_t z_i$$
+
+#### TD-Lambda Algorithm Applied to Dominoes
+In a game of dominoes, the goal of the game is to end each hand with as few
+points as possible. Therefore, an agent's value function is defined as its
+estimate of its final score at the end of the game (the sum of the points in
+its hand when a player goes out - see the [rules](dominoeRules.md)). 
+
+Following the convention of the influential 
+[TD-Gammon](https://en.wikipedia.org/wiki/TD-Gammon) model of TD-Lambda 
+learning, the temporal difference is defined in two ways depending on the game
+state. If the hand is not over, then it is defined as the difference in the 
+models prediction of the final score before and after a turn occurs (i.e. the 
+post-state estimate minus the pre-state estimate). However, once the hand is 
+over, then the post-state's prediction is replaced with the true final score. 
+
+$$ \delta_t = \left\{\begin{array} 
+    finalScore - f_V(S_t, \theta) \text{if hand is over} \\
+    f_V(S_{t+}, \theta) \text{if hand is not over} \\
+\end{array}\right. $$
+
+
+
+
+
+
+
+
+
+
+
+
+
