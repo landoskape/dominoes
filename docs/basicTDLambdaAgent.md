@@ -24,4 +24,4 @@ In temporal-difference learning, a value function $V(S)$ is used to predict
 the value ($V$) of the current state ($S$). The value function is adjusted by
 any rewards (or punishments) that are received, denoted $r$, and the predicted
 value of the next observed state. 
-$$V(s_t) &larr V(s_t) + \alpha (r_t + V(S_{t+1}) - V(s_t))$$. 
+$$V(s_t) &larr; V(s_t) + \alpha (r_t + V(S_{t+1}) - V(s_t))$$. 
