@@ -63,38 +63,25 @@ score is denoted by $R_{final}$.
 Following the convention of the influential 
 [TD-Gammon](https://en.wikipedia.org/wiki/TD-Gammon) model of TD-Lambda 
 learning, the temporal difference is defined in two different ways depending 
-on the game state. If the hand is not over, then it is defined as the 
-difference in the models prediction of the final score before and after a turn
-occurs (i.e. the post-state estimate minus the pre-state estimate). However, 
-once the hand is over, then the post-state's prediction is replaced with the 
-true final score. 
-
-$$\large
-\delta_t = \begin{cases}
-    R_{\text{final}} - f_V(S_t, \theta) & \text{if hand is over} \\
-    f_V(S_{t+}, \theta) - f_V(S_t, \theta) & \text{if hand is not over} \\
-\end{cases}
+on the game state. 
+- If the hand is not over, then the temporal difference is 
+  defined as the difference in the models prediction of the final score before
+  and after a turn occurs. The model prediction before and after a turn occurs 
+  are referred to, respectively, as the pre-state and the post-state model 
+  prediction. For mathematical notation, I will refer to these as $f_V(S_t)$ for
+  pre-state and $f_V(S_{t+})$ for post-state.
+$$
+\large \text{if hand is not over:} 
+\delta_t = f_V(S_{t+}, \theta) - f_V(S_t, \theta)
 $$
 
-\[
-X(m,n) = \left\{\begin{array}{lr}
-    x(n), & \text{for } 0\leq n\leq 1\\
-    x(n-1), & \text{for } 0\leq n\leq 1\\
-    x(n-1), & \text{for } 0\leq n\leq 1
-    \end{array}\right\} = xy
-\]
-
-\[
-X(m,n) = \begin{array}{lr}
-    x(n), & \text{for } 0\leq n\leq 1\\[10pt]
-    x(n-1), & \text{for } 0\leq n\leq 1\\
-    x(n-1), & \text{for } 0\leq n\leq 1
-    \end{array} = xy
-\]
-
-
-
-
+- If the hand is over, then the temporal difference is defined as the
+  difference between the true final score ($R_{final}$) and the model
+  prediction from the previous game state.
+$$
+\large \text{if hand is over:} 
+\delta_t = R_{final} - f_V(S_t, \theta)
+$$
 
 
 
