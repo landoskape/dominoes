@@ -61,25 +61,20 @@ its hand when a player goes out - see the [rules](dominoeRules.md)).
 
 Following the convention of the influential 
 [TD-Gammon](https://en.wikipedia.org/wiki/TD-Gammon) model of TD-Lambda 
-learning, the temporal difference is defined in two ways depending on the game
-state. If the hand is not over, then it is defined as the difference in the 
-models prediction of the final score before and after a turn occurs (i.e. the 
-post-state estimate minus the pre-state estimate). However, once the hand is 
-over, then the post-state's prediction is replaced with the true final score. 
+learning, the temporal difference is defined in two different ways depending 
+on the game state. If the hand is not over, then it is defined as the 
+difference in the models prediction of the final score before and after a turn
+occurs (i.e. the post-state estimate minus the pre-state estimate). However, 
+once the hand is over, then the post-state's prediction is replaced with the 
+true final score. 
 
-$$ \delta_t = \left\{\begin{array} 
-    finalScore - f_V(S_t, \theta) \text{if hand is over} \\
-    f_V(S_{t+}, \theta) \text{if hand is not over} \\
-\end{array}\right. $$
-
-$$
-\nabla f(\left.x_{1}, x_{2}, \ldots, x_{n}\right)=\left[\begin{array}{c}
-\dfrac{\partial f}{\partial x_1}(\left.x_{1}, x_{2}, \ldots, x_{n}\right)\\
-\dfrac{\partial f}{\partial x_2}(\left.x_{1}, x_{2}, \ldots, x_{n}\right) \\
-\vdots \\
-\dfrac{\partial f}{\partial x_n}(\left.x_{1}, x_{2}, \ldots, x_{n}\right) 
+$$ 
+\delta_t = \left[\begin{array}{ll}
+finalScore - f_V(S_t, \theta) \text{if hand is over} \\
+f_V(S_{t+}, \theta) \text{if hand is not over} \\
 \end{array}\right]
 $$
+
 
 
 
