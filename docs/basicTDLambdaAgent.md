@@ -70,18 +70,16 @@ on the game state.
   are referred to, respectively, as the pre-state and the post-state model 
   prediction. For mathematical notation, I will refer to these as $f_V(S_t)$ for
   pre-state and $f_V(S_{t+})$ for post-state.
-$$
-\large \text{if hand is not over:} 
-\delta_t = f_V(S_{t+}, \theta) - f_V(S_t, \theta)
-$$
+
+$$\large \text{if hand is not over:} 
+\delta_t = f_V(S_{t+}, \theta) - f_V(S_t, \theta)$$
 
 - If the hand is over, then the temporal difference is defined as the
   difference between the true final score ($R_{final}$) and the model
   prediction from the previous game state.
-$$
-\large \text{if hand is over:} 
-\delta_t = R_{final} - f_V(S_t, \theta)
-$$
+  
+$$\large \text{if hand is over:} 
+\delta_t = R_{final} - f_V(S_t, \theta)$$
 
 
 
