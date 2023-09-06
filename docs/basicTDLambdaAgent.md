@@ -25,7 +25,7 @@ the value ($V$) of the current state ($S$). The value function is adjusted by
 any rewards (or punishments) that are received, denoted $r$, and the predicted
 value of the next observed state. 
 
-$$V(S_t) &larr; V(S_t) + \alpha (r_{t+1} + V(S_{t+1}) - V(S_t))$$
+$$\Large V(S_t) &larr; V(S_t) + \alpha (r_{t+1} + V(S_{t+1}) - V(S_t))$$
 
 The term in the parentheses is called the temporal difference error because it
 reflects the error in predicting the next states reward from the previous 
@@ -37,7 +37,7 @@ need to determine how the parameters of the network affect the estimate of the
 value. For this, we need the gradient of the value with respect to $\theta$, 
 which we call the "eligibility trace", denoted $E$:
 
-$$E = \frac{\partial}{\partial \theta} f_V(S, \theta)$$
+$$\Large E = \frac{\partial}{\partial \theta} f_V(S, \theta)$$
 
 We can't just add the eligibility trace to the networks parameters, we have to
 make sure that we update the parameters such that the value function will 
@@ -48,4 +48,4 @@ the update is proportional to how much error there was in the estimate. And of
 course, everything is scaled by a learning rate $\alpha$. So, here we have it,
 looking at the update to a specific parameter $\theta_i$:
 
-$$\theta_i &larr; \theta_i + \alpha TD_t E_i$$
+$$\Large \theta_i &larr; \theta_i + \alpha TD_t E_i$$
