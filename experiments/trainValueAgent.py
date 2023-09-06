@@ -110,6 +110,7 @@ def plotResults(results):
     ax[0].plot(range(args.train_games), 
                filter(np.mean(results['trainScoreTally'][:,1:],axis=1)/trainRounds),
                c='k', label=f"{args.opponent}")
+    ax[0].set_ylim(0)
     ax[0].set_xlabel('Training Games')
     ax[0].set_ylabel('Training Score Per Hand')
     ax[0].legend(loc='best')
@@ -120,6 +121,7 @@ def plotResults(results):
     ax[1].plot(range(args.train_games), 
                filter(np.mean(results['trainHandWinnerCount'][:,1:],axis=1)), 
                c='k', label=f"{args.opponent}")
+    ax[1].set_ylim(0)
     ax[1].set_xlabel('Training Games')
     ax[1].set_ylabel('Training Num Won Hands')
     ax[1].legend(loc='best')
