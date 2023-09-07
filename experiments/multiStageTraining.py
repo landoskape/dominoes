@@ -139,20 +139,35 @@ def plotResults(results):
     plt.show()
 
 # Main script
-if __name__=='__main__': 
-    # Sorry for my improper style
-    numPlayers = args.num_players
-    highestDominoe = args.highest_dominoe
-    shuffleAgents = args.shuffle_agents
-    trainGames = args.train_games
-    trainRounds = args.train_rounds if args.train_rounds is not None else highestDominoe+1
-
+if __name__=='__main__':
     # if just plotting, load data. Otherwise, run training and testing
-    if not(args.justplot):
+    if not(args.justplot):    
+        # Sorry for my improper style
+        numPlayers = args.num_players
+        highestDominoe = args.highest_dominoe
+        shuffleAgents = args.shuffle_agents
+        trainGames = args.train_games
+        trainRounds = args.train_rounds if args.train_rounds is not None else highestDominoe+1
+        
         print(f"Performing multistage training of {args.value_agent}")
         results = trainValueAgent(numPlayers, highestDominoe, shuffleAgents, trainGames, trainRounds)
     else:
-        print("Need to check if args match saved args!!!")
+        # Load previous parameters 
+        prms = np.load(prmsPath / (getFileName()+'.npy'), allow_pickle=True).item()
+        assert prms.keys() <= vars(args).keys(), f"Saved parameters contain keys not found in ArgumentParser:  {set(prms.keys()).difference(vars(args).keys())}"
+        for (pk,pi), (ak,ai) in zip(prms.items(), vars(args).items()):
+            if pk=='justplot': continue
+            if pk=='nosave': continue
+            if prms[pk] != vars(args)[ak]:
+                print(f"Requested argument {ak}={ai} differs from saved, which is: {pk}={pi}. Using saved...")
+                setattr(args,pk,pi)
+
+        numPlayers = args.num_players
+        highestDominoe = args.highest_dominoe
+        shuffleAgents = args.shuffle_agents
+        trainGames = args.train_games
+        trainRounds = args.train_rounds if args.train_rounds is not None else highestDominoe+1
+        
         results = np.load(resPath / (getFileName()+'.npy'), allow_pickle=True).item()
     
     # Print results of experiment

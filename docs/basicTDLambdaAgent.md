@@ -45,7 +45,7 @@ gradients that is referred to as the eligibility trace, because it represents
 the "eligibility" of each parameter to be updated by temporal difference 
 errors. The eligibility trace is denoted $Z$ and is measured as follows:
 
-$$\large Z_t = \sum_{k=1}^{T}\lambda^{t-k}\nabla_{\theta}f_V(S_k, \theta)$$
+$$\large Z_t = \sum_{k=1}^{t}\lambda^{t-k}\nabla_{\theta}f_V(S_k, \theta)$$
 
 Fortunately, this equation is recursive so can be updated each time step 
 without recomputing the gradients of all past time steps as follows:
