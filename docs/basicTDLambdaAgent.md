@@ -47,7 +47,8 @@ errors. The eligibility trace is denoted $Z$ and is measured as follows:
 
 $$\large
 \begin{align}
-Z_t &= \sum_{k=1}^{T}\lambda^{t-k}\nabla_{\theta}f_V(S_k, \theta)
+Z_t &= \sum_{k=1}^{T}\lambda^{t-k}\nabla_{\theta}f_V(S_k, \theta) \\
+\vspace{10pt} \\
 Z_{t+1} &= \lambda Z_t + \nabla_{\theta}f_V(S_t, \theta)
 \end{align}
 $$
