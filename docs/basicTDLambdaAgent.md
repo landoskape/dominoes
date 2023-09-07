@@ -45,9 +45,9 @@ gradients that is referred to as the eligibility trace, because it represents
 the "eligibility" of each parameter to be updated by temporal difference 
 errors. The eligibility trace is denoted $Z$ and is measured as follows:
 
-$$\large z = \frac{\partial}{\partial \theta} f_V(S, \theta)$$
+$$\large Z = \frac{\partial}{\partial \theta} f_V(S, \theta)$$
 
- -- update for full form --
+$$\large Z_t = \sum{k=1}{T}\lambda^{t-k}\nabla_{\theta}f_V(S_k, \theta)$$
 
 We can't just add the eligibility trace to the networks parameters, we have to
 make sure that we update the parameters such that the value function will 
