@@ -47,7 +47,7 @@ errors. The eligibility trace is denoted $Z$ and is measured as follows:
 
 $$\large Z = \frac{\partial}{\partial \theta} f_V(S, \theta)$$
 
-$$\large Z_t = \sum{k=1}{T}\lambda^{t-k}\nabla_{\theta}f_V(S_k, \theta)$$
+$$\large Z_t = \sum_{k=1}^{T}\lambda^{t-k}\nabla_{\theta}f_V(S_k, \theta)$$
 
 We can't just add the eligibility trace to the networks parameters, we have to
 make sure that we update the parameters such that the value function will 
