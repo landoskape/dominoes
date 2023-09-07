@@ -45,9 +45,10 @@ gradients that is referred to as the eligibility trace, because it represents
 the "eligibility" of each parameter to be updated by temporal difference 
 errors. The eligibility trace is denoted $Z$ and is measured as follows:
 
-$$\large Z = \frac{\partial}{\partial \theta} f_V(S, \theta)$$
-
-$$\large Z_t = \sum_{k=1}^{T}\lambda^{t-k}\nabla_{\theta}f_V(S_k, \theta)$$
+$$\large 
+Z_t &= \sum_{k=1}^{T}\lambda^{t-k}\nabla_{\theta}f_V(S_k, \theta)
+Z_{t+1} &= \lambda Z_t + \nabla_{\theta}f_V(S_t, \theta)
+$$
 
 We can't just add the eligibility trace to the networks parameters, we have to
 make sure that we update the parameters such that the value function will 
@@ -57,9 +58,9 @@ makes sure that the sign of the update is right, and also ensures that the
 scale of the update is proportional to how much error there was in the 
 estimate. And of course, everything is scaled by a learning rate $\alpha$. So,
 here we have it, looking at the update to a specific parameter $\theta_i$, 
-associated with its own elgibility trace $z_i$:
+associated with its own elgibility trace $Z_i$:
 
-$$\large \theta_i &larr; \theta_i + \alpha \delta_t z_i$$
+$$\large \theta_i &larr; \theta_i + \alpha \delta Z_i$$
 
 ## Application of TD-Lambda Learning to Dominoes
 In a game of dominoes, the goal of the game is to end each hand with as few
