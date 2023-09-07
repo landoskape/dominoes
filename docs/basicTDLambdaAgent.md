@@ -46,11 +46,11 @@ the "eligibility" of each parameter to be updated by temporal difference
 errors. The eligibility trace is denoted $Z$ and is measured as follows:
 
 $$\large
-\begin{align}
-Z_t &= \sum_{k=1}^{T}\lambda^{t-k}\nabla_{\theta}f_V(S_k, \theta) \\
-\vspace{10pt} \\
-Z_{t+1} &= \lambda Z_t + \nabla_{\theta}f_V(S_t, \theta)
-\end{align}
+Z_t = \sum_{k=1}^{T}\lambda^{t-k}\nabla_{\theta}f_V(S_k, \theta) \\
+$$
+
+$$\large
+Z_{t+1} = \lambda Z_t + \nabla_{\theta}f_V(S_t, \theta)
 $$
 
 We can't just add the eligibility trace to the networks parameters, we have to
