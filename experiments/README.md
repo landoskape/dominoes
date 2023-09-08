@@ -26,12 +26,15 @@ can find these files listed in the "Documentation" section of the repositories
 see what their code does (I think they're pretty well commented...). If you
 have a question about an experiment or an idea for a new one, let me know!
 
-### [Basic Agent ELOs](basicAgentELOs.py)
+### Primary Experimental Narrative
+- [Basic Agent ELOs](basicAgentELOs.py)
+- [Training a TD-Lambda Agent](trainValueAgent.py)
+- [Multistage Training of a TD-Lambda Agent](multiStageTraining.py)
+- [Performance of TD-Lambda Agents](valueAgentELOs.py)
 
-### [Best Line Agent ELOs](bestLineAgentELOs.py)
+### Additional Curiosities
+- [Best Line Agent ELOs](bestLineAgentELOs.py)
+- [Table Position Matters](tablePositionMatters.py)
 
-### [Training a TD-Lambda Agent](trainValueAgent.py)
 
-### [Line Value Agent ELOs](lineValueELOs.py)
 
-### [Table Position Matters](tablePositionMatters.py)

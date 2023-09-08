@@ -113,8 +113,8 @@ class valueAgent(dominoeAgent):
         self.finalScoreOutput = self.finalScoreNetwork(self.valueNetworkInput)
         
         # compute gradient of V(S,w) with respect to weights and add it to eligibility traces
-        for idx,hvOutput in enumerate(self.finalScoreOutput):
-            hvOutput.backward(retain_graph=True) # measure gradient of weights with respect to this output value
+        for idx,fsOutput in enumerate(self.finalScoreOutput):
+            fsOutput.backward(retain_graph=True) # measure gradient of weights with respect to this output value
             for trace,prms in zip(self.finalScoreEligibility[idx], self.finalScoreNetwork.parameters()):
                 trace *= self.lam # discount past eligibility traces by lambda
                 trace += prms.grad # add new gradient to eligibility trace

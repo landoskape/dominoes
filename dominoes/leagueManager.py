@@ -34,9 +34,11 @@ class leagueManager:
             assert self.checkAgent(agent), f"Agent #{idx} is not a dominoe agent"
             assert isinstance(agent, dominoeAgent), f"Agent #{idx} must be an instantiated object of a dominoe agent"
             assert self.checkParameters(agent), f"Agent #{idx} has the wrong game parameters (either numPlayers or highestDominoe)"
+        agentIndex = []
         for agent in agentList:
             # Then once you know they are valid, add all of them (double assertions are worth it for expected behavior)
-            self.addAgent(agent)
+            cIndex = self.addAgent(agent)
+            agentIndex.append(cIndex[0])
         
     def addAgent(self, agent):
         # This method adds a single instantiated agent to the league
@@ -46,7 +48,9 @@ class leagueManager:
         agent.device = self.device # update device of agent
         self.agents.append(agent)
         self.elo.append(self.elo_base)
+        agentIndex = [self.numAgents]
         self.numAgents += 1
+        return agentIndex
         
     def addAgentType(self, agentType, num2add=1):
         # This method adds a new agent to the league
@@ -55,10 +59,12 @@ class leagueManager:
         assert isinstance(num2add, int) and num2add>0, "num2add must be a positive integer"
         assert self.checkAgent(agentType), "agentType is not a dominoe agent"
         assert not(isinstance(agentType,dominoeAgent)), "agentType must be a class definition of a dominoeAgent, not an instantiated object"
+        agentIndex = [i for i in range(self.numAgents,self.numAgents+num2add)]
         for _ in range(num2add):
             self.agents.append(agentType(self.numPlayers, self.highestDominoe, self.dominoes, self.numDominoes, device=self.device))
             self.elo.append(self.elo_base)
             self.numAgents += 1
+        return agentIndex
 
     def checkAgent(self, agent):
         # Supporting function to make sure that "agent" is either a instance of a dominoe agent or a class definition
