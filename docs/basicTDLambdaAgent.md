@@ -25,7 +25,7 @@ The term in the parentheses is called the temporal difference error because it
 reflects the error in predicting the next states reward from the previous 
 state. It is denoted as $\delta$:
 
-$$\large \delta = (r + V(S') - V(S))$$ 
+$$\large \delta = (r + \gamma V(S') - V(S))$$ 
 
 Suppose the value function is defined as a neural network $f$ with parameters 
 $\theta$: 
@@ -85,8 +85,13 @@ on the game state.
   defined as the difference in the models prediction of the final score before
   and after a turn occurs. The model prediction before and after a turn occurs 
   are referred to, respectively, as the pre-state and the post-state model 
-  prediction. For mathematical notation, I will refer to these as $f_V(S_t)$ for
-  pre-state and $f_V(S_{t+})$ for post-state.
+  prediction. For mathematical notation, I will refer to these as $f_V(S_t)$
+  for pre-state and $f_V(S_{t+})$ for post-state.
+
+To choose a move, TD-lambda agents simply simulate the future game state for
+each possible legal move and estimate the final score given that simulated 
+future state, then pick whichever move leads to the lowest estimate of their
+final score. 
 
 $$\large \text{if hand is not over:} \hspace{30pt}
 \delta_t = f_V(S_{t+}, \theta) - f_V(S_t, \theta)$$
@@ -109,22 +114,21 @@ details; for further information see the
 functions.
 
 ### Overall Architecture
-Following the style of the hand-crafted [agents](../dominoes/agents) in this
-repository, there is a parent class called 
-[`valueAgent`](../dominoes/agents/tdAgents.py) that defines the core code of 
-any agent learning with the TD-lambda algorithm. This parent class is not 
-meant to be used on its own- child classes defined within the same file 
-inherit from `valueAgent` and add their own rules for measuring value. I'll 
-also mention that if you add a new agent, then you should make sure to add it
-to the imports [here](../dominoes/agents/__init__.py). 
+Following the style of the hand-crafted agents in this repository, there is a
+parent class called `valueAgent` that defines the core code of any agent 
+learning with the TD-lambda algorithm. This parent class is not meant to be 
+used on its own. Child classes defined within the same file inherit from 
+`valueAgent` and add their own rules for measuring value. I'll also mention 
+that if you add a new agent, then you should make sure to add it to the 
+imports [here](../dominoes/agents/__init__.py). 
 
 ### Creating a deep network to represent the value function
 This repository contains several network architectures designed to represent 
 the value function (all coded in pytorch). These architectures are located in
 the [networks](../dominoes/networks.py) file and are created by the 
 `prepareNetwork()` method of each `valueAgent`. At the time of the network 
-creation, TD-Lambda agents also initialize their eligibility traces with torch
-tensors the same shape as the network parameters. 
+creation, TD-lambda agents also initialize their eligibility traces with torch
+tensors that have the same shape as the network parameters. 
 
 ### Preparing input to the value function
 Since all network architectures are coded in pytorch, the first step of 
@@ -132,7 +136,7 @@ measuring the value of a game state is converting the game state into a torch
 tensor. Like every [`dominoeAgent`](../dominoes/agents/dominoeAgent.py), 
 TD-lambda agents have a method called `processGameState()` that is called by 
 the `gameState()` method when the [`dominoeGame`](../dominoes/gameplay.py) 
-object feeds the game state to each agent. For TD-Lambda agents, this takes 
+object feeds the game state to each agent. For TD-lambda agents, this takes 
 each component of the game state and converts it to a binarized tensor 
 representation, then uses the additional method `prepareValueInputs()` to 
 concatenate each tensor into a vector(s) that represents the input to the 
@@ -140,7 +144,7 @@ value function.
 
 ### Measuring pre-state value estimates
 Every turn, the `dominoeGame` object tells each agent to estimate the 
-pre-state value ($f_V(S)$) with the method `performPrestateValueEstimate()`. 
+pre-state value ( $f_V(S)$ ) with the method `performPrestateValueEstimate()`. 
 Each agent decides whether or not to estimate the pre-state value based on a
 agent-method called `checkTurnUpdate()` based on who's turn it is (and also if
 they are in the "learning" state, which can be updated by `setLearning()`). 
@@ -151,7 +155,7 @@ but it works so that's how the code is setup right now.
 
 Estimating pre-state value is exclusively used to measure the eligibility 
 trace of the value functions's parameters ($Z$) with the gradient of the value
-function ($\nabla_{\theta}f_V(S, \theta)$. Therefore, agents first zero their
+function ( $\nabla_{\theta}f_V(S, \theta)$ ). Therefore, agents first zero their
 gradients, then estimate the final score given the current game state, and 
 finally compute the gradients to update the eligibility. 
 
