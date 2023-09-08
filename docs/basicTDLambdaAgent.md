@@ -88,11 +88,6 @@ on the game state.
   prediction. For mathematical notation, I will refer to these as $f_V(S_t)$
   for pre-state and $f_V(S_{t+})$ for post-state.
 
-To choose a move, TD-lambda agents simply simulate the future game state for
-each possible legal move and estimate the final score given that simulated 
-future state, then pick whichever move leads to the lowest estimate of their
-final score. 
-
 $$\large \text{if hand is not over:} \hspace{30pt}
 \delta_t = f_V(S_{t+}, \theta) - f_V(S_t, \theta)$$
 
@@ -103,7 +98,10 @@ $$\large \text{if hand is not over:} \hspace{30pt}
 $$\large \text{if hand is over:} \hspace{30pt}
 \delta_t = R_{final} - f_V(S_t, \theta)$$
 
-
+To choose a move, TD-lambda agents simply simulate the future game state for
+each possible legal move and estimate the final score given that simulated 
+future state, then pick whichever move leads to the lowest estimate of their
+final score. 
 
 ## Features of TD-Lambda Agents
 Here, I explain the code that implements TD-lambda in value agents as they 
