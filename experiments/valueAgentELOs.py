@@ -156,13 +156,20 @@ def estimateELO(numGames, numRounds):
 
 
 # And a function for plotting results
-def plotResults(results):
-    numAgents = len(results['averageScore'])
+def plotResults(results, args):
+    elo = np.mean(results['elo'].reshape(-1, args.num_each), axis=1)
+    averageScore = np.mean(results['averageScore'].reshape(-1, args.num_each), axis=1)
+    averageHandWins = np.mean(results['averageHandWins'].reshape(-1, args.num_each), axis=1)
+    trackedElo = np.mean(results['trackedElo'].T.reshape(-1, args.num_each, args.num_games),axis=1)
+    
+    names = results['names'][::args.num_each]
+    
+    numAgents = len(names)
     
     # Show plot of tracked ELO trajectories to make sure it reached asymptotic ELO ratings
     f1 = plt.figure(1)
-    for name, elo in zip(results['names'], results['trackedElo'].T):
-        plt.plot(range(args.num_games), elo, label=name)
+    for name, telo in zip(names, trackedElo):
+        plt.plot(range(args.num_games), telo, label=name)
     plt.ylim(0)
     plt.legend(loc='best')
     plt.show()
@@ -174,17 +181,17 @@ def plotResults(results):
     
     f2,ax = plt.subplots(1,3,figsize=(14,4))
 
-    ax[0].bar(x=range(numAgents), height=results['elo'], color=colors, tick_label=results['names'])
+    ax[0].bar(x=range(numAgents), height=elo, color=colors, tick_label=names)
     ax[0].tick_params(labelrotation=25)
     ax[0].set_ylim(0)
     ax[0].set_ylabel('ELO')
     
-    ax[1].bar(x=range(numAgents), height=results['averageScore'], color=colors, tick_label=results['names'])
+    ax[1].bar(x=range(numAgents), height=averageScore, color=colors, tick_label=names)
     ax[1].tick_params(labelrotation=25)
     ax[1].set_ylim(0)
     ax[1].set_ylabel('avg score/hand')
     
-    ax[2].bar(x=range(numAgents), height=results['averageHandWins'], color=colors, tick_label=results['names'])
+    ax[2].bar(x=range(numAgents), height=averageHandWins, color=colors, tick_label=names)
     ax[2].tick_params(labelrotation=25)
     ax[2].set_ylim(0)
     ax[2].set_ylabel('avg fraction of hand wins')
@@ -218,7 +225,7 @@ if __name__=='__main__':
         
         results = np.load(resPath / (getFileName()+'.npy'), allow_pickle=True).item()
         
-    plotResults(results)
+    plotResults(results, args)
         
     print(f"ELO: {results['elo']}")
     print(f"AvgScore: {results['averageScore']}")
