@@ -118,7 +118,7 @@ learning with the TD-lambda algorithm. This parent class is not meant to be
 used on its own. Child classes defined within the same file inherit from 
 `valueAgent` and add their own rules for measuring value. I'll also mention 
 that if you add a new agent, then you should make sure to add it to the 
-imports [here](../dominoes/agents/__init__.py). 
+standard imports [here](../dominoes/agents/__init__.py). 
 
 ### Creating a deep network to represent the value function
 This repository contains several network architectures designed to represent 
@@ -142,18 +142,20 @@ value function.
 
 ### Measuring pre-state value estimates
 Every turn, the `dominoeGame` object tells each agent to estimate the 
-pre-state value ( $f_V(S)$ ) with the method `performPrestateValueEstimate()`. 
-Each agent decides whether or not to estimate the pre-state value based on a
-agent-method called `checkTurnUpdate()` based on who's turn it is (and also if
-they are in the "learning" state, which can be updated by `setLearning()`). 
+pre-state value $f_V(S)$ with the method `performPrestateValueEstimate()`. 
+Each agent decides whether or not to estimate the pre-state value based on an
+agent method called `checkTurnUpdate()`, which returns `True` or `False` 
+depending on who's turn it is and also if agents are in the "learning" state, 
+which can be updated by `setLearning()`. 
 
-Note: I've found that TD-Lambda agents learn most effectively when they 
-estimate and update their value function on every turn, this might be overkill
-but it works so that's how the code is setup right now. 
+Note: I've found that TD-lambda agents learn most effectively when they 
+estimate and update their value function on every turn, regardless of whether
+it is their turn. This might be overkill, but it works so that's how the code 
+is setup right now. 
 
 Estimating pre-state value is exclusively used to measure the eligibility 
-trace of the value functions's parameters ($Z$) with the gradient of the value
-function ( $\nabla_{\theta}f_V(S, \theta)$ ). Therefore, agents first zero their
+trace of the value functions's parameters $Z$ with the gradient of the value
+function $\nabla_{\theta}f_V(S, \theta)$. Therefore, agents first zero their
 gradients, then estimate the final score given the current game state, and 
 finally compute the gradients to update the eligibility. 
 
@@ -182,7 +184,15 @@ that it is presevered across the for loop. Then, for each set of parameters
 add the new gradient, then zero the gradients so each backward call is 
 independent. 
 
+### Choosing a move
 
+### Updating the value function 
+
+### Saving a trained agent
+TD-lambda agents come pre-equipped with methods for saving and loading their
+parameters, including all value function parameters and any ancillary 
+parameters required by each agent type. These are the methods 
+`saveAgentParameters()` and `loadAgentParameters()`. 
 
 
 
