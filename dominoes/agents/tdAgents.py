@@ -20,7 +20,7 @@ class valueAgent(dominoeAgent):
         # meta parameters
         self.highestDominoeRange = [self.highestDominoe]
         self.learning = True
-        self.lam = 0.8
+        self.lam = 0.5
         self.alpha = 1e-5
         self.trackFinalScoreError = []
         self.finalScoreOutputDimension = 1
