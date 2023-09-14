@@ -21,7 +21,7 @@ class valueAgent(dominoeAgent):
         self.highestDominoeRange = [self.highestDominoe]
         self.learning = True
         self.lam = 0.5
-        self.alpha = 1e-5
+        self.alpha = 3e-5
         self.trackFinalScoreError = []
         self.finalScoreOutputDimension = 1
         
