@@ -1,6 +1,25 @@
 from copy import copy
 import itertools
 import numpy as np
+import matplotlib
+
+def averageGroups(var, numPerGroup, axis=0):
+    '''method for averaging variable across repeats within group on specified axis'''
+    assert isinstance(var, np.ndarray), "This only works for numpy arrays"
+    numGroups = var.shape[axis]/numPerGroup 
+    assert numGroups.is_integer(), f"numPerGroup provided is incorrect, this means there are {numGroups} groups..."
+    numGroups = int(numGroups)
+    exvar_shape = list(np.expand_dims(var, axis=axis+1).shape)
+    exvar_shape[axis]=numGroups
+    exvar_shape[axis+1]=numPerGroup
+    exvar = var.reshape(exvar_shape)
+    return np.mean(exvar, axis=axis+1)
+    
+def ncmap(name='Spectral', vmin=0., vmax=1.):
+    cmap = matplotlib.cm.get_cmap(name)
+    norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+    def cm(val): return cmap(norm(val))
+    return cm
 
 def softmax(values):
     ev = np.exp(values - np.max(values))
