@@ -37,12 +37,8 @@ trainedNetworks = [
     'name':'basicValueAgent < dominoeAgent',
     'agent':da.basicValueAgent,
     'type':0},
-    {'path':networkPath/'trainValueAgent_basicValueAgent_against_persistentLineAgent.npy',
-    'name':'basicValueAgent < persistentLineAgent',
-    'agent':da.basicValueAgent,
-    'type':0},
-    {'path':networkPath/'multiStageTrainValueAgent_basicValueAgent.npy',
-    'name':'basicValueAgent < multiStage',
+    {'path':networkPath/'trainValueAgent_basicValueAgent_against_doubleAgent.npy',
+    'name':'basicValueAgent < doubleAgent',
     'agent':da.basicValueAgent,
     'type':0},
 
@@ -51,14 +47,10 @@ trainedNetworks = [
     'name':'lineValueAgent < dominoeAgent',
     'agent':da.lineValueAgent,
     'type':1},
-    {'path':networkPath/'trainValueAgent_lineValueAgent_against_persistentLineAgent.npy',
-    'name':'lineValueAgent < persistentLineAgent',
+    {'path':networkPath/'trainValueAgent_lineValueAgent_against_doubleAgent.npy',
+    'name':'lineValueAgent < doubleAgent',
     'agent':da.lineValueAgent,
     'type':1},
-    {'path':networkPath/'multiStageTrainValueAgent_lineValueAgent.npy',
-    'name':'lineValueAgent < multiStage',
-    'agent':da.lineValueAgent,
-    'type':1}
 ]
 numTrained = len(trainedNetworks)
 
@@ -80,11 +72,11 @@ def handleArguments():
     parser = argparse.ArgumentParser(description='Run dominoes experiment.')
     parser.add_argument('-np','--num-players',type=int, default=4, help='the number of players for each game')
     parser.add_argument('-hd','--highest-dominoe',type=int, default=9, help='highest dominoe value in the set')
-    parser.add_argument('-ng','--num-games',type=int, default=5000, help='how many games to play to estimate ELO')
+    parser.add_argument('-ng','--num-games',type=int, default=4000, help='how many games to play to estimate ELO')
     # note: ELO is probability based, so increasing the number of rounds will usually exaggerate differences in ELO
     parser.add_argument('-nr','--num-rounds',type=int, default=None, help='how many rounds to play for each game')
     parser.add_argument('-ne','--num-each',type=int, default=2, help='how many copies of each agent to use in the league') # helps get a better average of ELO scores
-    parser.add_argument('-fe','--fraction-estimate',type=float, default=0.2, help='final fraction of elo estimates to use')
+    parser.add_argument('-fe','--fraction-estimate',type=float, default=0.25, help='final fraction of elo estimates to use')
     parser.add_argument('--nosave',default=False,action='store_true')
     parser.add_argument('--justplot',default=False,action='store_true')
 

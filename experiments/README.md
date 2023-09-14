@@ -29,7 +29,6 @@ have a question about an experiment or an idea for a new one, let me know!
 ### Primary Experimental Narrative
 - [Basic Agent ELOs](basicAgentELOs.py)
 - [Training a TD-Lambda Agent](trainValueAgent.py)
-- [Multistage Training of a TD-Lambda Agent](multiStageTraining.py)
 - [Performance of TD-Lambda Agents](valueAgentELOs.py)
 
 ### Additional Curiosities
