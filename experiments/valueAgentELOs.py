@@ -22,21 +22,6 @@ from dominoes import gameplay as dg
 from dominoes import agents as da
 from dominoes import functions as df
 
-# input arguments
-parser = argparse.ArgumentParser(description='Run dominoes experiment.')
-parser.add_argument('-np','--num-players',type=int, default=4, help='the number of players for each game')
-parser.add_argument('-hd','--highest-dominoe',type=int, default=9, help='highest dominoe value in the set')
-parser.add_argument('-ng','--num-games',type=int, default=5000, help='how many games to play to estimate ELO')
-# note: ELO is probability based, so increasing the number of rounds will usually exaggerate differences in ELO
-parser.add_argument('-nr','--num-rounds',type=int, default=None, help='how many rounds to play for each game')
-parser.add_argument('-ne','--num-each',type=int, default=2, help='how many copies of each agent to use in the league') # helps get a better average of ELO scores
-parser.add_argument('-fe','--fraction-estimate',type=float, default=0.1, help='final fraction of elo estimates to use')
-parser.add_argument('--nosave',default=False,action='store_true')
-parser.add_argument('--justplot',default=False,action='store_true')
-
-args = parser.parse_args()
-assert 0 < args.fraction_estimate < 1, "fraction-estimate needs to be a float between 0 and 1"
-
 device = 'cuda' if torchCuda.is_available() else 'cpu'
 
 # can edit this for each machine it's being used on
@@ -44,9 +29,6 @@ resPath = Path(mainPath) / 'experiments' / 'savedResults'
 prmsPath = Path(mainPath) / 'experiments' / 'savedParameters'
 figsPath = Path(mainPath) / 'docs' / 'media'
 
-def getFileName():
-    return 'valueAgentELOs'
-    
 # paths for loading previously trained agents
 networkPath = Path(mainPath) / 'experiments' / 'savedNetworks' 
 trainedNetworks = [
@@ -92,6 +74,26 @@ handCraftedAgents = [
     {'name':'stupidAgent',
      'agent':da.stupidAgent}
 ]
+
+def handleArguments():
+    # input arguments
+    parser = argparse.ArgumentParser(description='Run dominoes experiment.')
+    parser.add_argument('-np','--num-players',type=int, default=4, help='the number of players for each game')
+    parser.add_argument('-hd','--highest-dominoe',type=int, default=9, help='highest dominoe value in the set')
+    parser.add_argument('-ng','--num-games',type=int, default=5000, help='how many games to play to estimate ELO')
+    # note: ELO is probability based, so increasing the number of rounds will usually exaggerate differences in ELO
+    parser.add_argument('-nr','--num-rounds',type=int, default=None, help='how many rounds to play for each game')
+    parser.add_argument('-ne','--num-each',type=int, default=2, help='how many copies of each agent to use in the league') # helps get a better average of ELO scores
+    parser.add_argument('-fe','--fraction-estimate',type=float, default=0.2, help='final fraction of elo estimates to use')
+    parser.add_argument('--nosave',default=False,action='store_true')
+    parser.add_argument('--justplot',default=False,action='store_true')
+
+    args = parser.parse_args()
+    assert 0 < args.fraction_estimate < 1, "fraction-estimate needs to be a float between 0 and 1"
+    return args
+
+def getFileName():
+    return 'valueAgentELOs'
     
 # creates agent list based on the agent information stored in trained networks
 def createAgentList(league, numCopies):
@@ -203,6 +205,8 @@ def plotResults(results, args):
     
 
 if __name__=='__main__':
+    args = handleArguments()
+    
     if not(args.justplot):
         # estimate ELO with the requested parameters and agents
         results = estimateELO(args.num_games, args.num_rounds)
