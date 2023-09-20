@@ -21,10 +21,10 @@ class lineRepresentationNetwork(nn.Module):
         # this will transform the (numDominoe, numLineFeatures) input representation into an (numOutputChannels, numLineFeatures) output representation
         # then, this can be passed as an extra input into a FF network
         # the point is to use the same weights on the representations of every single dominoe, then process these transformed representations into the rest of the network
-        numLineFeatures = 6
+        self.numLineFeatures = 6
         numOutputChannels = 10
         numOutputValues = numOutputChannels * numDominoes
-        self.cnn_c1 = nn.Conv1d(numLineFeatures, numOutputChannels, 1)
+        self.cnn_c1 = nn.Conv1d(self.numLineFeatures, numOutputChannels, 1)
         self.cnn_f1 = nn.Linear(numOutputValues, self.numOutputCNN)
         self.cnn_ln = nn.LayerNorm((self.numOutputCNN)) # do layer normalization on cnn outputs -- which will change in scale depending on number 
         
@@ -65,7 +65,7 @@ class lineRepresentationNetwork(nn.Module):
     def forward(self, x, withBatch=False):
         cnnOutput = self.cnnForward(x[0], withBatch=withBatch)
         ffInput = torch.cat((cnnOutput, x[1]), dim=1 if withBatch else 0)
-        netOutput = self.ffLayer(torch.cat((cnnOutput,x[1])))
+        netOutput = self.ffLayer(ffInput)
         return netOutput
     
 class lineRepresentationNetworkSmall(nn.Module):
@@ -84,10 +84,10 @@ class lineRepresentationNetworkSmall(nn.Module):
         # this will transform the (numDominoe, numLineFeatures) input representation into an (numOutputChannels, numLineFeatures) output representation
         # then, this can be passed as an extra input into a FF network
         # the point is to use the same weights on the representations of every single dominoe, then process these transformed representations into the rest of the network
-        numLineFeatures = 6
+        self.numLineFeatures = 6
         numOutputChannels = 10
         numOutputValues = numOutputChannels * numDominoes
-        self.cnn_c1 = nn.Conv1d(numLineFeatures, numOutputChannels, 1)
+        self.cnn_c1 = nn.Conv1d(self.numLineFeatures, numOutputChannels, 1)
         self.cnn_f1 = nn.Linear(numOutputValues, self.numOutputCNN)
         self.cnn_ln = nn.LayerNorm((self.numOutputCNN)) # do layer normalization on cnn outputs -- which will change in scale depending on number 
         
@@ -127,7 +127,7 @@ class lineRepresentationNetworkSmall(nn.Module):
     def forward(self, x, withBatch=False):
         cnnOutput = self.cnnForward(x[0], withBatch=withBatch)
         ffInput = torch.cat((cnnOutput, x[1]), dim=1 if withBatch else 0)
-        netOutput = self.ffLayer(torch.cat((cnnOutput,x[1])))
+        netOutput = self.ffLayer(ffInput)
         return netOutput
     
     

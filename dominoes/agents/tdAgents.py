@@ -22,7 +22,9 @@ class valueAgent(dominoeAgent):
         self.learning = True
         self.lam = 0.5
         self.alpha = 3e-5
-        self.trackFinalScoreError = []
+        self.replay = True
+        self.probSaveForReplay = 0.1
+        self.sizeReplayBuffer = 1000
         self.finalScoreOutputDimension = 1
         
         # create binary arrays for presenting gamestate information to the RL networks
@@ -123,6 +125,8 @@ class valueAgent(dominoeAgent):
                 trace *= self.lam # discount past eligibility traces by lambda
                 trace += prms.grad # add new gradient to eligibility trace
                 prms.grad.zero_()
+        
+        self.updateReplayBuffer()
                     
     @torch.no_grad() # don't need to estimate any gradients here, that was done in estimatePrestateValue()!
     def updatePoststateValue(self, finalScore=None, currentPlayer=None):
@@ -136,8 +140,9 @@ class valueAgent(dominoeAgent):
         else:
             # if the final score is an array, then we should shift its perspective and learn from the true difference in our penultimate estimate and the actual final score
             finalScore = self.egocentric(finalScore)[:self.finalScoreOutputDimension]
-            finalScore = torch.tensor(finalScore).to(self.device)
+            finalScore = torch.tensor(finalScore).float().to(self.device)
             tdError = finalScore - self.finalScoreOutput
+            self.updateReplayTarget(finalScore)
 
         for idx,td in enumerate(tdError):
             for prmIdx,prms in enumerate(self.finalScoreNetwork.parameters()):
@@ -147,9 +152,6 @@ class valueAgent(dominoeAgent):
                 assert self.extraEligibility[idx][prmIdx].shape == prms.shape, "oops!"
                 prms += self.alpha * self.extraEligibility[idx][prmIdx] * td # TD(lambda) update rule
                     
-        if finalScore is not None:
-            # when the final score is provided (i.e. the game ended), then add the error between the penultimate estimate and the true final score to a list for performance monitoring
-            self.trackFinalScoreError.append(torch.mean(torch.abs(finalScore-self.finalScoreOutput)).to('cpu'))
         return None
     
     def selectPlay(self, gameEngine):      
@@ -212,11 +214,47 @@ class valueAgent(dominoeAgent):
 
 
 class basicValueAgent(valueAgent):
-    agentName = 'basicValueAgent'    
+    agentName = 'basicValueAgent'
+    def specializedInit(self):
+        # prepare replay 
+        self.replayBufferIndex = []
+        self.replayBuffer = torch.zeros((0, self.finalScoreNetwork.inputDimension)).to(device)
+        self.replayTarget = torch.zeros(0).to(self.device)
+        self.loss = torch.nn.L1Loss()
+        self.optimizer = torch.optim.Adadelta(self.finalScoreNetwork.parameters())
+        
     def checkTurnUpdate(self, currentPlayer, postState=False):
         relevantTurn = True # update every turn -- #(currentPlayer is not None) and (currentPlayer == self.agentIndex)
         relevantState = True # update gameState for pre and post states
         return relevantTurn and relevantState
+    
+    @torch.no_grad()
+    def updateReplayBuffer(self):
+        # Add to replay buffer probabilistically (and skip if not doing replay)
+        if not(self.replay) or (np.random.rand() > self.probSaveForReplay): 
+            return None
+        
+        if self.replayBuffer.size(0) < self.sizeReplayBuffer:
+            # we haven't filled the replay buffer up, concatenate to end
+            self.replayBufferIndex.append(self.replayBuffer.size(0))
+            self.replayBuffer = torch.cat((self.replayBuffer, self.valueNetworkInput.unsqueeze(0)), dim=0)
+        else:
+            # pick a random replay to replace
+            idx = np.random.randint(0, self.replayBuffer.size(0))
+            self.replayBufferIndex.append(idx)
+            self.replayBuffer[idx] = self.valueNetworkInput
+    
+    @torch.no_grad()
+    def updateReplayTarget(self, finalScore):
+        # Nothing to do if we're not doing replay or if there weren't any probabilistic replays saved this hand
+        if not(self.replay) or len(self.replayBufferIndex)==0: 
+            return None
+        
+        if torch.any(self.replayBufferIndex > self.replayTarget.size(0)):
+            num2add = torch.max(self.replayBufferIndex) + 1 - self.replayTarget.size(0)
+            self.replayTarget = torch.cat((self.replayTarget, torch.zeros(num2add)))
+        
+        self.replayTarget[self.replayBufferIndex]=finalScore
         
     def prepareNetwork(self):
         # initialize valueNetwork -- predicts next hand value of each player along with final score for each player (using omniscient information to begin with...) 
@@ -277,9 +315,25 @@ class lineValueAgent(valueAgent):
         self.nonDouble = self.dominoes[:,0]!=self.dominoes[:,1]
         self.playValue = np.sum(self.dominoes, axis=1)
         
+        # prepare replay 
+        replayDims0 = (self.finalScoreNetwork.numLineFeatures, self.numDominoes)
+        replayDims1 = (self.finalScoreNetwork.inputDimension-self.finalScoreNetwork.numOutputCNN, )
+        self.replayBufferIndex = []
+        self.replayBuffer = [torch.zeros((0, *replayDims0)).to(self.device), torch.zeros((0, *replayDims1)).to(self.device)]
+        self.replayTarget = torch.zeros(0).to(self.device)
+        self.loss = torch.nn.L1Loss()
+        self.optimizer = torch.optim.Adadelta(self.finalScoreNetwork.parameters())
+        
     def initHand(self):
         super().initHand()
         self.needsLineUpdate = True
+        if self.replay and self.replayBuffer[0].size(0)>0:
+            self.replayBufferIndex = [] # reset so any replays to add from this hand get appended here
+            self.optimizer.zero_grad()
+            finalScoreOutput = self.finalScoreNetwork(self.replayBuffer, withBatch=True)
+            finalScoreError = self.loss(finalScoreOutput, self.replayTarget)
+            finalScoreError.backward()
+            self.optimizer.step()
         
     def linePlayedOn(self):
         # if my line was played on, then recompute sequences if it's my turn
@@ -298,6 +352,37 @@ class lineValueAgent(valueAgent):
             specialPrms[key] = getattr(self, key)
         return specialPrms
 
+    @torch.no_grad()
+    def updateReplayBuffer(self):
+        # Add to replay buffer probabilistically (and skip if not doing replay)
+        if not(self.replay) or (np.random.rand() > self.probSaveForReplay): 
+            return None
+        
+        if self.replayBuffer[0].size(0) < self.sizeReplayBuffer:
+            # we haven't filled the replay buffer up, concatenate to end
+            self.replayBufferIndex.append(self.replayBuffer[0].size(0))
+            self.replayBuffer[0] = torch.cat((self.replayBuffer[0], self.valueNetworkInput[0].unsqueeze(0)), dim=0)
+            self.replayBuffer[1] = torch.cat((self.replayBuffer[1], self.valueNetworkInput[1].unsqueeze(0)), dim=0)
+        else:
+            # pick a random replay to replace
+            idx = np.random.randint(0, self.replayBuffer[0].size(0))
+            self.replayBufferIndex.append(idx)
+            self.replayBuffer[0][idx] = self.valueNetworkInput[0]
+            self.replayBuffer[1][idx] = self.valueNetworkInput[1]
+    
+    @torch.no_grad()
+    def updateReplayTarget(self, finalScore):
+        # Nothing to do if we're not doing replay or if there weren't any probabilistic replays saved this hand
+        if not(self.replay) or len(self.replayBufferIndex)==0: 
+            return None
+        
+        if any(rbi>self.replayTarget.size(0) for rbi in self.replayBufferIndex):
+            num2add = max(self.replayBufferIndex) + 1 - self.replayTarget.size(0)
+            self.replayTarget = torch.cat((self.replayTarget, torch.zeros(num2add).to(self.device)))
+        
+        self.replayTarget[self.replayBufferIndex]=finalScore
+        
+        
     def prepareNetwork(self):
         # initialize valueNetwork -- predicts next hand value of each player along with final score for each player (using omniscient information to begin with...) 
         self.finalScoreNetwork = dnn.lineRepresentationNetwork(self.numPlayers,self.numDominoes,self.highestDominoe,self.finalScoreOutputDimension)
