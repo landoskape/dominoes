@@ -28,7 +28,6 @@ class lineRepresentationNetwork(nn.Module):
         self.cnn_f1 = nn.Linear(numOutputValues, self.numOutputCNN)
         self.cnn_ln = nn.LayerNorm((self.numOutputCNN)) # do layer normalization on cnn outputs -- which will change in scale depending on number 
         
-        self.cnnLayer = nn.Sequential(self.cnn_c1, nn.ReLU(), nn.Flatten(start_dim=0), self.cnn_f1, nn.ReLU(), self.cnn_ln)
         
         # create ff network that integrates the standard network input with the convolutional output
         self.fc1 = nn.Linear(self.inputDimension, 1000)
@@ -56,9 +55,16 @@ class lineRepresentationNetwork(nn.Module):
             nn.LayerNorm((self.fc3.out_features)),
             self.fc4
         )
-
-    def forward(self, x):
-        cnnOutput = self.cnnLayer(x[0])
+    
+    def cnnForward(self, x, withBatch=False):
+        x = F.relu(self.cnn_c1(x))
+        x = x.view(x.size(0), -1) if withBatch else x.view(-1)
+        x = self.cnn_ln(F.relu(self.cnn_f1(x)))
+        return x
+    
+    def forward(self, x, withBatch=False):
+        cnnOutput = self.cnnForward(x[0], withBatch=withBatch)
+        ffInput = torch.cat((cnnOutput, x[1]), dim=1 if withBatch else 0)
         netOutput = self.ffLayer(torch.cat((cnnOutput,x[1])))
         return netOutput
     
@@ -84,8 +90,6 @@ class lineRepresentationNetworkSmall(nn.Module):
         self.cnn_c1 = nn.Conv1d(numLineFeatures, numOutputChannels, 1)
         self.cnn_f1 = nn.Linear(numOutputValues, self.numOutputCNN)
         self.cnn_ln = nn.LayerNorm((self.numOutputCNN)) # do layer normalization on cnn outputs -- which will change in scale depending on number 
-        
-        self.cnnLayer = nn.Sequential(self.cnn_c1, nn.ReLU(), nn.Flatten(start_dim=0), self.cnn_f1, nn.ReLU(), self.cnn_ln)
         
         # create ff network that integrates the standard network input with the convolutional output
         self.fc1 = nn.Linear(self.inputDimension, 100)
@@ -114,10 +118,18 @@ class lineRepresentationNetworkSmall(nn.Module):
             self.fc4
         )
 
-    def forward(self, x):
-        cnnOutput = self.cnnLayer(x[0])
+    def cnnForward(self, x, withBatch=False):
+        x = F.relu(self.cnn_c1(x))
+        x = x.view(x.size(0), -1) if withBatch else x.view(-1)
+        x = self.cnn_ln(F.relu(self.cnn_f1(x)))
+        return x
+    
+    def forward(self, x, withBatch=False):
+        cnnOutput = self.cnnForward(x[0], withBatch=withBatch)
+        ffInput = torch.cat((cnnOutput, x[1]), dim=1 if withBatch else 0)
         netOutput = self.ffLayer(torch.cat((cnnOutput,x[1])))
         return netOutput
+    
     
         
 class valueNetwork(nn.Module):
