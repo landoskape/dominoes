@@ -23,7 +23,7 @@ class valueAgent(dominoeAgent):
         self.lam = 0.5
         self.alpha = 3e-5
         self.replay = True
-        self.probSaveForReplay = 0.1
+        self.probSaveForReplay = 0.2
         self.sizeReplayBuffer = 1000
         self.finalScoreOutputDimension = 1
         
@@ -51,7 +51,10 @@ class valueAgent(dominoeAgent):
         
     def setLearning(self, learningState):
         self.learning = learningState
-
+    
+    def setReplay(self, replayState):
+        self.replay = replayState
+        
     def resetBinaries(self):
         self.binaryPlayed[:]=0 
         self.binaryLineAvailable[:]=0 
@@ -215,13 +218,14 @@ class valueAgent(dominoeAgent):
 
 class basicValueAgent(valueAgent):
     agentName = 'basicValueAgent'
-    def specializedInit(self):
+    def specializedInit(self,**kwargs):
+        super().specializedInit(**kwargs)
         # prepare replay 
         self.replayBufferIndex = []
-        self.replayBuffer = torch.zeros((0, self.finalScoreNetwork.inputDimension)).to(device)
-        self.replayTarget = torch.zeros(0).to(self.device)
+        self.replayBuffer = torch.zeros((0, self.finalScoreNetwork.inputDimension)).to(self.device)
+        self.replayTarget = torch.zeros((0,1)).to(self.device)
         self.loss = torch.nn.L1Loss()
-        self.optimizer = torch.optim.Adadelta(self.finalScoreNetwork.parameters())
+        self.optimizer = torch.optim.SGD(self.finalScoreNetwork.parameters(), lr=self.alpha)
         
     def checkTurnUpdate(self, currentPlayer, postState=False):
         relevantTurn = True # update every turn -- #(currentPlayer is not None) and (currentPlayer == self.agentIndex)
@@ -250,9 +254,9 @@ class basicValueAgent(valueAgent):
         if not(self.replay) or len(self.replayBufferIndex)==0: 
             return None
         
-        if torch.any(self.replayBufferIndex > self.replayTarget.size(0)):
-            num2add = torch.max(self.replayBufferIndex) + 1 - self.replayTarget.size(0)
-            self.replayTarget = torch.cat((self.replayTarget, torch.zeros(num2add)))
+        if any(rbi>self.replayTarget.size(0) for rbi in self.replayBufferIndex):
+            num2add = max(self.replayBufferIndex) + 1 - self.replayTarget.size(0)
+            self.replayTarget = torch.cat((self.replayTarget, torch.zeros((num2add,1)).to(self.device)))
         
         self.replayTarget[self.replayBufferIndex]=finalScore
         
@@ -320,14 +324,14 @@ class lineValueAgent(valueAgent):
         replayDims1 = (self.finalScoreNetwork.inputDimension-self.finalScoreNetwork.numOutputCNN, )
         self.replayBufferIndex = []
         self.replayBuffer = [torch.zeros((0, *replayDims0)).to(self.device), torch.zeros((0, *replayDims1)).to(self.device)]
-        self.replayTarget = torch.zeros(0).to(self.device)
+        self.replayTarget = torch.zeros((0,1)).to(self.device)
         self.loss = torch.nn.L1Loss()
-        self.optimizer = torch.optim.Adadelta(self.finalScoreNetwork.parameters())
+        self.optimizer = torch.optim.SGD(self.finalScoreNetwork.parameters(), lr=self.alpha)
         
     def initHand(self):
         super().initHand()
         self.needsLineUpdate = True
-        if self.replay and self.replayBuffer[0].size(0)>0:
+        if self.learning and self.replay and self.replayBuffer[0].size(0)>0:
             self.replayBufferIndex = [] # reset so any replays to add from this hand get appended here
             self.optimizer.zero_grad()
             finalScoreOutput = self.finalScoreNetwork(self.replayBuffer, withBatch=True)
@@ -378,7 +382,7 @@ class lineValueAgent(valueAgent):
         
         if any(rbi>self.replayTarget.size(0) for rbi in self.replayBufferIndex):
             num2add = max(self.replayBufferIndex) + 1 - self.replayTarget.size(0)
-            self.replayTarget = torch.cat((self.replayTarget, torch.zeros(num2add).to(self.device)))
+            self.replayTarget = torch.cat((self.replayTarget, torch.zeros((num2add,1)).to(self.device)))
         
         self.replayTarget[self.replayBufferIndex]=finalScore
         
