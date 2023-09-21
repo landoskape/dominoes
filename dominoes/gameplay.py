@@ -263,11 +263,11 @@ class dominoeGame:
 
     def printResults(self):
         if hasattr(self, 'currentScore'):
-            print("Scores for each round:")
-            print(self.score)
-            print("")
-            print("Final score:")
-            print(self.currentScore)
+            # print("Scores for each round:")
+            # print(self.score)
+            # print("")
+            print("Average score per hand:")
+            print(np.mean(self.score,axis=0))
             print("")
             print("Number times going out:")
             numTimesOut = np.sum(self.score==0,axis=0)
