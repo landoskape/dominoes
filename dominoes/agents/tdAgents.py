@@ -23,8 +23,10 @@ class valueAgent(dominoeAgent):
         self.lam = 0.5
         self.alpha = 3e-5
         self.replay = True
-        self.probSaveForReplay = 0.2
+        self.probSaveForReplay = 0.1
         self.sizeReplayBuffer = 1000
+        self.replayAlpha = copy(self.alpha)
+        self.replayRepetitions = 10
         self.finalScoreOutputDimension = 1
         
         # create binary arrays for presenting gamestate information to the RL networks
@@ -42,6 +44,14 @@ class valueAgent(dominoeAgent):
     
     def initHand(self):
         self.zeroEligibility()
+        if self.learning and self.replay and self.replayBuffer[0].size(0)>0:
+            self.replayBufferIndex = [] # reset so any replays to add from this hand get appended here
+            for _ in range(self.replayRepetitions):
+                self.optimizer.zero_grad()
+                finalScoreOutput = self.finalScoreNetwork(self.replayBuffer, withBatch=True)
+                finalScoreError = self.loss(finalScoreOutput, self.replayTarget)
+                finalScoreError.backward()
+                self.optimizer.step()
         
     def prepareNetwork(self):
         raise ValueError("It looks like you instantiated an object of the valueAgent class directly. This class is only used to provide a scaffold for complete valueAgents, see possible agents in this script!")
@@ -225,7 +235,7 @@ class basicValueAgent(valueAgent):
         self.replayBuffer = torch.zeros((0, self.finalScoreNetwork.inputDimension)).to(self.device)
         self.replayTarget = torch.zeros((0,1)).to(self.device)
         self.loss = torch.nn.L1Loss()
-        self.optimizer = torch.optim.SGD(self.finalScoreNetwork.parameters(), lr=self.alpha)
+        self.optimizer = torch.optim.SGD(self.finalScoreNetwork.parameters(), lr=self.replayAlpha)
         
     def checkTurnUpdate(self, currentPlayer, postState=False):
         relevantTurn = True # update every turn -- #(currentPlayer is not None) and (currentPlayer == self.agentIndex)
@@ -326,18 +336,19 @@ class lineValueAgent(valueAgent):
         self.replayBuffer = [torch.zeros((0, *replayDims0)).to(self.device), torch.zeros((0, *replayDims1)).to(self.device)]
         self.replayTarget = torch.zeros((0,1)).to(self.device)
         self.loss = torch.nn.L1Loss()
-        self.optimizer = torch.optim.SGD(self.finalScoreNetwork.parameters(), lr=self.alpha)
+        self.optimizer = torch.optim.SGD(self.finalScoreNetwork.parameters(), lr=self.replayAlpha)
         
     def initHand(self):
         super().initHand()
         self.needsLineUpdate = True
         if self.learning and self.replay and self.replayBuffer[0].size(0)>0:
             self.replayBufferIndex = [] # reset so any replays to add from this hand get appended here
-            self.optimizer.zero_grad()
-            finalScoreOutput = self.finalScoreNetwork(self.replayBuffer, withBatch=True)
-            finalScoreError = self.loss(finalScoreOutput, self.replayTarget)
-            finalScoreError.backward()
-            self.optimizer.step()
+            for _ in range(self.replayRepetitions):
+                self.optimizer.zero_grad()
+                finalScoreOutput = self.finalScoreNetwork(self.replayBuffer, withBatch=True)
+                finalScoreError = self.loss(finalScoreOutput, self.replayTarget)
+                finalScoreError.backward()
+                self.optimizer.step()
         
     def linePlayedOn(self):
         # if my line was played on, then recompute sequences if it's my turn
