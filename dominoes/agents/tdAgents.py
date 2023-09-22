@@ -44,18 +44,8 @@ class valueAgent(dominoeAgent):
     
     def initHand(self):
         self.zeroEligibility()
-        if self.learning and self.replay and self.replayBuffer[0].size(0)>0:
-            self.replayBufferIndex = [] # reset so any replays to add from this hand get appended here
-            self.changeReplayBufferDevice(cpu=False, alsoTarget=True)
-            for _ in range(self.replayRepetitions):
-                self.optimizer.zero_grad()
-                finalScoreOutput = self.finalScoreNetwork(self.replayBuffer[0], withBatch=True)
-                finalScoreError = self.loss(finalScoreOutput, self.replayTarget)
-                finalScoreError.backward()
-                self.optimizer.step()
-            self.optimizer.zero_grad()
-            self.changeReplayBufferDevice(cpu=True, alsoTarget=True)
-        
+        self.doReplayUpdate()
+            
     def prepareNetwork(self):
         raise ValueError("It looks like you instantiated an object of the valueAgent class directly. This class is only used to provide a scaffold for complete valueAgents, see possible agents in this script!")
     
@@ -68,13 +58,6 @@ class valueAgent(dominoeAgent):
     def setReplay(self, replayState):
         self.replay = replayState
     
-    def changeReplayBufferDevice(self, cpu=False, alsoTarget=False):
-        dev = self.device if not(cpu) else 'cpu'
-        for ii in range(len(self.replayBuffer)):
-            self.replayBuffer[ii] = self.replayBuffer[ii].to(dev)
-        if alsoTarget:
-            self.replayTarget = self.replayTarget.to(dev)
-        
     def resetBinaries(self):
         self.binaryPlayed[:]=0 
         self.binaryLineAvailable[:]=0 
@@ -247,8 +230,8 @@ class basicValueAgent(valueAgent):
         super().specializedInit(**kwargs)
         # prepare replay 
         self.replayBufferIndex = []
-        self.replayBuffer = [torch.zeros((0, self.finalScoreNetwork.inputDimension)), ]
-        self.replayTarget = torch.zeros((0,1))
+        self.replayBuffer = [torch.zeros((0, self.finalScoreNetwork.inputDimension)).to(self.device), ]
+        self.replayTarget = torch.zeros((0,1)).to(self.device)
         self.loss = torch.nn.L1Loss()
         self.optimizer = torch.optim.SGD(self.finalScoreNetwork.parameters(), lr=self.replayAlpha)
         
@@ -266,12 +249,12 @@ class basicValueAgent(valueAgent):
         if self.replayBuffer[0].size(0) < self.sizeReplayBuffer:
             # we haven't filled the replay buffer up, concatenate to end
             self.replayBufferIndex.append(self.replayBuffer[0].size(0))
-            self.replayBuffer[0] = torch.cat((self.replayBuffer[0], self.valueNetworkInput.cpu().unsqueeze(0)), dim=0)
+            self.replayBuffer[0] = torch.cat((self.replayBuffer[0], self.valueNetworkInput.clone().unsqueeze(0)), dim=0)
         else:
             # pick a random replay to replace
             idx = np.random.randint(self.replayBuffer[0].size(0), size=1)[0]
             self.replayBufferIndex.append(idx)
-            self.replayBuffer[0][idx] = self.valueNetworkInput.cpu()
+            self.replayBuffer[0][idx] = self.valueNetworkInput.clone()
     
     @torch.no_grad()
     def updateReplayTarget(self, finalScore):
@@ -281,9 +264,20 @@ class basicValueAgent(valueAgent):
         
         if any(rbi>(self.replayTarget.size(0)-1) for rbi in self.replayBufferIndex):
             num2add = max(self.replayBufferIndex) + 1 - self.replayTarget.size(0)
-            self.replayTarget = torch.cat((self.replayTarget, torch.zeros((num2add,1))))
+            self.replayTarget = torch.cat((self.replayTarget, torch.zeros((num2add,1)).to(self.device)))
         
-        self.replayTarget[self.replayBufferIndex]=finalScore
+        self.replayTarget[self.replayBufferIndex]=finalScore.clone()
+    
+    def doReplayUpdate(self):
+        if self.learning and self.replay and self.replayBuffer[0].size(0)>0:
+            self.replayBufferIndex = [] # reset so any replays to add from this hand get appended here
+            for _ in range(self.replayRepetitions):
+                self.optimizer.zero_grad()
+                finalScoreOutput = self.finalScoreNetwork(self.replayBuffer[0], withBatch=True)
+                finalScoreError = self.loss(finalScoreOutput, self.replayTarget)
+                finalScoreError.backward()
+                self.optimizer.step()
+            self.optimizer.zero_grad()
         
     def prepareNetwork(self):
         # initialize valueNetwork -- predicts next hand value of each player along with final score for each player (using omniscient information to begin with...) 
@@ -345,8 +339,8 @@ class lineValueAgent(valueAgent):
         replayDims0 = (self.finalScoreNetwork.numLineFeatures, self.numDominoes)
         replayDims1 = (self.finalScoreNetwork.inputDimension-self.finalScoreNetwork.numOutputCNN, )
         self.replayBufferIndex = []
-        self.replayBuffer = [torch.zeros((0, *replayDims0)), torch.zeros((0, *replayDims1))]
-        self.replayTarget = torch.zeros((0,1))
+        self.replayBuffer = [torch.zeros((0, *replayDims0)).to(self.device), torch.zeros((0, *replayDims1)).to(self.device)]
+        self.replayTarget = torch.zeros((0,1)).to(self.device)
         self.loss = torch.nn.L1Loss()
         self.optimizer = torch.optim.SGD(self.finalScoreNetwork.parameters(), lr=self.replayAlpha)
         
@@ -380,14 +374,14 @@ class lineValueAgent(valueAgent):
         if self.replayBuffer[0].size(0) < self.sizeReplayBuffer:
             # we haven't filled the replay buffer up, concatenate to end
             self.replayBufferIndex.append(self.replayBuffer[0].size(0))
-            self.replayBuffer[0] = torch.cat((self.replayBuffer[0], self.valueNetworkInput[0].cpu().unsqueeze(0)), dim=0)
-            self.replayBuffer[1] = torch.cat((self.replayBuffer[1], self.valueNetworkInput[1].cpu().unsqueeze(0)), dim=0)
+            self.replayBuffer[0] = torch.cat((self.replayBuffer[0], self.valueNetworkInput[0].clone().unsqueeze(0)), dim=0)
+            self.replayBuffer[1] = torch.cat((self.replayBuffer[1], self.valueNetworkInput[1].clone().unsqueeze(0)), dim=0)
         else:
             # pick a random replay to replace
             idx = np.random.randint(self.replayBuffer[0].size(0), size=1)[0]
             self.replayBufferIndex.append(idx)
-            self.replayBuffer[0][idx] = self.valueNetworkInput[0].cpu()
-            self.replayBuffer[1][idx] = self.valueNetworkInput[1].cpu()
+            self.replayBuffer[0][idx] = self.valueNetworkInput[0].clone()
+            self.replayBuffer[1][idx] = self.valueNetworkInput[1].clone()
     
     @torch.no_grad()
     def updateReplayTarget(self, finalScore):
@@ -397,11 +391,21 @@ class lineValueAgent(valueAgent):
         
         if any(rbi>(self.replayTarget.size(0)-1) for rbi in self.replayBufferIndex):
             num2add = max(self.replayBufferIndex) + 1 - self.replayTarget.size(0)
-            self.replayTarget = torch.cat((self.replayTarget, torch.zeros((num2add,1))))
+            self.replayTarget = torch.cat((self.replayTarget, torch.zeros((num2add,1)).to(self.device)))
             
-        self.replayTarget[self.replayBufferIndex]=finalScore
+        self.replayTarget[self.replayBufferIndex]=finalScore.clone()
         
-        
+    def doReplayUpdate(self):
+        if self.learning and self.replay and self.replayBuffer[0].size(0)>0:
+            self.replayBufferIndex = [] # reset so any replays to add from this hand get appended here
+            for _ in range(self.replayRepetitions):
+                self.optimizer.zero_grad()
+                finalScoreOutput = self.finalScoreNetwork(self.replayBuffer, withBatch=True)
+                finalScoreError = self.loss(finalScoreOutput, self.replayTarget)
+                finalScoreError.backward()
+                self.optimizer.step()
+            self.optimizer.zero_grad()
+            
     def prepareNetwork(self):
         # initialize valueNetwork -- predicts next hand value of each player along with final score for each player (using omniscient information to begin with...) 
         self.finalScoreNetwork = dnn.lineRepresentationNetwork(self.numPlayers,self.numDominoes,self.highestDominoe,self.finalScoreOutputDimension)
