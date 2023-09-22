@@ -176,6 +176,6 @@ class valueNetwork(nn.Module):
             self.fc4
         )
         
-    def forward(self, x):
+    def forward(self, x, withBatch=None):
         return self.ffLayer(x)
     
