@@ -2,6 +2,8 @@
 import sys
 import os
 
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+
 # add path that contains the dominoes package
 mainPath = os.path.dirname(os.path.abspath(__file__)) + "/.."
 sys.path.append(mainPath)
