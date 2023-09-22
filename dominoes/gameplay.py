@@ -267,14 +267,14 @@ class dominoeGame:
             # print(self.score)
             # print("")
             print("Average score per hand:")
-            print(np.mean(self.score,axis=0))
+            print(np.round(np.mean(self.score,axis=0),2))
             print("")
             print("Number times going out:")
             numTimesOut = np.sum(self.score==0,axis=0)
             print(numTimesOut)
             print("")
             print(f"The winner is agent: {self.currentWinner}"
-                  f" with an average hand score of {self.currentScore[self.currentWinner]/len(self.score)}.")
+                  f" with an average hand score of {round(self.currentScore[self.currentWinner]/len(self.score),2)}.")
         else:
             print("Game has not begun!")
             
