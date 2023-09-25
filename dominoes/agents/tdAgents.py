@@ -23,10 +23,10 @@ class valueAgent(dominoeAgent):
         self.lam = 0.5
         self.alpha = 3e-5
         self.replay = True
-        self.probSaveForReplay = 0.1
-        self.sizeReplayBuffer = 1000
-        self.replayAlpha = copy(self.alpha)
-        self.replayRepetitions = 10
+        self.probSaveForReplay = 0.05
+        self.sizeReplayBuffer = 2000
+        self.replayAlpha = 3*copy(self.alpha)
+        self.replayRepetitions = 1
         self.finalScoreOutputDimension = 1
         
         # create binary arrays for presenting gamestate information to the RL networks

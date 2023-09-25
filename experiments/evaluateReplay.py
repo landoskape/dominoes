@@ -48,7 +48,7 @@ opponents = {
 
 # method for returning the name of the saved network parameters (different save for each possible opponent)
 def getFileName():
-    return "evaluateReplay"
+    return f"evaluateReplay_against_{args.opponent}"
 
 def getNetworkPath(replay=True):
     replayString = '' if replay else 'withReplay_'
@@ -61,7 +61,7 @@ def handleArguments():
     parser.add_argument('-n','--num-players', type=int, default=4, help='the number of agents in the game of dominoes')
     parser.add_argument('-hd','--highest-dominoe', type=int, default=9, help='the highest dominoe in the board')
     parser.add_argument('-s','--shuffle-agents', type=bool, default=True, help='whether to shuffle the order of the agents each hand')
-    parser.add_argument('-tg','--num-games',type=int, default=2000, help='the number of training games')
+    parser.add_argument('-tg','--num-games',type=int, default=400, help='the number of training games')
     parser.add_argument('-tr','--num-rounds',type=int, default=None, help='the number of training rounds')
     parser.add_argument('-op','--opponent',type=str, default='dominoeAgent', help='which opponent to play the basic value agent against for training and testing')
     parser.add_argument('-va','--value-agent',type=str, default='basicValueAgent', help='which value agent to use')
