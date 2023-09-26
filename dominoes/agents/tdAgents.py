@@ -26,6 +26,7 @@ class valueAgent(dominoeAgent):
         self.probSaveForReplay = 0.05
         self.sizeReplayBuffer = 2000
         self.replayAlpha = 3*copy(self.alpha)
+        self.replayLambda = 0.75
         self.replayRepetitions = 1
         self.finalScoreOutputDimension = 1
         
@@ -232,7 +233,8 @@ class basicValueAgent(valueAgent):
         self.replayBufferIndex = []
         self.replayBuffer = [torch.zeros((0, self.finalScoreNetwork.inputDimension)).to(self.device), ]
         self.replayTarget = torch.zeros((0,1)).to(self.device)
-        self.loss = torch.nn.L1Loss()
+        self.replayWeight = torch.zeros((0,1)).to(self.device)
+        self.loss = torch.nn.L1Loss(reduction='none')
         self.optimizer = torch.optim.SGD(self.finalScoreNetwork.parameters(), lr=self.replayAlpha)
         
     def checkTurnUpdate(self, currentPlayer, postState=False):
@@ -265,8 +267,10 @@ class basicValueAgent(valueAgent):
         if any(rbi>(self.replayTarget.size(0)-1) for rbi in self.replayBufferIndex):
             num2add = max(self.replayBufferIndex) + 1 - self.replayTarget.size(0)
             self.replayTarget = torch.cat((self.replayTarget, torch.zeros((num2add,1)).to(self.device)))
+            self.replayWeight = torch.cat((self.replayWeight, torch.zeros((num2add,1)).to(self.device)))
         
         self.replayTarget[self.replayBufferIndex]=finalScore.clone()
+        self.replayWeight[self.replayBufferIndex]=1 # initial replay weight always 1
     
     def doReplayUpdate(self):
         if self.learning and self.replay and self.replayBuffer[0].size(0)>0:
@@ -275,9 +279,11 @@ class basicValueAgent(valueAgent):
                 self.optimizer.zero_grad()
                 finalScoreOutput = self.finalScoreNetwork(self.replayBuffer[0], withBatch=True)
                 finalScoreError = self.loss(finalScoreOutput, self.replayTarget)
-                finalScoreError.backward()
+                replayLoss = (finalScoreError * self.replayWeight).mean()
+                replayLoss.backward()
                 self.optimizer.step()
             self.optimizer.zero_grad()
+            self.replayWeight *= self.replayLambda
         
     def prepareNetwork(self):
         # initialize valueNetwork -- predicts next hand value of each player along with final score for each player (using omniscient information to begin with...) 
@@ -341,7 +347,8 @@ class lineValueAgent(valueAgent):
         self.replayBufferIndex = []
         self.replayBuffer = [torch.zeros((0, *replayDims0)).to(self.device), torch.zeros((0, *replayDims1)).to(self.device)]
         self.replayTarget = torch.zeros((0,1)).to(self.device)
-        self.loss = torch.nn.L1Loss()
+        self.replayWeight = torch.zeros((0,1)).to(self.device)
+        self.loss = torch.nn.L1Loss(reduction='none')
         self.optimizer = torch.optim.SGD(self.finalScoreNetwork.parameters(), lr=self.replayAlpha)
         
     def initHand(self):
@@ -392,8 +399,10 @@ class lineValueAgent(valueAgent):
         if any(rbi>(self.replayTarget.size(0)-1) for rbi in self.replayBufferIndex):
             num2add = max(self.replayBufferIndex) + 1 - self.replayTarget.size(0)
             self.replayTarget = torch.cat((self.replayTarget, torch.zeros((num2add,1)).to(self.device)))
+            self.replayWeight = torch.cat((self.replayWeight, torch.zeros((num2add,1)).to(self.device)))
             
         self.replayTarget[self.replayBufferIndex]=finalScore.clone()
+        self.replayWeight[self.replayBufferIndex]=1
         
     def doReplayUpdate(self):
         if self.learning and self.replay and self.replayBuffer[0].size(0)>0:
@@ -402,9 +411,11 @@ class lineValueAgent(valueAgent):
                 self.optimizer.zero_grad()
                 finalScoreOutput = self.finalScoreNetwork(self.replayBuffer, withBatch=True)
                 finalScoreError = self.loss(finalScoreOutput, self.replayTarget)
-                finalScoreError.backward()
+                replayLoss = (finalScoreError * self.replayWeight).mean()
+                replayLoss.backward()
                 self.optimizer.step()
             self.optimizer.zero_grad()
+            self.replayWeight *= self.replayLambda
             
     def prepareNetwork(self):
         # initialize valueNetwork -- predicts next hand value of each player along with final score for each player (using omniscient information to begin with...) 
