@@ -76,7 +76,7 @@ def trainValueAgent(numPlayers, highestDominoe, shuffleAgents, trainGames, train
     agents=(valueAgents[args.value_agent], None, None, None)
     game = dg.dominoeGame(highestDominoe, numPlayers=numPlayers, shuffleAgents=shuffleAgents, agents=agents, defaultAgent=opponents[args.opponent], device=device)
     game.getAgent(0).setLearning(True)
-    if args.noreplay: game.getAgent(0).setReplay(False)
+    game.getAgent(0).setReplay(not(args.noreplay))
     
     # run training rounds
     trainWinnerCount = np.zeros(numPlayers)

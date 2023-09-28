@@ -51,7 +51,7 @@ def getFileName():
     return f"evaluateReplay_against_{args.opponent}"
 
 def getNetworkPath(replay=True):
-    replayString = '' if replay else 'withReplay_'
+    replayString = 'withReplay_' if replay else ''
     name = f"trainValueAgent_{args.value_agent}_"+replayString+f"against_{args.opponent}"
     path = networkPath / (name+'.npy')
     return path
@@ -62,7 +62,9 @@ def handleArguments():
     parser.add_argument('-hd','--highest-dominoe', type=int, default=9, help='the highest dominoe in the board')
     parser.add_argument('-s','--shuffle-agents', type=bool, default=True, help='whether to shuffle the order of the agents each hand')
     parser.add_argument('-tg','--num-games',type=int, default=400, help='the number of training games')
-    parser.add_argument('-tr','--num-rounds',type=int, default=None, help='the number of training rounds')
+
+    # ELO is probabilistic, so ELO will be exagerrated with more data (e.g. if there are more rounds per game)
+    parser.add_argument('-tr','--num-rounds',type=int, default=50, help='the number of training rounds') 
     parser.add_argument('-op','--opponent',type=str, default='dominoeAgent', help='which opponent to play the basic value agent against for training and testing')
     parser.add_argument('-va','--value-agent',type=str, default='basicValueAgent', help='which value agent to use')
     parser.add_argument('-fe','--fraction-estimate',type=float, default=0.25, help='final fraction of elo estimates to use')
@@ -149,19 +151,20 @@ def plotResults(results, args):
 
     # Create discrete colormap
     colors = ['b','k',*(['0.3']*(numAgents-2))]
-    f2,ax = plt.subplots(1,3,figsize=(14,4))
+    f2,ax = plt.subplots(1,3,figsize=(14,4), layout='constrained')
 
-    ax[0].bar(x=range(numAgents), height=elo, color=colors, tick_label=names)
+    tick_labels = ['replay','noReplay',*names[2:]]
+    ax[0].bar(x=np.arange(numAgents), height=elo, color=colors, tick_label=tick_labels)
     ax[0].tick_params(labelrotation=25)
     ax[0].set_ylim(0)
     ax[0].set_ylabel('ELO')
     
-    ax[1].bar(x=range(numAgents), height=averageScore, color=colors, tick_label=names)
+    ax[1].bar(x=np.arange(numAgents), height=averageScore, color=colors, tick_label=tick_labels)
     ax[1].tick_params(labelrotation=25)
     ax[1].set_ylim(0)
     ax[1].set_ylabel('avg score/hand')
     
-    ax[2].bar(x=range(numAgents), height=averageHandWins, color=colors, tick_label=names)
+    ax[2].bar(x=np.arange(numAgents), height=averageHandWins, color=colors, tick_label=tick_labels)
     ax[2].tick_params(labelrotation=25)
     ax[2].set_ylim(0)
     ax[2].set_ylabel('avg fraction of hand wins')

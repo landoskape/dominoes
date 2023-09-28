@@ -23,10 +23,10 @@ class valueAgent(dominoeAgent):
         self.lam = 0.5
         self.alpha = 3e-5
         self.replay = True # whether replay is activated
-        self.probSaveForReplay = 0.05 # probability of adding any game state to the replay buffer
+        self.probSaveForReplay = 0.1 # probability of adding any game state to the replay buffer
         self.sizeReplayBuffer = 2000 # how many stored game states to keep in the replay buffer
         self.replayAlpha = 3*copy(self.alpha) # learning rate of replay
-        self.replayLambda = 0.75 # how much to forget each replay every hand
+        self.replayLambda = 0.9 # how much to forget each replay every hand
         self.replayRepetitions = 1 # how many repetitions to learn from each replay batch every hand
         self.finalScoreOutputDimension = 1
         
