@@ -118,6 +118,31 @@ class SelfAttention(nn.Module):
         return self.unifyheads(out)
 
 
+# make transformer layer here, then use stacks of these rather than stacks of attention layers in the pointer network
+class Transformer(nn.Module):
+    """
+    
+        self.encoder.append(
+         self.ff = nn.Sequential(
+      nn.Linear(k, 4 * k),
+      nn.ReLU(),
+      nn.Linear(4 * k, k))
+
+  def forward(self, x):
+    attended = self.attention(x)
+    x = self.norm1(attended + x)
+
+    fedforward = self.ff(x)
+    return self.norm2(fedforward + x)
+
+    
+    """
+    def __init__(self):
+        None
+
+    def forward(self, x):
+        None
+        
 class ContextualAttention(nn.Module):
     """
     Implementation of attention with contextual inputs not to be transformed
@@ -238,12 +263,14 @@ class PointerAttention(nn.Module):
         return log_score
 
 
+
 class PointerNetwork(nn.Module):
-    def __init__(self, input_dim, embedding_dim, heads=8, kqnorm=True, encoding_layers=1, bias=False, decode_with_gru=True):
+    def __init__(self, input_dim, embedding_dim, heads=8, expand_ff=2, kqnorm=True, encoding_layers=1, bias=False, decode_with_gru=True):
         super().__init__()
         self.input_dim = input_dim
         self.embedding_dim = embedding_dim
         self.heads = heads
+        self.expand_ff = expand_ff
         self.kqnorm = kqnorm
         self.bias = bias
         self.encoding_layers = encoding_layers
