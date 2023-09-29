@@ -8,7 +8,7 @@ toy problem solved by pointer networks.
 
 ## Toy Problem
 The toy problem is written as an experiment called 
-[pointerDemonstration](../experiments/pointerDemonstration.md). It trains a
+[pointerDemonstration](../experiments/pointerDemonstration.py). It trains a
 pointer network to sort dominoes by the value on each dominoe given a random
 set of dominoes in random order, with a variable set size, due to the magic of
 pointer networks. Since it's a simple problem, the pointer network learns the
@@ -16,7 +16,7 @@ task in just a few minutes.
 
 You can run this toy problem yourself with the following command:
 ```
-python experiments/pointerDemonstration.md
+python experiments/pointerDemonstration.py
 ```
 
 The main result of the problem is shown here: 
