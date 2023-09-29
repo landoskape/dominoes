@@ -46,18 +46,21 @@ conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvi
 In lieu of a wiki (which I found out about after writing all these md files),
 this table of contents links to documentation that explains how to use this 
 repository and presents analyses of the agents I have developed. 
-1. [Rules of the game](docs/dominoeRules.md)
-2. [Gameplay object](docs/gameplay.md)
-3. Dominoe Agents (Code structure and hand-crafted policies) 
-   - [Anatomy of a dominoe agent](docs/agents.md)
-   - [Basic policies](docs/basicPolicies.md)
-4. [Multiplayer ELO System](docs/multiplayerElo.md)
-5. [Tutorials and basic usage](docs/tutorials.md)
-6. [Experiments](experiments)
-7. [Basic Analysis](docs/basicAnalysis.md)
-8. Reinforcement Learning Agents
-   - [The TD-Lambda algorithm implemented in dominoes](docs/TDLambdaAgents.md)
-
+1. Groundwork for Dominoes Package in Python
+    - [Rules of the game](docs/dominoeRules.md) -- (not written yet, sorry!)
+    - [Gameplay object](docs/gameplay.md)
+    - Dominoe Agents (Code structure and hand-crafted policies)
+        - [Anatomy of a dominoe agent](docs/agents.md)
+        - [Basic policies](docs/basicPolicies.md)
+    - [Multiplayer ELO System](docs/multiplayerElo.md)
+    - [Basic Analysis](docs/basicAnalysis.md)
+    - [Tutorials and basic usage](docs/tutorials.md)
+2. [Experiments](experiments)
+    - Transformer and Pointer Network Code -- (not written yet, sorry)
+    - [Pointer Network Toy Problem](docs/pointerDemonstration.md)
+4. Reinforcement Learning Agents
+   - [The TD-Lambda Algorithm](docs/TDLambdaAgents.md)
+   - TD-Lambda Agents -- (not written yet, sorry)
 
 ## Contributing
 Feel free to contribute to this project by opening issues or submitting pull 

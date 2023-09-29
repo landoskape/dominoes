@@ -31,6 +31,9 @@ have a question about an experiment or an idea for a new one, let me know!
 - [Training a TD-Lambda Agent](trainValueAgent.py)
 - [Performance of TD-Lambda Agents](valueAgentELOs.py)
 
+### Supporting Experiments
+- [Pointer Network Demonstration](pointerDemonstration.py)
+
 ### Additional Curiosities
 - [Best Line Agent ELOs](bestLineAgentELOs.py)
 - [Table Position Matters](tablePositionMatters.py)

@@ -1,4 +1,3 @@
-# mainExperiment at checkpoint 1
 import sys
 import os
 
@@ -54,6 +53,38 @@ def handleArguments():
     return args
 
 def dominoeBatch(batchSize, seqLength, listDominoes, dominoeValue, highestDominoe):
+    """
+    retrieve a batch of dominoes and their target order given the value of each dominoe
+
+    dominoes are paired values (combinations with replacement) of integers 
+    from 0 to <highestDominoe>. The total value of each dominoe is the sum of
+    the two integers associated with that dominoe. For example, the dominoe
+    (7|3) has value 10. 
+
+    Each element in the batch contains an input and target. The input is 
+    composed of a sequence of dominoes in a random order, transformed into a
+    simple representation (explained below). The target is a list of the order
+    of dominoes by the one with the highest value to the one with the lowest
+    value. Note that many dominoes share the same value, but since the dominoe
+    list is always the same, equal value dominoes will always be sorted in the
+    same way. 
+
+    The simple representation is a two-hot vector where the first 
+    <highestDominoe+1> elements represent the first value of the dominoe, and
+    the second <highestDominoe+1> elements represent the second value of the 
+    dominoe. Here are some examples for highest dominoe = 3:
+
+    (0 | 0): [1, 0, 0, 0, 1, 0, 0, 0]
+    (0 | 1): [1, 0, 0, 0, 0, 1, 0, 0]
+    (0 | 2): [1, 0, 0, 0, 0, 0, 1, 0]
+    (0 | 3): [1, 0, 0, 0, 0, 0, 0, 1]
+    (1 | 0): [0, 1, 0, 0, 1, 0, 0, 0]
+    (2 | 1): [0, 0, 1, 0, 0, 1, 0, 0]
+
+    For simplification, every element in the batch has the same sequence 
+    length, but once I have a mask working, I can vary sequence length within
+    the batch. And that's why pointer networks are awesome. 
+    """
     numDominoes = len(listDominoes)
     input_dim = 2*(highestDominoe+1)
 
@@ -73,6 +104,7 @@ def dominoeBatch(batchSize, seqLength, listDominoes, dominoeValue, highestDomino
     return input, target
 
 def trainTestModel():
+    # get values from the argument parser
     highestDominoe = args.highest_dominoe
     listDominoes = df.listDominoes(highestDominoe)
     dominoeValue = np.sum(listDominoes, axis=1)
@@ -80,7 +112,7 @@ def trainTestModel():
     minSeqLength = args.min_seq_length
     maxSeqLength = args.max_seq_length
     batchSize = args.batch_size
-
+    
     input_dim = 2*(highestDominoe+1)
     embedding_dim = args.embedding_dim
     heads = args.heads
@@ -89,11 +121,12 @@ def trainTestModel():
     trainEpochs = args.train_epochs
     testEpochs = args.test_epochs
     
-    # Create network
+    # Create a pointer network
     pnet = transformers.PointerNetwork(input_dim, embedding_dim, encoding_layers=encoding_layers, heads=heads, kqnorm=True, decode_with_gru=False, greedy=greedy)
     pnet = pnet.to(device)
-    
-    # Create optimizer
+    pnet.train()
+
+    # Create an optimizer, Adam with weight decay is pretty good
     optimizer = torch.optim.Adam(pnet.parameters(), lr=1e-3, weight_decay=1e-5)
     
     # Train network
@@ -102,57 +135,62 @@ def trainTestModel():
     trainLoss = torch.zeros(trainEpochs)
     trainPositionError = [None]*trainEpochs
     for epoch in tqdm(range(trainEpochs)):
-        pnet.train()
-    
-        # input, target = getBatch(batchSize, seqLength, input_dim)
+        
+        # right now elements in a batch have to have the same sequence length 
         cSeqLength = np.random.randint(minSeqLength, maxSeqLength+1)
+
+        # create a data batch and put it on the right device
         input, target = dominoeBatch(batchSize, cSeqLength, listDominoes, dominoeValue, highestDominoe)
         input, target = input.to(device), target.to(device)
-    
+
+        # zero gradients, get output of network
         optimizer.zero_grad()
         log_scores, choices = pnet(input)
-        
+
+        # measure loss with negative log-likelihood
         unrolled = log_scores.view(-1, log_scores.size(-1))
         loss = torch.nn.functional.nll_loss(unrolled, target.view(-1))
         assert not np.isnan(loss.item()), "model diverged :("
-    
+
+        # update network
         loss.backward()
         optimizer.step()
-    
+
+        # the loss spikes sometimes, and I think it might be due to the autoregressive component of pointer networks.
+        # i.e., if the network gets the first element wrong, it'll get the rest of the elements right given the one it chose... but this will inflate the training loss
+        # anyway, this metric is a way to measure how bad the prediction is as a function of position in sequence to try to identify that issue
         t = torch.gather(unrolled, dim=1, index=target.view(-1).unsqueeze(-1)).cpu().detach().view(batchSize, cSeqLength)
         m = torch.max(unrolled, dim=1)[0].cpu().detach().view(batchSize, cSeqLength)
         trainPositionError[epoch] = torch.mean(m-t,dim=0)
+
+        # save training data
         trainLoss[epoch] = loss.item()
         trainSeqLength[epoch] = cSeqLength
 
-    # Test network
-    print("Testing network...")
-    testSeqLength = torch.zeros(testEpochs)
-    testLoss = torch.zeros(testEpochs)
-    testPositionError = [None]*testEpochs
-    for epoch in tqdm(range(testEpochs)):
-        pnet.test()
-    
-        # input, target = getBatch(batchSize, seqLength, input_dim)
-        cSeqLength = np.random.randint(minSeqLength, maxSeqLength+1)
-        input, target = dominoeBatch(batchSize, cSeqLength, listDominoes, dominoeValue, highestDominoe)
-        input, target = input.to(device), target.to(device)
-    
-        optimizer.zero_grad()
-        log_scores, choices = pnet(input)
+    # Test network - same thing as in testing but without updates to model
+    with torch.no_grad():
+        print("Testing network...")
+        pnet.eval()
         
-        unrolled = log_scores.view(-1, log_scores.size(-1))
-        loss = torch.nn.functional.nll_loss(unrolled, target.view(-1))
-        assert not np.isnan(loss.item()), "model diverged :("
-    
-        loss.backward()
-        optimizer.step()
-    
-        t = torch.gather(unrolled, dim=1, index=target.view(-1).unsqueeze(-1)).cpu().detach().view(batchSize, cSeqLength)
-        m = torch.max(unrolled, dim=1)[0].cpu().detach().view(batchSize, cSeqLength)
-        testPositionError[epoch] = torch.mean(m-t,dim=0)
-        testLoss[epoch] = loss.item()
-        testSeqLength[epoch] = cSeqLength
+        testSeqLength = torch.zeros(testEpochs)
+        testLoss = torch.zeros(testEpochs)
+        testPositionError = [None]*testEpochs
+        for epoch in tqdm(range(testEpochs)):
+            # input, target = getBatch(batchSize, seqLength, input_dim)
+            cSeqLength = np.random.randint(minSeqLength, maxSeqLength+1)
+            input, target = dominoeBatch(batchSize, cSeqLength, listDominoes, dominoeValue, highestDominoe)
+            input, target = input.to(device), target.to(device)
+        
+            log_scores, choices = pnet(input)
+            
+            unrolled = log_scores.view(-1, log_scores.size(-1))
+            loss = torch.nn.functional.nll_loss(unrolled, target.view(-1))
+            
+            t = torch.gather(unrolled, dim=1, index=target.view(-1).unsqueeze(-1)).cpu().detach().view(batchSize, cSeqLength)
+            m = torch.max(unrolled, dim=1)[0].cpu().detach().view(batchSize, cSeqLength)
+            testPositionError[epoch] = torch.mean(m-t,dim=0)
+            testLoss[epoch] = loss.item()
+            testSeqLength[epoch] = cSeqLength
 
     results = {
         'trainLoss': trainLoss,
@@ -167,24 +205,24 @@ def trainTestModel():
 
 
 def plotResults(results, args):
-    fig, ax = plt.subplots(1,2,figsize=(8,4))
-    ax[0].plot(range(args.train_epochs), results['trainLoss'])
+    fig, ax = plt.subplots(1,3,figsize=(12,4))
+    ax[0].plot(range(args.train_epochs), results['trainLoss'], color='k', lw=1)
     ax[0].set_xlabel('Epoch')
     ax[0].set_ylabel('Loss')
     ax[0].set_ylim(0)
     ax[0].set_title('Training Loss')
     yMin, yMax = ax[0].get_ylim()
     
-    ax[1].plot(range(args.test_epochs), results['testLoss'])
+    ax[1].plot(range(args.test_epochs), results['testLoss'], color='b', lw=1)
     ax[1].set_xlabel('Epoch')
     ax[1].set_ylabel('Loss')
     ax[1].set_ylim(yMin, yMax)
     ax[1].set_title('Testing Loss')
 
-    ax[2].scatter(results['testSeqLength'], results['testLoss'], color='k', alpha=0.5)
+    ax[2].scatter(results['testSeqLength'], results['testLoss'], color='b', alpha=0.5)
     ax[2].set_xlabel('Sequence Length')
     ax[2].set_ylabel('Testing Loss')
-    ax[2].set_ylim(yMin, yMax)
+    # ax[2].set_ylim(yMin, yMax)
     ax[2].set_title('Test Loss vs. Sequence Length')
 
     if not(args.nosave):
@@ -196,7 +234,7 @@ if __name__=='__main__':
     args = handleArguments()
     
     if not(args.justplot):
-        # estimate ELO with the requested parameters and agents
+        # train and test pointerNetwork 
         results = trainTestModel()
         
         # save results if requested
