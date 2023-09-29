@@ -390,6 +390,8 @@ class PointerNetwork(nn.Module):
                 
             # use pointer attention to evaluate scores of each possible input given the context
             score = self.pointer(encodedRepresentation, decoder_context)
+            
+            # standard loss function (nll_loss) requires log-probabilities
             log_score = score if self.greedy else torch.log(score)
             
             # choose token for this sample
