@@ -15,9 +15,13 @@ pointer network code:
 transformer code: 
 - from the repository: https://github.com/pbloem/former
   - and the associated blog: http://peterbloem.nl/blog/transformers
+- and of course the paper: https://proceedings.neurips.cc/paper_files/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf
 """
 
 
+# ---------------------------------
+# ----------- utilities -----------
+# ---------------------------------
 def mask_future(data, maskval=0.0, mask_diagonal=True):
     """
     Masks out values in a given batch of data where i <= j
@@ -28,13 +32,20 @@ def mask_future(data, maskval=0.0, mask_diagonal=True):
     mask_index = torch.triu_indices(h, w, offset=0 if mask_diagonal else 1)
     data[..., mask_index[0], mask_index[1]] = maskval
 
+def get_device(tensor):
+    """simple method to get device of input tensor"""
+    return 'cuda' if tensor.is_cuda else 'cpu'
 
+
+# ---------------------------------
+# ----------- attention -----------
+# ---------------------------------
 class SelfAttention(nn.Module):
     """
     Canonical implementation of multi-head self attention.
     Adopted from pbloem/former
     """
-    def __init__(self, emb, heads=8, mask=False, kqnorm=False):
+    def __init__(self, emb, heads=8, kqnorm=False):
         super().__init__()
 
         # This is a requirement
@@ -43,7 +54,6 @@ class SelfAttention(nn.Module):
         # Store parameters 
         self.emb = emb
         self.heads = heads
-        self.mask = mask
 
         # Dimensionality of each head
         self.headsize = emb // heads
@@ -101,10 +111,6 @@ class SelfAttention(nn.Module):
         # check to make sure this is correct
         assert dot.size() == (batch*self.heads, tokens, tokens), "somehow the query-key dot product is an unexpected size"
         
-        # if requested, mask out dot products that inform the past from the future    
-        if self.mask: 
-            mask_future(dot, maskval=float('-inf'), mask_diagonal=False)
-
         # and take softmax to get self-attention probabilities
         dot = F.softmax(dot, dim=2)
         
@@ -118,31 +124,6 @@ class SelfAttention(nn.Module):
         return self.unifyheads(out)
 
 
-# make transformer layer here, then use stacks of these rather than stacks of attention layers in the pointer network
-class Transformer(nn.Module):
-    """
-    
-        self.encoder.append(
-         self.ff = nn.Sequential(
-      nn.Linear(k, 4 * k),
-      nn.ReLU(),
-      nn.Linear(4 * k, k))
-
-  def forward(self, x):
-    attended = self.attention(x)
-    x = self.norm1(attended + x)
-
-    fedforward = self.ff(x)
-    return self.norm2(fedforward + x)
-
-    
-    """
-    def __init__(self):
-        None
-
-    def forward(self, x):
-        None
-        
 class ContextualAttention(nn.Module):
     """
     Implementation of attention with contextual inputs not to be transformed
@@ -241,11 +222,16 @@ class ContextualAttention(nn.Module):
 class PointerAttention(nn.Module):
     """
     PointerAttention Module (as specified in the original paper)
-    Can probably replace with "SelfAttention" above, but let's start here
+
+    log_softmax is preferable if the probabilities of each token are not 
+    needed because it's more efficient. However, if token embeddings are
+    combined via their probabilities, then softmax is required, so log_softmax
+    should be set to `False`.
     """
-    def __init__(self, emb):
+    def __init__(self, emb, log_softmax=False):
         super().__init__()
         self.emb = emb
+        self.log_softmax = log_softmax
         self.W1 = nn.Linear(emb, emb, bias=False)
         self.W2 = nn.Linear(emb, emb, bias=False)
         self.vt = nn.Linear(emb, 1, bias=False)
@@ -258,80 +244,165 @@ class PointerAttention(nn.Module):
         # then combine them and project to a new space
         u = self.vt(torch.tanh(transformEncoded + transformDecoder)).squeeze(-1)
 
-        # convert to probabilities with softmax
-        log_score = torch.nn.functional.log_softmax(u, dim=-1)
-        return log_score
+        if self.log_softmax:
+            # convert to log scores
+            return torch.nn.functional.log_softmax(u, dim=-1)
+        else:
+            # convert to probabilities
+            return torch.nn.functional.softmax(u, dim=-1)
 
+
+# ---------------------------------
+# ------------ networks -----------
+# ---------------------------------
+class TransformerLayer(nn.Module):
+    """
+    Standard implementation of a transformer layer, from:
+    https://proceedings.neurips.cc/paper_files/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf
+
+    Performs multi-headed attention on input, then layer normalization, then
+    two-stage feedforward processing with an optional expansion, then layer 
+    normalization, with residual connections before each layer normalization.
+
+    This transformer layer has the option of using contextual attention, where
+    some inputs are only used to generate keys and values that modulate the 
+    primary inputs. 
+    """
+    def __init__(self, embedding_dim, heads=8, expansion=1, contextual=False, kqnorm=False):
+        super().__init__()
+        
+        self.embedding_dim = embedding_dim
+        self.heads = heads
+        self.contextual = contextual
+        self.kqnorm = kqnorm
+        assert type(expansion)==int and expansion>=1, f"expansion ({expansion}) must be a positive integer"
+        assert embedding_dim % heads == 0, f"Embedding dimension ({embedding_dim}) should be divisible by the number of heads ({heads})"
+
+        if contextual:
+            self.attention = ContextualAttention(embedding_dim, heads=heads, kqnorm=kqnorm)
+        else:
+            self.attention = SelfAttention(embedding_dim, heads=heads, kqnorm=kqnorm)
+            
+        self.layerNorm1 = nn.LayerNorm(embedding_dim)
+        self.ff = nn.Sequential(
+            nn.Linear(embedding_dim, embedding_dim*expansion),
+            nn.ReLU(),
+            nn.Linear(embedding_dim*expansion, embedding_dim)
+        )
+        self.layerNorm2 = nn.LayerNorm(embedding_dim)
+
+    def forward(self, x):
+        if self.contextual: 
+            x, context = x
+            attended = self.attention(x, context)
+        else:
+            attended = self.attention(x)
+
+        x = self.layerNorm1(x + attended)
+        fedforward = self.ff(x)
+        output = self.layerNorm2(x + fedforward)
+
+        return output
 
 
 class PointerNetwork(nn.Module):
-    def __init__(self, input_dim, embedding_dim, heads=8, expand_ff=2, kqnorm=True, encoding_layers=1, bias=False, decode_with_gru=True):
+    """
+    Implementation of a pointer network, including an encoding stage and a
+    decoding stage. Adopted from the original paper: 
+    https://papers.nips.cc/paper/5866-pointer-networks
+
+    With support from: https://github.com/ast0414/pointer-networks-pytorch
+    
+    This implementation deviates from the original in two ways: 
+    1. In the original presentation, the encoding layer uses a bidirectional 
+    LSTM. Here, I'm using a transformer on the full sequence to produce 
+    encoded representations for each token, followed by an average across 
+    token encodings to get a contextual representation. 
+    2. The paper uses an LSTM at the decoding stage to process the context 
+    representation (<last_output_of_model>=input, <context_representation>
+    = <hidden_state>). Here you can do that by setting `decode_with_gru=True`,
+    or you can use a contextual transfomer that transforms the context 
+    representation using the encoded representations and the last output to 
+    make a set of keys and values (but not queries, as they are not 
+    transformed). 
+
+    The paper suggests feeding the decoder a dot product between the encoded
+    representations and the scores. However, in some cases it may be better to
+    use the "greedy" choice and only feed the decoder the token that had the 
+    highest probability. If you want to do it that way, set `greedy=True`. If
+    you want to be conservative, set `greedy=False` and it will combine 
+    representations with probabilities.
+    """
+    def __init__(self, input_dim, embedding_dim, heads=8, expansion=1, kqnorm=True, encoding_layers=1, bias=False, decode_with_gru=True, greedy=False):
         super().__init__()
         self.input_dim = input_dim
         self.embedding_dim = embedding_dim
         self.heads = heads
-        self.expand_ff = expand_ff
+        self.expansion = expansion
         self.kqnorm = kqnorm
         self.bias = bias
         self.encoding_layers = encoding_layers
         self.decoder_method = 'gru' if decode_with_gru else 'attention'
+        self.greedy = greedy
 
         self.embedding = nn.Linear(in_features=input_dim, out_features=self.embedding_dim, bias=self.bias)
-        self.encodingLayers = [SelfAttention(self.embedding_dim, heads=self.heads, kqnorm=self.kqnorm) for _ in range(self.encoding_layers)]
-        self.encoder = nn.Sequential()
-        for layer in self.encodingLayers: 
-            self.encoder.append(layer)
+        self.encodingLayers = [TransformerLayer(self.embedding_dim, heads=self.heads, expansion=self.expansion, contextual=False, kqnorm=self.kqnorm) for _ in range(self.encoding_layers)]
+        self.encoder = nn.Sequential(*self.encodingLayers)
 
-        self.contextEncoder = SelfAttention(self.embedding_dim, heads=self.heads, kqnorm=self.kqnorm)
         if self.decoder_method == 'gru':
+            # if using GRU, then make a GRU cell for the decoder
             self.decoder = nn.GRUCell(input_size=self.embedding_dim, hidden_size=self.embedding_dim, bias=self.bias)
         
         elif self.decoder_method == 'attention':
-            self.decoder = ContextualAttention(self.embedding_dim, heads=self.heads, kqnorm=self.kqnorm)
+            # if using attention for the decoder, make a contextual transformer for the decoder
+            self.decoder = TransformerLayer(self.embedding_dim, heads=self.heads, expansion=self.expansion, contextual=True, kqnorm=self.kqnorm)
         
         else: 
             raise ValueError("an unexpected bug occurred and self.decoder_method was not set correctly"
                              f"it should be either 'gru' or 'attention', but it is {self.decoder_method}")
-        
-        self.pointer = PointerAttention(self.embedding_dim)
-    
-    def get_device(self, tensor):
-        return 'cuda' if tensor.is_cuda else 'cpu'
+
+        # output of the network uses a pointer attention layer as described in the original paper
+        self.pointer = PointerAttention(self.embedding_dim, log_softmax=self.greedy)
         
     def forward(self, x): 
-        assert x.ndim == 3, "x must have shape (batch, tokens, embedding)"
+        assert x.ndim == 3, "x must have shape (batch, tokens, input_dim)"
         batch, tokens, inp_dim = x.size()
         assert inp_dim == self.input_dim, "input dim of x doesn't match network"
-        
+
+        # Encoding stage
         embeddedRepresentation = self.embedding(x) # embed each token to right dimensionality
         encodedRepresentation = self.encoder(embeddedRepresentation) # perform N-layer self-attention on inputs
-        decoder_input = torch.zeros((batch, self.embedding_dim)).to(self.get_device(x))
+        decoder_context = encodedRepresentation.mean(dim=1) # average encoded representations to get the context
+        decoder_input = torch.zeros((batch, self.embedding_dim)).to(get_device(x)) # initialize decoder_input as zeros
 
-        decoder_context = self.contextEncoder(encodedRepresentation).mean(dim=1)
-
+        # Decoding stage
         pointer_log_scores = []
         pointer_choices = []
-        
         for i in range(tokens):
-            # update decoder context
+            # update decoder context using RNN or contextual transformer
             if self.decoder_method == 'gru':
                 decoder_context = self.decoder(decoder_input, decoder_context)
             elif self.decoder_method == 'attention':
                 contextInputs = torch.cat((decoder_input.unsqueeze(1), encodedRepresentation), dim=1)
-                decoder_context = self.decoder(decoder_context.unsqueeze(1), contextInputs).squeeze(1)
+                decoder_context = self.decoder((decoder_context.unsqueeze(1), contextInputs)).squeeze(1)
             else:
                 raise ValueError("self.decoder_method not recognized")
                 
-            # use pointer layer to evaluate scores of each possible input
-            log_score = self.pointer(encodedRepresentation, decoder_context)
-
+            # use pointer attention to evaluate scores of each possible input given the context
+            score = self.pointer(encodedRepresentation, decoder_context)
+            log_score = score if self.greedy else torch.log(score)
+            
             # choose token for this sample
             choice = torch.argmax(log_score, dim=1, keepdim=True)
 
-            # convert choice vector to gather index and get encoded representations for this sample
-            index_tensor = choice.unsqueeze(-1).expand(batch, 1, self.embedding_dim)
-            decoder_input = torch.gather(encodedRepresentation, dim=1, index=index_tensor).squeeze(1)
-            
+            if self.greedy:
+                # next decoder_input is whatever token had the highest probability
+                index_tensor = choice.unsqueeze(-1).expand(batch, 1, self.embedding_dim)
+                decoder_input = torch.gather(encodedRepresentation, dim=1, index=index_tensor).squeeze(1)
+            else:
+                # next decoder_input is the dot product of token encodings and their probabilities
+                decoder_input = torch.bmm(score.unsqueeze(1), encodedRepresentation).squeeze(1)
+                
             # Save output of each decoding round
             pointer_log_scores.append(log_score)
             pointer_choices.append(choice)
