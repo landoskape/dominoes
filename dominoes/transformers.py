@@ -5,8 +5,7 @@ import torch.nn.functional as F
 """
 Almost everything I've learned about machine learning and pytorch has been due
 to reading blogs, papers, and people kindly posting good code on github. This
-script is no exception, and has drawn heavily from two code sources and a 
-paper. 
+script is no exception, and has drawn heavily from two code sources. 
 
 pointer network code: 
 - from the repository: https://github.com/ast0414/pointer-networks-pytorch
@@ -14,7 +13,8 @@ pointer network code:
 
 transformer code: 
 - from the repository: https://github.com/pbloem/former
-  - and the associated blog: http://peterbloem.nl/blog/transformers
+  - and the associated (very well-written!) blog: 
+  http://peterbloem.nl/blog/transformers
 - and of course the paper: https://proceedings.neurips.cc/paper_files/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf
 """
 
@@ -72,11 +72,14 @@ class SelfAttention(nn.Module):
             self.kln = nn.LayerNorm([self.headsize])
             self.qln = nn.LayerNorm([self.headsize])
 
-    def forward(self, x):
+    def forward(self, x, mask=None):
         # attention layer forward pass
         assert x.ndim==3, "x should have size: (batch_size, num_tokens, embedding_dimensionality)"
         batch, tokens, emb = x.size() # get size of input
         
+        if mask is not None:
+            assert x.size(0)==mask.size(0) and x.size(1)==mask.size(1), "mask must have same batch_size and num_tokens as x"
+            
         # this is the only requirement on the input (other than the number of dimensions)
         assert emb == self.emb, f'Input embedding dim ({emb}) should match layer embedding dim ({self.emb})'
 
@@ -110,6 +113,12 @@ class SelfAttention(nn.Module):
 
         # check to make sure this is correct
         assert dot.size() == (batch*self.heads, tokens, tokens), "somehow the query-key dot product is an unexpected size"
+
+        if mask is not None:
+            # mask query key products to -inf that are not used
+            dotMask = torch.bmm(mask.unsqueeze(2), mask.unsqueeze(1))
+            dotMask = dotMask.unsqueeze(1).expand(batch, self.heads, tokens, tokens).reshape(batch*self.heads, tokens, tokens)
+            dot.masked_fill_(dotMask==0, float('-inf')) # assign -inf for any value that isn't used
         
         # and take softmax to get self-attention probabilities
         dot = F.softmax(dot, dim=2)
@@ -161,19 +170,29 @@ class ContextualAttention(nn.Module):
             self.kln = nn.LayerNorm([self.headsize])
             self.qln = nn.LayerNorm([self.headsize])
 
-    def forward(self, x, context):
+    def forward(self, x, context, mask=None, contextMask=None):
         # attention layer forward pass
-        assert x.ndim==3, "x should have size: (batch_size, num_tokens, embedding_dimensionality)"
-        assert context.ndim==3, "context should have size: (batch_size, num_tokens, embedding_dimensionality)"
+        assert x.ndim==3, "x should have size: (batch_size, num_input_tokens, embedding_dimensionality)"
+        assert context.ndim==3, "context should have size: (batch_size, num_context_tokens, embedding_dimensionality)"
         batch, itokens, emb = x.size() # get size of input
         cbatch, ctokens, cemb = context.size() # get size of context
         tokens = itokens + ctokens # total number of tokens to process
+
+        # concatenate input and context
+        x_plus_context = torch.cat((x, context), dim=1) 
+
+        # Handle masks
+        useMask = (mask is not None) or (contextMask is not None)
+        if useMask:
+            mask = mask if mask is not None else torch.ones((batch, itokens), dtype=x.dtype).to(get_device(x))
+            contextMask = contextMask if contextMask is not None else torch.ones((batch, ctokens), dtype=context.dtype).to(get_device(x))
+            assert x.size(0)==mask.size(0)==contextMask.size(0), "masks must have same batch_size as x"
+            assert x.size(1)==mask.size(1), "mask must have same num_input_tokens as x"
+            assert context.size(1)==contextMask.size(1), "contextMask must have same num_context_tokens as context"
+            mask_plus_contextMask = torch.cat((mask, contextMask), dim=1)
         
         assert cbatch==batch, "batch size of x and context should be the same"
         assert emb == cemb == self.emb, f'Input embedding dim ({emb}) and context embedding dim ({cemb}) should both match layer embedding dim ({self.emb})'
-        
-        # concatenate input and context
-        x_plus_context = torch.cat((x, context), dim=1) 
         
         # convert input tokens to their keys, queries, and values
         queries = self.toqueries(x) # context inputs don't need to query
@@ -206,6 +225,12 @@ class ContextualAttention(nn.Module):
         # check to make sure this is correct
         assert dot.size() == (batch*self.heads, itokens, tokens), "somehow the query-key dot product is an unexpected size"
 
+        if useMask:
+            # mask query key products to -inf that are not used
+            dotMask = torch.bmm(mask.unsqueeze(2), mask_plus_contextMask.unsqueeze(1))
+            dotMask = dotMask.unsqueeze(1).expand(batch, self.heads, itokens, tokens).reshape(batch*self.heads, itokens, tokens)
+            dot.masked_fill_(dotMask==0, float('-inf')) # assign -inf for any value that isn't used
+        
         # and take softmax to get self-attention probabilities
         dot = F.softmax(dot, dim=2)
         
@@ -291,18 +316,17 @@ class TransformerLayer(nn.Module):
         )
         self.layerNorm2 = nn.LayerNorm(embedding_dim)
 
-    def forward(self, x):
+    def forward(self, x, mask=None, contextMask=None):
         if self.contextual: 
             x, context = x
-            attended = self.attention(x, context)
+            withAttention = self.attention(x, context, mask=mask, contextMask=contextMask)
         else:
-            attended = self.attention(x)
+            withAttention = self.attention(x, mask=mask)
 
-        x = self.layerNorm1(x + attended)
-        fedforward = self.ff(x)
-        output = self.layerNorm2(x + fedforward)
-
-        return output
+        x = self.layerNorm1(x + withAttention)
+        withTransformation = self.ff(x)
+        
+        return self.layerNorm2(x + withTransformation)
 
 
 class PointerNetwork(nn.Module):
@@ -364,11 +388,16 @@ class PointerNetwork(nn.Module):
         # output of the network uses a pointer attention layer as described in the original paper
         self.pointer = PointerAttention(self.embedding_dim, log_softmax=self.greedy)
         
-    def forward(self, x): 
+    def forward(self, x, mask=None): 
         assert x.ndim == 3, "x must have shape (batch, tokens, input_dim)"
         batch, tokens, inp_dim = x.size()
         assert inp_dim == self.input_dim, "input dim of x doesn't match network"
-
+        if mask is not None: 
+            assert mask.ndim == 3, "mask must have shape (batch, tokens)"
+            assert mask.size(0)==batch and mask.size(1)==tokens, "mask must have same batch size and max tokens as x"
+        else:
+            mask = torch.ones((batch, tokens), dtype=x.dtype).to(get_device(x))
+        
         # Encoding stage
         embeddedRepresentation = self.embedding(x) # embed each token to right dimensionality
         encodedRepresentation = self.encoder(embeddedRepresentation) # perform N-layer self-attention on inputs
@@ -540,7 +569,7 @@ class PointerNetwork(nn.Module):
 
 #         # We use an embedding layer for more complicate application usages later, e.g., word sequences.
 #         self.embedding = nn.Linear(in_features=input_dim, out_features=embedding_dim, bias=False)
-#         self.encoder = Encoder(embedding_dim=embedding_dim, hidden_size=hidden_size, num_layers=self.num_layers,
+#         self.encoder = Encoder(embedding_dim=embedding_dim, hidden_size=hidden_size, num_layers=self.num_layers, 
 #                                bidirectional=bidirectional, batch_first=batch_first)
 #         self.decoding_rnn = nn.LSTMCell(input_size=hidden_size, hidden_size=hidden_size)
 #         self.attn = Attention(hidden_size=hidden_size)
