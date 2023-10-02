@@ -23,9 +23,13 @@ The main result of the problem is shown here:
 ![pointer toy figure](media/pointerDemonstration.png)
 
 As you can see, the network quickly learns to sort dominoes by their value 
-effectively. Pretty cool! The third panel of the figure shows that the lost 
+effectively. Pretty cool! (As an aside, I think it's pretty awesome that each
+batch has data with uneven sequence lengths, and the network can handle that 
+kind of input.)
+
+<!---The third panel of the figure shows that the lost 
 depends on the sequence size, which makes sense because there is more room 
 for error and uncertainty in a longer list of dominoes to sort, and the 
-negative log-likelihood loss function penalizes the network for uncertainty. 
+negative log-likelihood loss function penalizes the network for uncertainty. ---!>
 
 
