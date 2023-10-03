@@ -105,8 +105,10 @@ class valueAgent(dominoeAgent):
         binaryDummyAvailable[dummyAvailable]=1 # indicate which value is available on the dummy line
         binaryHand[newHand]=1 # indicate which dominoes are present in hand
         
-        # This needs to be here for the lineValueAgents
+        # This needs to be here for the some (but not all) of the value agents
         kwargs['myHand']=newHand
+        kwargs['dominoes']=self.dominoes
+        kwargs['highestDominoe']=self.highestDominoe
         
         # -- prepare value input in simulated future gamestate --
         return self.simulateValueInputs(binaryHand, binaryPlayed, binaryLineAvailable, binaryDummyAvailable, handSize, cantPlay, didntPlay, turnCounter, dummyPlayable, **kwargs)

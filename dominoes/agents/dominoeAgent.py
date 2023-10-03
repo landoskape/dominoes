@@ -25,9 +25,7 @@ class dominoeAgent:
     def __init__(self, numPlayers, highestDominoe, dominoes, numDominoes, device=None, **kwargs):
         # meta-variables (includes redundant information, but if I train 1000s of networks I want it to be as fast as possible)
         self.numPlayers = numPlayers
-        self.numPlayerRange = [self.numPlayers]
         self.highestDominoe = highestDominoe
-        self.highestDominoeRange = range(1, 1000)
         self.dominoes = dominoes
         self.numDominoes = numDominoes
         self.dominoeValue = np.sum(self.dominoes, axis=1).astype(float)
