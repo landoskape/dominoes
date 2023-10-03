@@ -12,7 +12,7 @@ def get_device(tensor):
 class handRepresentationNetwork(nn.Module):
     def __init__(self, numPlayers, numDominoes, highestDominoe, finalScoreOutputDimension,
                 embedding_dim=128, heads=8, expansion=2, kqnorm=True, bias=False, encoding_layers=1,
-                weightPrms=(0.,0.1),biasPrms=0.):
+                include_hand_index=True, weightPrms=(0.,0.1),biasPrms=0.):
         super().__init__()
         assert finalScoreOutputDimension<numPlayers, "finalScoreOutputDimension can't be greater than the number of players"
         self.numPlayers = numPlayers
@@ -25,6 +25,7 @@ class handRepresentationNetwork(nn.Module):
         self.kqnorm = kqnorm
         self.bias = bias
         self.encoding_layers = encoding_layers
+        self.include_hand_index = include_hand_index
         
         # the hand representation network uses a transformer to process the dominoes in the agents hand
         self.embedding = nn.Linear(in_features=self.input_dim, out_features=embedding_dim, bias=bias)
@@ -33,18 +34,17 @@ class handRepresentationNetwork(nn.Module):
                                                                            expansion=expansion, 
                                                                            contextual=False, 
                                                                            kqnorm=kqnorm) for _ in range(encoding_layers)])
-        self.encoding = self.forwardEncoder
-
+        
         # then combines the transformer output with a simple feedforward network to estimate the final score
         # see dominoesAgents>generateValueInput() for explanation of why this dimensionality
-        self.ff_input_dim = embedding_dim + 2*numDominoes + (highestDominoe+1)*(numPlayers+1) + 4*numPlayers + 1
+        self.ff_input_dim = embedding_dim + numDominoes + (numDominoes if self.include_hand_index else 0) + (highestDominoe+1)*(numPlayers+1) + 4*numPlayers + 1
         self.outputDimension = finalScoreOutputDimension
         
         # create layers (all linear fully connected)
-        self.fc1 = nn.Linear(self.ff_input_dim, 1000)
-        self.fc2 = nn.Linear(1000, 500)
-        self.fc3 = nn.Linear(500, 500)
-        self.fc4 = nn.Linear(500, self.outputDimension)
+        self.fc1 = nn.Linear(self.ff_input_dim, 256)
+        self.fc2 = nn.Linear(256, 128)
+        self.fc3 = nn.Linear(128, 64)
+        self.fc4 = nn.Linear(64, self.outputDimension)
         torch.nn.init.normal_(self.fc1.weight, mean=weightPrms[0], std=weightPrms[1])
         torch.nn.init.normal_(self.fc2.weight, mean=weightPrms[0], std=weightPrms[1])
         torch.nn.init.normal_(self.fc3.weight, mean=weightPrms[0], std=weightPrms[1])
