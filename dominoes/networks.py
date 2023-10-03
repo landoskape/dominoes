@@ -3,6 +3,94 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from . import functions as df
+from . import transformers
+
+def get_device(tensor):
+    """simple method to get device of input tensor"""
+    return 'cuda' if tensor.is_cuda else 'cpu'
+    
+class handRepresentationNetwork(nn.Module):
+    def __init__(self, numPlayers, numDominoes, highestDominoe, finalScoreOutputDimension,
+                embedding_dim=128, heads=8, expansion=2, kqnorm=True, bias=False, encoding_layers=1,
+                weightPrms=(0.,0.1),biasPrms=0.):
+        super().__init__()
+        assert finalScoreOutputDimension<numPlayers, "finalScoreOutputDimension can't be greater than the number of players"
+        self.numPlayers = numPlayers
+        self.numDominoes = numDominoes
+        self.highestDominoe = highestDominoe
+        self.input_dim = 2*(highestDominoe+1)
+        self.embedding_dim = embedding_dim
+        self.heads = heads
+        self.expansion = expansion
+        self.kqnorm = kqnorm
+        self.bias = bias
+        self.encoding_layers = encoding_layers
+        
+        # the hand representation network uses a transformer to process the dominoes in the agents hand
+        self.embedding = nn.Linear(in_features=self.input_dim, out_features=embedding_dim, bias=bias)
+        self.encodingLayers = nn.ModuleList([transformers.TransformerLayer(embedding_dim, 
+                                                                           heads=heads, 
+                                                                           expansion=expansion, 
+                                                                           contextual=False, 
+                                                                           kqnorm=kqnorm) for _ in range(encoding_layers)])
+        self.encoding = self.forwardEncoder
+
+        # then combines the transformer output with a simple feedforward network to estimate the final score
+        # see dominoesAgents>generateValueInput() for explanation of why this dimensionality
+        self.ff_input_dim = embedding_dim + 2*numDominoes + (highestDominoe+1)*(numPlayers+1) + 4*numPlayers + 1
+        self.outputDimension = finalScoreOutputDimension
+        
+        # create layers (all linear fully connected)
+        self.fc1 = nn.Linear(self.ff_input_dim, 1000)
+        self.fc2 = nn.Linear(1000, 500)
+        self.fc3 = nn.Linear(500, 500)
+        self.fc4 = nn.Linear(500, self.outputDimension)
+        torch.nn.init.normal_(self.fc1.weight, mean=weightPrms[0], std=weightPrms[1])
+        torch.nn.init.normal_(self.fc2.weight, mean=weightPrms[0], std=weightPrms[1])
+        torch.nn.init.normal_(self.fc3.weight, mean=weightPrms[0], std=weightPrms[1])
+        torch.nn.init.normal_(self.fc4.weight, mean=weightPrms[0], std=weightPrms[1])
+        torch.nn.init.constant_(self.fc1.bias, val=biasPrms)
+        torch.nn.init.constant_(self.fc2.bias, val=biasPrms)
+        torch.nn.init.constant_(self.fc4.bias, val=biasPrms)
+        torch.nn.init.constant_(self.fc4.bias, val=biasPrms)
+        
+        self.ffLayer = nn.Sequential(
+            self.fc1, 
+            nn.ReLU(),
+            nn.LayerNorm((self.fc1.out_features)),
+            self.fc2, 
+            nn.ReLU(), 
+            nn.LayerNorm((self.fc2.out_features)),
+            self.fc3, 
+            nn.ReLU(), 
+            nn.LayerNorm((self.fc3.out_features)),
+            self.fc4
+        )
+
+    def forwardEncoder(self, x, mask=None):
+        for elayer in self.encodingLayers:
+            x = elayer(x, mask=mask)
+        return x
+
+    def forward(self, x, mask=None, withBatch=False):
+        # transformer requires batch dimension, so it should be =1 if withBatch=False
+        if not(withBatch): 
+            assert x[0].size(0)==1, "hand input has >1 batch dimension but withBatch set to false"
+        
+        # get output of transformer and condense it across tokens
+        embedded = self.embedding(x[0])
+        handRepresentation = self.forwardEncoder(embedded, mask=mask) # process hand through transformer
+        if mask is None: mask = torch.ones((embedded.size(0), embedded.size(1)),dtype=embedded.dtype).to(get_device(embedded))
+        handRepresentationCondensed = torch.sum(handRepresentation*mask.unsqueeze(2), dim=1) / torch.sum(mask, dim=1, keepdim=True)
+
+        # if not using the batch dimension, squeeze it out of the transformer output
+        if not(withBatch): handRepresentationCondensed = handRepresentationCondensed.squeeze(0)
+
+        # then prepare feed forward input
+        ffInput = torch.cat((handRepresentationCondensed, x[1]), dim=1 if withBatch else 0)
+        netOutput = self.ffLayer(ffInput)
+        return netOutput
+
 
 
 class lineRepresentationNetwork(nn.Module):
@@ -67,6 +155,7 @@ class lineRepresentationNetwork(nn.Module):
         ffInput = torch.cat((cnnOutput, x[1]), dim=1 if withBatch else 0)
         netOutput = self.ffLayer(ffInput)
         return netOutput
+        
     
 class lineRepresentationNetworkSmall(nn.Module):
     def __init__(self, numPlayers, numDominoes, highestDominoe, finalScoreOutputDimension, numOutputCNN=10, weightPrms=(0.,0.1),biasPrms=0.,actFunc=F.relu,pDropout=0):
