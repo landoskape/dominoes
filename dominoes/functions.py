@@ -1,7 +1,9 @@
 from copy import copy
 import itertools
 import numpy as np
+import torch
 import matplotlib
+
 
 def averageGroups(var, numPerGroup, axis=0):
     '''method for averaging variable across repeats within group on specified axis'''
@@ -42,6 +44,47 @@ def listDominoes(highestDominoe):
     # given a standard rule for how to organize the list of dominoes as one-hot arrays, list the dominoes present in a one hot array
     return np.array([np.array(quake) for quake in itertools.combinations_with_replacement(np.arange(highestDominoe+1), 2)], dtype=int)
 
+def twohotDominoe(dominoeIndex, dominoes, highestDominoe, withBatch=True):
+    """
+    converts an index of dominoes to a stacked two-hot representation of their value
+
+    dominoes are paired values (combinations with replacement) of integers 
+    from 0 to <highestDominoe>. The total value of each dominoe is the sum of
+    the two integers associated with that dominoe. For example, the dominoe
+    (7|3) has value 10. 
+
+    The simple representation is a two-hot vector where the first 
+    <highestDominoe+1> elements represent the first value of the dominoe, and
+    the second <highestDominoe+1> elements represent the second value of the 
+    dominoe. Here are some examples for highest dominoe = 3:
+
+    (0 | 0): [1, 0, 0, 0, 1, 0, 0, 0]
+    (0 | 1): [1, 0, 0, 0, 0, 1, 0, 0]
+    (0 | 2): [1, 0, 0, 0, 0, 0, 1, 0]
+    (0 | 3): [1, 0, 0, 0, 0, 0, 0, 1]
+    (1 | 0): [0, 1, 0, 0, 1, 0, 0, 0]
+    (2 | 1): [0, 0, 1, 0, 0, 1, 0, 0]
+
+    """
+    # input dimension determined by highest dominoe (twice the number of possible values on a dominoe)
+    input_dim = 2*(highestDominoe+1)
+
+    # first & second value are index and shifted index
+    firstValue = torch.tensor(dominoes[dominoeIndex,0], dtype=torch.int64).unsqueeze(1)
+    secondValue = torch.tensor(dominoes[dominoeIndex,1]+highestDominoe+1, dtype=torch.int64).unsqueeze(1)
+
+    # scatter data into two-hot vectors
+    src = torch.ones((len(dominoeIndex), 1), dtype=torch.float)
+    twohot = torch.zeros((len(dominoeIndex), input_dim), dtype=torch.float)
+    twohot.scatter_(1, firstValue, src)
+    twohot.scatter_(1, secondValue, src)
+
+    # unsqueeze batch dimension if requested
+    if withBatch: 
+        twohot = twohot.unsqueeze(0) 
+        
+    return twohot
+    
 def dominoesString(dominoe):
     return f"{dominoe[0]:>2}|{dominoe[1]:<2}"
     
@@ -221,3 +264,79 @@ def eloUpdate(S, E, k=32):
 def argsort(seq):
     # http://stackoverflow.com/questions/3071415/efficient-method-to-calculate-the-rank-vector-of-a-list-in-python
     return sorted(range(len(seq)), key=seq.__getitem__)
+
+
+def dominoeUnevenBatch(batchSize, minSeq, maxSeq, listDominoes, dominoeValue, highestDominoe, ignoreIndex=-1):
+    """
+    retrieve a batch of dominoes and their target order given the value of each dominoe
+
+    dominoes are paired values (combinations with replacement) of integers 
+    from 0 to <highestDominoe>. The total value of each dominoe is the sum of
+    the two integers associated with that dominoe. For example, the dominoe
+    (7|3) has value 10. 
+
+    Each element in the batch contains an input and target. The input is 
+    composed of a sequence of dominoes in a random order, transformed into a
+    simple representation (explained below). The target is a list of the order
+    of dominoes by the one with the highest value to the one with the lowest
+    value. Note that many dominoes share the same value, but since the dominoe
+    list is always the same, equal value dominoes will always be sorted in the
+    same way. 
+    
+    Each element can have a different sequence length, they will be padded 
+    with zeros to whatever the longest sequence is. The ignoreIndex is used to
+    determine what to label targets for any padded elements (i.e. any place 
+    where no prediction is needed). The nll_loss function then accepts this as
+    an input to ignore. This is part of the reason why pointer networks are
+    awesome... the input and output can vary in size!!!
+
+    The simple representation is a two-hot vector where the first 
+    <highestDominoe+1> elements represent the first value of the dominoe, and
+    the second <highestDominoe+1> elements represent the second value of the 
+    dominoe. Here are some examples for highest dominoe = 3:
+
+    (0 | 0): [1, 0, 0, 0, 1, 0, 0, 0]
+    (0 | 1): [1, 0, 0, 0, 0, 1, 0, 0]
+    (0 | 2): [1, 0, 0, 0, 0, 0, 1, 0]
+    (0 | 3): [1, 0, 0, 0, 0, 0, 0, 1]
+    (1 | 0): [0, 1, 0, 0, 1, 0, 0, 0]
+    (2 | 1): [0, 0, 1, 0, 0, 1, 0, 0]
+
+    """
+    numDominoes = len(listDominoes)
+    input_dim = 2*(highestDominoe+1)
+    
+    # choose how long each sequence in the batch will be
+    seqLength = np.random.randint(minSeq, maxSeq+1, batchSize)
+    maxSeqLength = max(seqLength) # max sequence length for padding
+
+    # choose dominoes from the batch, and get their value (in points)
+    selection = [np.random.choice(numDominoes, sl, replace=False).tolist() for sl in seqLength]
+    value = [dominoeValue[sel] for sel in selection]
+    
+    # index of first and second value in two-hot representation
+    pad = [[0]*(maxSeqLength-sl) for sl in seqLength]
+    firstValue = np.stack([listDominoes[sel,0].tolist()+p for p, sel in zip(pad, selection)])
+    secondValue = np.stack([(listDominoes[sel,1]+highestDominoe+1).tolist()+p for p, sel in zip(pad, selection)])
+    firstValue = torch.tensor(firstValue, dtype=torch.int64).unsqueeze(2)
+    secondValue = torch.tensor(secondValue, dtype=torch.int64).unsqueeze(2)
+
+    # create mask (used for scattering and also as an output)
+    mask = 1.*(torch.arange(maxSeqLength).view(1,-1).expand(batchSize, -1) < torch.tensor(seqLength).view(-1,1))
+
+    # scatter data into two-hot vectors, except where sequence length is exceed where the mask is 0
+    input = torch.zeros((batchSize, maxSeqLength, input_dim), dtype=torch.float)
+    input.scatter_(2, firstValue, mask.float().unsqueeze(2))
+    input.scatter_(2, secondValue, mask.float().unsqueeze(2))
+    
+    # sort and pad each list of dominoes by value
+    def sortPad(val, padTo, ignoreIndex=-1):
+        s = sorted(range(len(val)), key=lambda i: -val[i])
+        p = [ignoreIndex]*(padTo-len(val))
+        return s+p
+
+    # create a padded sort index, then turn into a torch tensor as the target vector
+    sortIdx = [sortPad(val, maxSeqLength, ignoreIndex) for val in value] # pad with ignore index so nll_loss ignores them
+    target = torch.stack([torch.LongTensor(idx) for idx in sortIdx])
+
+    return input, target, mask
