@@ -22,7 +22,8 @@ class transformerAgent(valueAgent):
         self.expansion = 2
         self.kqnorm = True
         self.bias = False
-        self.encoding_layers = 2
+        self.encoding_layers = 3
+        self.include_hand_index = False
         
         # do general valueAgent initialization
         super().specializedInit(**kwargs)
@@ -30,7 +31,7 @@ class transformerAgent(valueAgent):
         self.replay = False 
         print("setting replay to false for tformer agent and not setting any of the replay variables in special init")
  
-        # prepare replay 
+        # # prepare replay 
         # replayDims0 = (self.finalScoreNetwork.numLineFeatures, self.numDominoes)
         # replayDims1 = (self.finalScoreNetwork.inputDimension-self.finalScoreNetwork.numOutputCNN, )
         # self.replayBufferIndex = []
@@ -116,7 +117,8 @@ class transformerAgent(valueAgent):
                                                                expansion=self.expansion, 
                                                                kqnorm=self.kqnorm,
                                                                bias=self.bias, 
-                                                               encoding_layers=self.encoding_layers
+                                                               encoding_layers=self.encoding_layers,
+                                                               include_hand_index=self.include_hand_index,
                                                               )
         self.finalScoreNetwork.to(self.device)
 
@@ -130,7 +132,7 @@ class transformerAgent(valueAgent):
     
     def generateValueInput(self):
         handRepresentationInput = df.twohotDominoe(self.myHand, self.dominoes, self.highestDominoe, withBatch=True).to(self.device)
-        gameStateInput = torch.tensor(np.concatenate((self.binaryHand, 
+        gameStateInput = torch.tensor(np.concatenate((self.binaryHand if self.include_hand_index else np.empty(0), 
                                                       self.binaryPlayed, 
                                                       self.binaryLineAvailable.flatten(), 
                                                       self.binaryDummyAvailable,
@@ -145,7 +147,7 @@ class transformerAgent(valueAgent):
    
     def simulateValueInputs(self, binaryHand, binaryPlayed, binaryLineAvailable, binaryDummyAvailable, handSize, cantPlay, didntPlay, turnCounter, dummyPlayable, **kwargs):
         handRepresentationInput = df.twohotDominoe(kwargs['myHand'], kwargs['dominoes'], kwargs['highestDominoe'], withBatch=True).to(self.device)
-        gameStateInput = torch.tensor(np.concatenate((binaryHand, binaryPlayed, binaryLineAvailable.flatten(), binaryDummyAvailable, handSize, cantPlay, didntPlay, turnCounter, np.array(dummyPlayable).reshape(-1)))).float().to(self.device)
+        gameStateInput = torch.tensor(np.concatenate((binaryHand if self.include_hand_index else np.empty(0), binaryPlayed, binaryLineAvailable.flatten(), binaryDummyAvailable, handSize, cantPlay, didntPlay, turnCounter, np.array(dummyPlayable).reshape(-1)))).float().to(self.device)
         return handRepresentationInput, gameStateInput
     
     def makeChoice(self, optionValue):
