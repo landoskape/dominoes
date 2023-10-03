@@ -261,11 +261,12 @@ class dominoeGame:
         if np.any(self.handSize==0): 
             self.handActive=False
 
-    def printResults(self):
+    def printResults(self, fullScore=False):
         if hasattr(self, 'currentScore'):
-            # print("Scores for each round:")
-            # print(self.score)
-            # print("")
+            if fullScore:
+                print("Scores for each round:")
+                print(self.score)
+                print("")
             print("Average score per hand:")
             print(np.round(np.mean(self.score,axis=0),2))
             print("")
