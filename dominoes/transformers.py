@@ -254,7 +254,7 @@ class PointerAttention(nn.Module):
         self.W2 = nn.Linear(emb, emb, bias=False)
         self.vt = nn.Linear(emb, 1, bias=False)
 
-    def forward(self, encoded, decoder_state, mask=None):
+    def forward(self, encoded, decoder_state, mask=None, temperature=1):
         # first transform encoded representations and decoder states 
         transformEncoded = self.W1(encoded)
         transformDecoded = self.W2(decoder_state).unsqueeze(1) # unsqueeze for broadcasting on token dimension
@@ -266,10 +266,10 @@ class PointerAttention(nn.Module):
             
         if self.log_softmax:
             # convert to log scores
-            return torch.nn.functional.log_softmax(u, dim=-1)
+            return torch.nn.functional.log_softmax(u/temperature, dim=-1)
         else:
             # convert to probabilities
-            return torch.nn.functional.softmax(u, dim=-1)
+            return torch.nn.functional.softmax(u/temperature, dim=-1)
 
 
 # ---------------------------------
@@ -393,13 +393,15 @@ class PointerNetwork(nn.Module):
             x = elayer(x, mask=mask)
         return x
         
-    def forward(self, x, mask=None): 
+    def forward(self, x, mask=None, max_output=None): 
         """
         forward method for pointer network with possible masked input
         
         x should be an input tensor with shape (batchSize, maxTokens, input_dim)
         mask should be a 1/0 input tensor with shape (batchSize, maxTokens) where a 1 indicates a valid token and 0 indicates padded data
         checks on the mask only care about the shape, so make sure your mask is as described!!!
+
+        max_output should be an integer determining when to cut off decoder output
         """
         assert x.ndim == 3, "x must have shape (batch, tokens, input_dim)"
         batch, tokens, inp_dim = x.size()
@@ -409,7 +411,10 @@ class PointerNetwork(nn.Module):
             assert mask.size(0)==batch and mask.size(1)==tokens, "mask must have same batch size and max tokens as x"
         else:
             mask = torch.ones((batch, tokens), dtype=x.dtype).to(get_device(x))
-        
+
+        if max_output is None: 
+            max_output = tokens
+            
         # Encoding stage
         embeddedRepresentation = self.embedding(x) # embed each token to right dimensionality
         encodedRepresentation = self.encoding(embeddedRepresentation, mask=mask) # perform N-layer self-attention on inputs
@@ -423,7 +428,7 @@ class PointerNetwork(nn.Module):
         # Decoding stage
         pointer_log_scores = []
         pointer_choices = []
-        for i in range(tokens):
+        for i in range(max_output):
             # update decoder context using RNN or contextual transformer
             if self.decoder_method == 'gru':
                 decoder_context = self.decoder(decoder_input, decoder_context)
@@ -459,5 +464,4 @@ class PointerNetwork(nn.Module):
         pointer_choices = torch.stack(pointer_choices, 1).squeeze()
 
         return pointer_log_scores, pointer_choices
-
 
