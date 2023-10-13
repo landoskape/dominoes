@@ -352,7 +352,8 @@ class PointerNetwork(nn.Module):
     you want to be conservative, set `greedy=False` and it will combine 
     representations with probabilities.
     """
-    def __init__(self, input_dim, embedding_dim, heads=8, expansion=1, kqnorm=True, encoding_layers=1, bias=False, decode_with_gru=True, greedy=False):
+    def __init__(self, input_dim, embedding_dim,
+                 heads=8, expansion=1, kqnorm=True, encoding_layers=1, bias=False, decode_with_gru=True, greedy=False, temperature=1):
         super().__init__()
         self.input_dim = input_dim
         self.embedding_dim = embedding_dim
@@ -363,9 +364,15 @@ class PointerNetwork(nn.Module):
         self.encoding_layers = encoding_layers
         self.decoder_method = 'gru' if decode_with_gru else 'attention'
         self.greedy = greedy
+        self.temperature = temperature
 
         self.embedding = nn.Linear(in_features=input_dim, out_features=self.embedding_dim, bias=self.bias)
-        self.encodingLayers = nn.ModuleList([TransformerLayer(self.embedding_dim, heads=self.heads, expansion=self.expansion, contextual=False, kqnorm=self.kqnorm) for _ in range(self.encoding_layers)])
+        self.encodingLayers = nn.ModuleList([TransformerLayer(self.embedding_dim, 
+                                                              heads=self.heads, 
+                                                              expansion=self.expansion,  
+                                                              kqnorm=self.kqnorm) 
+                                             for _ in range(self.encoding_layers)])
+        
         self.encoding = self.forwardEncoder # since there are masks, it's easier to write a custom forward than wrangle the transformer layers to work with nn.Sequential
         
         if self.decoder_method == 'gru':
@@ -398,7 +405,7 @@ class PointerNetwork(nn.Module):
         forward method for pointer network with possible masked input
         
         x should be an input tensor with shape (batchSize, maxTokens, input_dim)
-        mask should be a 1/0 input tensor with shape (batchSize, maxTokens) where a 1 indicates a valid token and 0 indicates padded data
+        mask should be a binary input tensor with shape (batchSize, maxTokens) where a 1 indicates a valid token and 0 indicates padded data
         checks on the mask only care about the shape, so make sure your mask is as described!!!
 
         max_output should be an integer determining when to cut off decoder output
@@ -411,10 +418,10 @@ class PointerNetwork(nn.Module):
             assert mask.size(0)==batch and mask.size(1)==tokens, "mask must have same batch size and max tokens as x"
         else:
             mask = torch.ones((batch, tokens), dtype=x.dtype).to(get_device(x))
-
+        
         if max_output is None: 
             max_output = tokens
-            
+
         # Encoding stage
         embeddedRepresentation = self.embedding(x) # embed each token to right dimensionality
         encodedRepresentation = self.encoding(embeddedRepresentation, mask=mask) # perform N-layer self-attention on inputs
@@ -440,7 +447,7 @@ class PointerNetwork(nn.Module):
                 raise ValueError("decoder_method not recognized")
                 
             # use pointer attention to evaluate scores of each possible input given the context
-            score = self.pointer(encodedRepresentation, decoder_context, mask=mask)
+            score = self.pointer(encodedRepresentation, decoder_context, mask=mask, temperature=self.temperature)
             
             # standard loss function (nll_loss) requires log-probabilities
             log_score = score if self.greedy else torch.log(score)

@@ -44,16 +44,14 @@ def listDominoes(highestDominoe):
     # given a standard rule for how to organize the list of dominoes as one-hot arrays, list the dominoes present in a one hot array
     return np.array([np.array(quake) for quake in itertools.combinations_with_replacement(np.arange(highestDominoe+1), 2)], dtype=int)
 
-def twohotDominoe(dominoeIndex, dominoes, highestDominoe, withBatch=True):
+def twohotDominoe(dominoeIndex, dominoes, highestDominoe, available=None, available_token=False, null_token=False, with_batch=True):
     """
-    converts an index of dominoes to a stacked two-hot representation of their value
+    converts an index of dominoes to a stacked two-hot representation
 
     dominoes are paired values (combinations with replacement) of integers 
-    from 0 to <highestDominoe>. The total value of each dominoe is the sum of
-    the two integers associated with that dominoe. For example, the dominoe
-    (7|3) has value 10. 
+    from 0 to <highestDominoe>. 
 
-    The simple representation is a two-hot vector where the first 
+    This simple representation is a two-hot vector where the first 
     <highestDominoe+1> elements represent the first value of the dominoe, and
     the second <highestDominoe+1> elements represent the second value of the 
     dominoe. Here are some examples for highest dominoe = 3:
@@ -66,24 +64,38 @@ def twohotDominoe(dominoeIndex, dominoes, highestDominoe, withBatch=True):
     (2 | 1): [0, 0, 1, 0, 0, 1, 0, 0]
 
     """
+    assert dominoeIndex.ndim==1, "dominoeIndex must have shape (numDominoesSelected, 1)"
+    if available_token: assert available is not None, "if with_available=True, then available needs to be provided"
+    num_dominoes, = dominoeIndex.shape
+    
     # input dimension determined by highest dominoe (twice the number of possible values on a dominoe)
-    input_dim = 2*(highestDominoe+1)
-
+    input_dim = (2 if not(available_token) else 3)*(highestDominoe+1) + (1 if null_token else 0)
+        
     # first & second value are index and shifted index
     firstValue = torch.tensor(dominoes[dominoeIndex,0], dtype=torch.int64).unsqueeze(1)
     secondValue = torch.tensor(dominoes[dominoeIndex,1]+highestDominoe+1, dtype=torch.int64).unsqueeze(1)
-
+    
     # scatter data into two-hot vectors
-    src = torch.ones((len(dominoeIndex), 1), dtype=torch.float)
-    twohot = torch.zeros((len(dominoeIndex), input_dim), dtype=torch.float)
+    src = torch.ones((num_dominoes, 1), dtype=torch.float)
+    twohot = torch.zeros((num_dominoes, input_dim), dtype=torch.float)
     twohot.scatter_(1, firstValue, src)
     twohot.scatter_(1, secondValue, src)
+        
+    if null_token:
+        null = torch.zeros((1, input_dim), dtype=torch.float).scatter_(1, torch.tensor(input_dim-1).view(1,1), torch.tensor(1.).view(1,1))
+        twohot = torch.cat((twohot, null), dim=0)
 
-    # unsqueeze batch dimension if requested
-    if withBatch: 
-        twohot = twohot.unsqueeze(0) 
+    if available_token:
+        rep_available = torch.zeros((1, input_dim), dtype=torch.float)
+        availableidx = int((highestDominoe+1)*2 + available)
+        rep_available[0, availableidx] = 1.0
+        twohot = torch.cat((twohot, rep_available), dim=0)
+        
+    if with_batch:
+        twohot = twohot.unsqueeze(0)
         
     return twohot
+    
     
 def dominoesString(dominoe):
     return f"{dominoe[0]:>2}|{dominoe[1]:<2}"
