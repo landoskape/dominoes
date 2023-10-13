@@ -418,7 +418,7 @@ class PointerNetwork(nn.Module):
             assert mask.size(0)==batch and mask.size(1)==tokens, "mask must have same batch size and max tokens as x"
         else:
             mask = torch.ones((batch, tokens), dtype=x.dtype).to(get_device(x))
-        
+    
         if max_output is None: 
             max_output = tokens
 
