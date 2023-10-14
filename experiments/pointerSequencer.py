@@ -22,6 +22,7 @@ from dominoes import transformers
 device = 'cuda' if torchCuda.is_available() else 'cpu'
 
 # can edit this for each machine it's being used on
+savePath = Path('.') / 'experiments' / 'savedNetworks'
 resPath = Path(mainPath) / 'experiments' / 'savedResults'
 prmsPath = Path(mainPath) / 'experiments' / 'savedParameters'
 figsPath = Path(mainPath) / 'docs' / 'media'
@@ -29,7 +30,6 @@ figsPath = Path(mainPath) / 'docs' / 'media'
 # method for returning the name of the saved network parameters (different save for each possible opponent)
 def getFileName():
     return "pointerSequencer"
-    
 
 def handleArguments():
     parser = argparse.ArgumentParser(description='Run pointer dominoe sequencing experiment.')
@@ -215,7 +215,7 @@ def trainTestModel():
         'testLoss': testLoss,
     }
 
-    return results
+    return results, pnet
 
 
 def plotResults(results, args):
@@ -249,11 +249,12 @@ if __name__=='__main__':
     
     if not(args.justplot):
         # train and test pointerNetwork 
-        results = trainTestModel()
+        results, pnet = trainTestModel()
         
         # save results if requested
         if not(args.nosave):
             # Save agent parameters
+            torch.save(pnet, savePath / getFileName())
             np.save(prmsPath / getFileName(), vars(args))
             np.save(resPath / getFileName(), results)
         
