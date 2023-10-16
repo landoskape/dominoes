@@ -400,7 +400,7 @@ class PointerNetwork(nn.Module):
             x = elayer(x, mask=mask)
         return x
         
-    def forward(self, x, mask=None, max_output=None): 
+    def forward(self, x, mask=None, decode_mask=None, max_output=None): 
         """
         forward method for pointer network with possible masked input
         
@@ -418,7 +418,14 @@ class PointerNetwork(nn.Module):
             assert mask.size(0)==batch and mask.size(1)==tokens, "mask must have same batch size and max tokens as x"
         else:
             mask = torch.ones((batch, tokens), dtype=x.dtype).to(get_device(x))
-    
+
+        if decode_mask is not None:
+            assert decode_mask.ndim == 2, "decode_mask must have shape (batch, tokens)"
+            assert decode_mask.size(0)==batch and decode_mask.size(1)==tokens, "decode_mask must have same batch size and max tokens as x"
+        else:
+            decode_mask = torch.ones((batch, tokens), dtype=x.dtype).to(get_device(x))
+            decode_mask *= mask
+            
         if max_output is None: 
             max_output = tokens
 
@@ -441,13 +448,13 @@ class PointerNetwork(nn.Module):
                 decoder_context = self.decoder(decoder_input, decoder_context)
             elif self.decoder_method == 'attention':
                 contextInputs = torch.cat((decoder_input.unsqueeze(1), encodedRepresentation), dim=1)
-                contextMask = torch.cat((torch.ones((batch,1), dtype=mask.dtype).to(get_device(mask)), mask), dim=1)
+                contextMask = torch.cat((torch.ones((batch,1), dtype=mask.dtype).to(get_device(decode_mask)), decode_mask), dim=1)
                 decoder_context = self.decoder((decoder_context.unsqueeze(1), contextInputs), contextMask=contextMask).squeeze(1)
             else:
                 raise ValueError("decoder_method not recognized")
                 
             # use pointer attention to evaluate scores of each possible input given the context
-            score = self.pointer(encodedRepresentation, decoder_context, mask=mask, temperature=self.temperature)
+            score = self.pointer(encodedRepresentation, decoder_context, mask=decode_mask, temperature=self.temperature)
             
             # standard loss function (nll_loss) requires log-probabilities
             log_score = score if self.greedy else torch.log(score)
