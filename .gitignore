@@ -1,6 +1,7 @@
 # Saved files
 *.pkl
 *.npy
+*.pt # no pytorch files to github
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
