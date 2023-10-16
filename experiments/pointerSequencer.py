@@ -28,8 +28,8 @@ prmsPath = Path(mainPath) / 'experiments' / 'savedParameters'
 figsPath = Path(mainPath) / 'docs' / 'media'
 
 # method for returning the name of the saved network parameters (different save for each possible opponent)
-def getFileName():
-    return "pointerSequencer"
+def getFileName(network=False):
+    return "pointerSequencer"+('.pt' if network else '')
 
 def handleArguments():
     parser = argparse.ArgumentParser(description='Run pointer dominoe sequencing experiment.')
