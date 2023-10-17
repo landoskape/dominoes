@@ -5,7 +5,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.9
+  - python
   - pip
   - numpy
   - scipy
@@ -16,4 +16,4 @@ dependencies:
   - pytorch
   - torchvision
   - torchaudio
-  - pytorch-cuda=11.7
+  - pytorch-cuda=12.7
