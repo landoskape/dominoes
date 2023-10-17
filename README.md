@@ -17,11 +17,17 @@ This repository requires several packages that are available for download via
 the standard methods, including conda or pip. First, clone this repository to 
 your computer. Then, in a command window, change directory to wherever you 
 cloned the repository and use the `environment.yml` file to create a new conda 
-environment. 
+environment. Note: I highly recommend using mamba instead of conda. The best 
+way to do that is with 
+[miniforge](https://github.com/conda-forge/miniforge#mambaforge) but if you 
+want to use an existing conda setup then instructions are 
+[here](https://mamba.readthedocs.io/en/latest/mamba-installation.html#mamba-install).
+If you are using conda instead of mamba, replace `mamba` with `conda`, they 
+work identically (except mamba is faster!).
 
 ```
 cd /path/to/cloned/repository
-conda env create -f environment.yml
+mamba env create -f environment.yml
 ```
 
 Note: I have tested and developed this code on a Windows 10 machine so cannot 
@@ -34,12 +40,12 @@ packages, use the recommended command from the
 [pytorch website](https://pytorch.org/get-started/locally/).
 
 ```
-conda create -n dominoes
-conda activate dominoes
+mamba create -n dominoes
+mamba activate dominoes
 pip install <package_name> # go in order through the environment.yml file, ignore the pytorch packages
 
 # use whatever line of code is suggested from the pytorch website:
-conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
+mamba install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
 ```
 
 ## Documentation
