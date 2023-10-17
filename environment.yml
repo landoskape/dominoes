@@ -16,4 +16,4 @@ dependencies:
   - pytorch
   - torchvision
   - torchaudio
-  - pytorch-cuda=12.7
+  - pytorch-cuda=12.1
