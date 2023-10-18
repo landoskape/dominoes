@@ -37,7 +37,11 @@ fails, I would recommend creating an environment called "dominoes", then adding
 each package manually. For everything above pytorch in the `environment.yml` 
 file, just type `pip install <package_name>`. Then, for the pytorch/torch 
 packages, use the recommended command from the 
-[pytorch website](https://pytorch.org/get-started/locally/).
+[pytorch website](https://pytorch.org/get-started/locally/). Note that for you
+to use your GPU (if it's installed), the pytorch-cuda version needs to be the 
+same as whatever is installed on your computer. To figure this out, open a 
+command prompt and type `nvidia-smi`. It'll show you the CUDA Version in the 
+top right if it's installed. 
 
 ```
 mamba create -n dominoes
