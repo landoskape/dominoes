@@ -278,7 +278,7 @@ def argsort(seq):
     return sorted(range(len(seq)), key=seq.__getitem__)
 
 
-def dominoeUnevenBatch(batchSize, minSeq, maxSeq, listDominoes, dominoeValue, highestDominoe, ignoreIndex=-1):
+def dominoeUnevenBatch(batchSize, minSeq, maxSeq, listDominoes, dominoeValue, highestDominoe, ignoreIndex=-1, return_full=False):
     """
     retrieve a batch of dominoes and their target order given the value of each dominoe
 
@@ -351,4 +351,7 @@ def dominoeUnevenBatch(batchSize, minSeq, maxSeq, listDominoes, dominoeValue, hi
     sortIdx = [sortPad(val, maxSeqLength, ignoreIndex) for val in value] # pad with ignore index so nll_loss ignores them
     target = torch.stack([torch.LongTensor(idx) for idx in sortIdx])
 
-    return input, target, mask
+    if return_full:
+        return input, target, mask, selection
+    else:
+        return input, target, mask
