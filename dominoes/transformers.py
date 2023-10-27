@@ -355,13 +355,14 @@ class TransformerLayer(nn.Module):
     some inputs are only used to generate keys and values that modulate the 
     primary inputs. 
     """
-    def __init__(self, embedding_dim, heads=8, expansion=1, contextual=False, kqnorm=False):
+    def __init__(self, embedding_dim, heads=8, expansion=1, contextual=False, kqnorm=False, bias=False):
         super().__init__()
         
         self.embedding_dim = embedding_dim
         self.heads = heads
         self.contextual = contextual
         self.kqnorm = kqnorm
+        self.bias = bias
         assert type(expansion)==int and expansion>=1, f"expansion ({expansion}) must be a positive integer"
         assert embedding_dim % heads == 0, f"Embedding dimension ({embedding_dim}) should be divisible by the number of heads ({heads})"
 
@@ -372,9 +373,9 @@ class TransformerLayer(nn.Module):
             
         self.layerNorm1 = nn.LayerNorm(embedding_dim)
         self.ff = nn.Sequential(
-            nn.Linear(embedding_dim, embedding_dim*expansion),
+            nn.Linear(embedding_dim, embedding_dim*expansion, bias=bias),
             nn.ReLU(),
-            nn.Linear(embedding_dim*expansion, embedding_dim)
+            nn.Linear(embedding_dim*expansion, embedding_dim, bias=bias)
         )
         self.layerNorm2 = nn.LayerNorm(embedding_dim)
 
@@ -428,7 +429,7 @@ class PointerModule(nn.Module):
             
         elif self.pointer_method == 'PointerTransformer':
             # output of the network uses a pointer attention layer with a transformer
-            kwargs = {'heads':self.heads, 'expansion':1, 'kqnorm':self.kqnorm}
+            kwargs = {'heads':self.heads, 'expansion':1, 'kqnorm':self.kqnorm, 'bias':self.bias}
             self.pointer = PointerTransformer(self.embedding_dim, log_softmax=self.greedy, **kwargs)
 
         elif self.pointer_method == 'PointerAttention':
