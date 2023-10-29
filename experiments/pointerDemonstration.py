@@ -33,6 +33,7 @@ def getFileName():
 def handleArguments():
     parser = argparse.ArgumentParser(description='Run pointer demonstration.')
     parser.add_argument('-hd','--highest-dominoe', type=int, default=9, help='the highest dominoe in the board')
+    parser.add_argument('--train-fraction', type=float, default=0.75, help='the fraction of dominoes in the set to train with')
     parser.add_argument('-mn','--min-seq-length', type=int, default=4, help='the minimum tokens per sequence')
     parser.add_argument('-mx','--max-seq-length', type=int, default=12, help='the maximum tokens per sequence')
     parser.add_argument('-bs','--batch-size',type=int, default=512, help='number of sequences per batch')
@@ -49,6 +50,7 @@ def handleArguments():
     args = parser.parse_args()
 
     assert args.min_seq_length <= args.max_seq_length, "min seq length has to be less than or equal to max seq length"
+    assert args.train_fraction > 0 and args.train_fraction <= 1, "train fraction must be greater than 0 and less than or equal to 1"
     
     return args
     
@@ -59,8 +61,23 @@ def trainTestModel():
     # get values from the argument parser
     highestDominoe = args.highest_dominoe
     listDominoes = df.listDominoes(highestDominoe)
+
+    # create full set of dominoes (representing non-doubles in both ways)
+    doubleDominoes = listDominoes[:,0] == listDominoes[:,1]
+    nonDoubleReverse = listDominoes[~doubleDominoes][:,[1,0]] # represent each dominoe in both orders
+
+    # list of full set of dominoe representations and value of each
+    listDominoes = np.concatenate((listDominoes, nonDoubleReverse), axis=0)
     dominoeValue = np.sum(listDominoes, axis=1)
 
+    # subset dominoes
+    keepFraction = args.train_fraction
+    keepNumber = int(len(listDominoes)*keepFraction)
+    keepIndex = np.sort(np.random.permutation(len(listDominoes))[:keepNumber]) # keep random fraction (but sort in same way)
+    keepDominoes = listDominoes[keepIndex]
+    keepValue = dominoeValue[keepIndex]
+
+    # other input and network parameters
     minSeqLength = args.min_seq_length
     maxSeqLength = args.max_seq_length
     batchSize = args.batch_size
@@ -95,7 +112,7 @@ def trainTestModel():
         #input, target = dominoeBatch(batchSize, cSeqLength, listDominoes, dominoeValue, highestDominoe)
         #input, target = input.to(device), target.to(device)
 
-        input, target, mask = df.dominoeUnevenBatch(batchSize, minSeqLength, maxSeqLength, listDominoes, dominoeValue, highestDominoe, ignoreIndex=ignoreIndex)
+        input, target, mask = df.dominoeUnevenBatch(batchSize, minSeqLength, maxSeqLength, keepDominoes, keepValue, highestDominoe, ignoreIndex=ignoreIndex)
         input, target, mask = input.to(device), target.to(device), mask.to(device)
 
         # zero gradients, get output of network
