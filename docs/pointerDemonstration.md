@@ -30,17 +30,12 @@ The first `highestDominoe+1` elements represent the first value of the dominoe
 and the second `highestDominoe+1` elements represent the second value of the
 dominoe. Here are some examples for `highestDominoe = 3`:
 
-(0 | 0): [1, 0, 0, 0, 1, 0, 0, 0]
-
-(0 | 1): [1, 0, 0, 0, 0, 1, 0, 0]
-
-(0 | 2): [1, 0, 0, 0, 0, 0, 1, 0]
-
-(0 | 3): [1, 0, 0, 0, 0, 0, 0, 1]
-
-(1 | 0): [0, 1, 0, 0, 1, 0, 0, 0]
-
-(2 | 1): [0, 0, 1, 0, 0, 1, 0, 0]
+(0 | 0): `[1, 0, 0, 0, 1, 0, 0, 0]`  
+(0 | 1): `[1, 0, 0, 0, 0, 1, 0, 0]`  
+(0 | 2): `[1, 0, 0, 0, 0, 0, 1, 0]`  
+(0 | 3): `[1, 0, 0, 0, 0, 0, 0, 1]`  
+(1 | 0): `[0, 1, 0, 0, 1, 0, 0, 0]`  
+(2 | 1): `[0, 0, 1, 0, 0, 1, 0, 0]`  
 
 ### Target
 The value of each dominoe is the sum of the two values on the dominoe. For 
@@ -49,6 +44,10 @@ to sort dominoes based on their value, from highest to lowest, and output them
 in order using a pointer network. Note that some dominoes have equal value in 
 a set, but because the dominoes are always initialized in the same order, 
 equal value dominoes are always sorted in the same way. 
+
+The target is represented as a list of integers corresponding to the arg sort
+of the dominoe values for each hand. As an example, if a hand was composed of 
+the 6 dominoes shown above as an example, the target is `[5,3,2,4,1,0]`.
 
 ### Network Architecture
 The pointer network architecture consists of two stages, a forward encoder and
