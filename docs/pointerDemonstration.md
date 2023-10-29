@@ -99,14 +99,51 @@ The main result of the problem is shown here:
 ![pointer toy figure](media/pointerDemonstration.png)
 
 As you can see, the network quickly learns to sort dominoes by their value 
-effectively. Pretty cool! (As an aside, I think it's pretty awesome that each
-batch has data with uneven sequence lengths, and the network can handle that 
-kind of input.)
+effectively. Pretty cool! There are two key observations to make that I'd like
+to discuss: the lack of an increase in loss for the testing phase and the loss
+spikes during the training phase. 
+
+### Test loss is similar to final training loss
+The testing loss is essentially identical to the final training loss. This is 
+despite the fact that the network is all of a sudden seeing new dominoes 
+during the testing phase (see above for explanation of the hold out 
+procedure). What this means is that the network doesn't simply learn a look up
+table between input and output, instead it really learns exactly what the task
+is: sort dominoes based on the sum of their value.
+
+### Loss spikes during training
+During the training phase, there are some pretty large spikes in the loss. 
+What is going on? To understand why those loss spikes occur, take a look at 
+the following figure. It shows a highlight of a loss spike on the top panel 
+and the error as a function of sequence position in the bottom panel. (Note
+that this is from a different training run than the one shown above).
+
+![pointer loss spike](media/pointerDemonstration_lossSpike.png)
+
+The error is defined as the average difference in the max score and the target
+score for each position. Note that right before the loss spike (epoch 1357), 
+there is a small spike in the target error for the higher (e.g. later) 
+positions. Interestingly, the target error increases bit by bit each position,
+with almost no excess error for the first few outputs, but a lot by the last 
+few. Then, in the next training epoch (epoch 1358), there's a huge spike in 
+error at every position. 
+
+What this indicates is that as the network is generating sequential output, it
+sometimes accumulates an error that gets bigger and bigger throughout the 
+sequence. If this is too big, the network receives a large error signal from 
+the backprop algorithm which adjusts the weights so much that it loses most of
+it's progress. This is interesting! Maybe there's a way to teach a pointer 
+network how to filter error based on whether it's likely to be meaningful or 
+due to these shift-based failure modes. 
 
 
-<!---The third panel of the figure shows that the lost 
-depends on the sequence size, which makes sense because there is more room 
-for error and uncertainty in a longer list of dominoes to sort, and the 
-negative log-likelihood loss function penalizes the network for uncertainty. ---!>
+
+
+
+
+
+
+
+
 
 

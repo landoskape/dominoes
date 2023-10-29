@@ -64,7 +64,6 @@ the agents I have developed.
         - [Anatomy of a dominoe agent](docs/agents.md)
         - [Basic policies](docs/basicPolicies.md)
     - [Multiplayer ELO System](docs/multiplayerElo.md)
-    - [Basic Analysis](docs/basicAnalysis.md)
     - [Tutorials and basic usage](docs/tutorials.md)
 2. [Experiments](experiments)
     - [Pointer Network Toy Problem](docs/pointerDemonstration.md)
