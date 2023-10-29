@@ -121,12 +121,12 @@ that this is from a different training run than the one shown above).
 ![pointer loss spike](media/pointerDemonstration_lossSpike.png)
 
 The error is defined as the average difference in the max score and the target
-score for each position. Note that right before the loss spike (epoch 1357), 
-there is a small spike in the target error for the higher (e.g. later) 
-positions. Interestingly, the target error increases bit by bit each position,
-with almost no excess error for the first few outputs, but a lot by the last 
-few. Then, in the next training epoch (epoch 1358), there's a huge spike in 
-error at every position. 
+score for each position. Right before the loss spike (epoch 1357), there is a 
+small spike in the target error for the higher (e.g. later) positions. 
+Interestingly, the target error increases bit by bit each position, with 
+almost no excess error for the first few outputs, but a lot by the last few. 
+Then, in the next training epoch (epoch 1358), there's a huge spike in error 
+at every position. 
 
 What this indicates is that as the network is generating sequential output, it
 sometimes accumulates an error that gets bigger and bigger throughout the 
