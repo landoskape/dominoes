@@ -33,10 +33,10 @@ mamba env create -f environment.yml
 Note: I have tested and developed this code on a Windows 10 machine so cannot 
 guarantee that it works on other operating systems. I think most compatibility
 issues will relate to pytorch and nvidia tools, so if the environment creation 
-fails, I would recommend creating an environment called "dominoes", then adding 
-each package manually. For everything above pytorch in the `environment.yml` 
-file, just type `pip install <package_name>`. Then, for the pytorch/torch 
-packages, use the recommended command from the 
+fails, I would recommend commenting out the lines in the `environment.yml` 
+file related to pytorch, (`pytorch`, `torchvision`, `torchaudio`, 
+`pytorch-cuda=12.1`), creating the environment as above, then installing the 
+torch packages as recommended from the  
 [pytorch website](https://pytorch.org/get-started/locally/). Note that for you
 to use your GPU (if it's installed), the pytorch-cuda version needs to be the 
 same as whatever is installed on your computer. To figure this out, open a 
@@ -53,10 +53,11 @@ mamba install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvi
 ```
 
 ## Documentation
-In lieu of a wiki (which I found out about after writing all these md files),
-this table of contents links to documentation that explains how to use this 
-repository and presents analyses of the agents I have developed. 
-1. Groundwork for Dominoes Package in Python
+Until I learn how to build a project page, the presentation and documentation
+of this repository is going to live on markdown files in the [docs](docs) 
+folder. These files explain how to use this repository and present analyses of
+the agents I have developed. 
+1. Groundwork for Dominoes in Python
     - [Rules of the game](docs/dominoeRules.md) -- (not written yet, sorry!)
     - [Gameplay object](docs/gameplay.md)
     - Dominoe Agents (Code structure and hand-crafted policies)
@@ -66,8 +67,8 @@ repository and presents analyses of the agents I have developed.
     - [Basic Analysis](docs/basicAnalysis.md)
     - [Tutorials and basic usage](docs/tutorials.md)
 2. [Experiments](experiments)
-    - Transformer and Pointer Network Code -- (not written yet, sorry)
     - [Pointer Network Toy Problem](docs/pointerDemonstration.md)
+    - [Pointer Network Line Sequencer](docs/pointerSequencer.md)
 4. Reinforcement Learning Agents
    - [The TD-Lambda Algorithm](docs/TDLambdaAgents.md)
    - TD-Lambda Agents -- (not written yet, sorry)
