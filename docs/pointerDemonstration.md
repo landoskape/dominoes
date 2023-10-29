@@ -31,10 +31,15 @@ and the second `highestDominoe+1` elements represent the second value of the
 dominoe. Here are some examples for `highestDominoe = 3`:
 
 (0 | 0): [1, 0, 0, 0, 1, 0, 0, 0]
+
 (0 | 1): [1, 0, 0, 0, 0, 1, 0, 0]
+
 (0 | 2): [1, 0, 0, 0, 0, 0, 1, 0]
+
 (0 | 3): [1, 0, 0, 0, 0, 0, 0, 1]
+
 (1 | 0): [0, 1, 0, 0, 1, 0, 0, 0]
+
 (2 | 1): [0, 0, 1, 0, 0, 1, 0, 0]
 
 ### Target
