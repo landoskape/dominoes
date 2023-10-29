@@ -50,17 +50,16 @@ of the dominoe values for each hand. As an example, if a hand was composed of
 the 6 dominoes shown above as an example, the target is `[5,3,2,4,1,0]`.
 
 ### Network Architecture
-The pointer network architecture consists of two stages, a forward encoder and
-a decoder. The encoder generates an embedding of each element of an input 
+The pointer network architecture consists of two stages, an encoder and a 
+decoder. The encoder generates an embedding of each element of an input 
 sequence, along with a context vector that describes the state of the whole
-set of inputs. The decoder updates the context vector based on the last output
-of the network, then chooses one of the input elements to output next by 
-combining the embedded representations with the state (this is the "pointer"
-component).
+set of inputs. The decoder first updates the context vector based on the last 
+output of the network. Second, it chooses one of the input elements to output 
+next by combining the embedded representations with the context vector.
 
-In the original paper by Vinyals et al., the forward encoder is an LSTM RNN.
-In this implementation, I have replaced the LSTM with a transfomer. Then, the
-context vector is just a sum of the transformed input representations. 
+In the original paper by Vinyals et al., the encoder is an LSTM RNN. In this
+implementation, I have replaced the LSTM with a transfomer. Then, the context
+vector is just a sum of the transformed input representations. 
 
 ![pointer encoder](media/schematics/pointerEncoderArchitecture.png)
 
