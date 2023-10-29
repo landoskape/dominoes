@@ -272,6 +272,43 @@ class PointerStandard(nn.Module):
         else:
             # convert to probabilities
             return torch.nn.functional.softmax(u/temperature, dim=-1)
+
+
+class PointerDot(nn.Module):
+    """
+    PointerDot Module (variant of the original paper)
+
+    log_softmax is preferable if the probabilities of each token are not 
+    needed. However, if token embeddings are combined via their probabilities,
+    then softmax is required, so log_softmax should be set to `False`.
+    """
+    def __init__(self, emb, log_softmax=False):
+        super().__init__()
+        self.emb = emb
+        self.log_softmax = log_softmax
+        self.W1 = nn.Linear(emb, emb, bias=False)
+        self.W2 = nn.Linear(emb, emb, bias=False)
+
+    def forward(self, encoded, decoder_state, mask=None, temperature=1):
+        # first transform encoded representations and decoder states 
+        transformEncoded = self.W1(encoded)
+        transformDecoded = self.W2(decoder_state).unsqueeze(2) # unsqueeze for broadcasting on token dimension
+
+        # instead of add, tanh, and project on learnable weights, 
+        # just dot product the encoded representations with the decoder "pointer"
+        u = torch.bmm(transformEncoded, transformDecoded).squeeze(2)
+        
+        if mask is not None:
+            # u += (mask + 1e-45).log()
+            # this produces nans for any row that is fully masked 
+            u.masked_fill_(mask==0, -200) # only use valid tokens
+
+        if self.log_softmax:
+            # convert to log scores
+            return torch.nn.functional.log_softmax(u/temperature, dim=1)
+        else:
+            # convert to probabilities
+            return torch.nn.functional.softmax(u/temperature, dim=1)
             
 
 class PointerAttention(nn.Module):
@@ -426,15 +463,19 @@ class PointerModule(nn.Module):
         if self.pointer_method == 'PointerStandard':
             # output of the network uses a pointer attention layer as described in the original paper
             self.pointer = PointerStandard(self.embedding_dim, log_softmax=self.greedy)
+
+        elif self.pointer_method == 'PointerDot':
+            self.pointer = PointerDot(self.embedding_dim, log_softmax=self.greedy)
             
+        elif self.pointer_method == 'PointerAttention':
+            kwargs = {'heads':self.heads, 'kqnorm':self.kqnorm}
+            self.pointer = PointerAttention(self.embedding_dim, log_softmax=self.greedy, **kwargs)
+
         elif self.pointer_method == 'PointerTransformer':
             # output of the network uses a pointer attention layer with a transformer
             kwargs = {'heads':self.heads, 'expansion':1, 'kqnorm':self.kqnorm, 'bias':self.bias}
             self.pointer = PointerTransformer(self.embedding_dim, log_softmax=self.greedy, **kwargs)
-
-        elif self.pointer_method == 'PointerAttention':
-            kwargs = {'heads':self.heads, 'kqnorm':self.kqnorm}
-            self.pointer = PointerAttention(self.embedding_dim, log_softmax=self.greedy, **kwargs)
+            
         else:
             raise ValueError("the pointer_method was not set correctly"
                              f"it should either be 'PointerStandard' or 'PointerTransformer' but it is {self.pointer_method}")
@@ -456,9 +497,11 @@ class PointerModule(nn.Module):
     def get_decoder_state(self, decoder_input, decoder_context):
         if self.pointer_method == 'PointerStandard':
             decoder_state = decoder_context
-        elif self.pointer_method == 'PointerTransformer':
-            decoder_state = torch.cat((decoder_input.unsqueeze(1), decoder_context.unsqueeze(1)), dim=1)
+        elif self.pointer_method == 'PointerDot':
+            decoder_state = decoder_context
         elif self.pointer_method == 'PointerAttention':
+            decoder_state = torch.cat((decoder_input.unsqueeze(1), decoder_context.unsqueeze(1)), dim=1)
+        elif self.pointer_method == 'PointerTransformer':
             decoder_state = torch.cat((decoder_input.unsqueeze(1), decoder_context.unsqueeze(1)), dim=1)
         else:
             raise ValueError(f"Pointer method not recognized, somehow it has changed to {self.pointer_method}")
