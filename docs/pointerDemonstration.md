@@ -108,8 +108,8 @@ The testing loss is essentially identical to the final training loss. This is
 despite the fact that the network is all of a sudden seeing new dominoes 
 during the testing phase (see above for explanation of the hold out 
 procedure). What this means is that the network doesn't simply learn a look up
-table between input and output, instead it really learns exactly what the task
-is: sort dominoes based on the sum of their value.
+table between input and output. Insteadm it really learns exactly what the 
+task is: sort dominoes based on the sum of their value.
 
 ### Loss spikes during training
 During the training phase, there are some pretty large spikes in the loss. 
@@ -135,6 +135,10 @@ the backprop algorithm which adjusts the weights so much that it loses most of
 it's progress. This is interesting! Maybe there's a way to teach a pointer 
 network how to filter error based on whether it's likely to be meaningful or 
 due to these shift-based failure modes. 
+
+Also interesting: the return to good performance is much faster after one of 
+these spikes than it would be at a similar training loss after initialization.
+Curious.
 
 
 
