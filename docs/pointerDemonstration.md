@@ -7,7 +7,12 @@ pointer networks to sequence lines with reinforcement learning first!). This
 documentation file shows how the transformers and pointer networks work, and
 displays the results of a simple toy problem solved by pointer networks. 
 
-## Toy Problem
+You can run this toy problem yourself with the following command:
+```
+python experiments/pointerDemonstration.py
+```
+
+## Toy Problem Explanation
 The toy problem is written as an experiment called 
 [pointerDemonstration](../experiments/pointerDemonstration.py). It trains a
 pointer network to sort dominoes by the value on each dominoe given a random
@@ -15,10 +20,11 @@ set of dominoes in random order. Due to the magic (engineering) of pointer
 networks, it can do this on input data with a variable set size. Since it's a
 simple problem, the pointer network learns the task in just a few minutes. 
 
-You can run this toy problem yourself with the following command:
-```
-python experiments/pointerDemonstration.py
-```
+As a means of testing whether the network really learns the values of dominoes
+rather than just a lookup table of inputs to outputs, the training set 
+includes only 2/3rds of the possible dominoe representations but the testing
+is done with all of them. 
+
 
 ### Input
 A full set of dominoes is a set of paired values (combinations with 
@@ -36,6 +42,9 @@ dominoe. Here are some examples for `highestDominoe = 3`:
 (0 | 3): `[1, 0, 0, 0, 0, 0, 0, 1]`  
 (1 | 0): `[0, 1, 0, 0, 1, 0, 0, 0]`  
 (2 | 1): `[0, 0, 1, 0, 0, 1, 0, 0]`  
+
+Dominoes with non-equal value pairs (e.g. `(1 | 2)`) are represented in the 
+dataset in both directions (it includes the `(2 | 1)`) representation.
 
 ### Target
 The value of each dominoe is the sum of the two values on the dominoe. For 
@@ -79,6 +88,10 @@ however many times is requested.
 ### Training
 To train the network, I used the Adam optimizer with $lr=1e^{-3}$ and L2 
 regularization with $\lambda=1e^{-5}$.
+
+### Testing
+Testing is exactly the same as training, except the remaining 1/3 of dominoe
+pairs are returned to the dataset. 
 
 ## Results
 
