@@ -61,6 +61,7 @@ In the original paper by Vinyals et al., the encoder is an LSTM RNN. In this
 implementation, I have replaced the LSTM with a transfomer. Then, the context
 vector is just a sum of the transformed input representations. 
 
+![pointer encoder](media/schematics/pointerEncoderArchitecture.png)
 
 The decoder stage first updates the context vector. In the original paper, 
 this is performed with a second RNN in which the context vector is 
