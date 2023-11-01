@@ -11,7 +11,9 @@ import argparse
 from pathlib import Path
 from tqdm import tqdm
 import numpy as np
+import scipy as sp
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import torch
 import torch.cuda as torchCuda
 
@@ -27,8 +29,11 @@ prmsPath = Path(mainPath) / 'experiments' / 'savedParameters'
 figsPath = Path(mainPath) / 'docs' / 'media'
 
 # method for returning the name of the saved network parameters (different save for each possible opponent)
-def getFileName():
-    return "pointerDemonstration"
+def getFileName(extra=None):
+    baseName = "pointerDemonstration"
+    if extra is not None:
+        baseName = baseName + f"_{extra}"
+    return baseName
 
 def handleArguments():
     parser = argparse.ArgumentParser(description='Run pointer demonstration.')
@@ -77,18 +82,19 @@ def trainTestModel():
     keepDominoes = listDominoes[keepIndex]
     keepValue = dominoeValue[keepIndex]
 
-    # other input and network parameters
+    # other input and training parameters
     minSeqLength = args.min_seq_length
     maxSeqLength = args.max_seq_length
     batchSize = args.batch_size
-    
+    trainEpochs = args.train_epochs
+    testEpochs = args.test_epochs
+
+    # network parameters
     input_dim = 2*(highestDominoe+1)
     embedding_dim = args.embedding_dim
     heads = args.heads
     encoding_layers = args.encoding_layers
     greedy = args.greedy
-    trainEpochs = args.train_epochs
-    testEpochs = args.test_epochs
     
     # Create a pointer network
     pnet = transformers.PointerNetwork(input_dim, embedding_dim, encoding_layers=encoding_layers, heads=heads, kqnorm=True, decode_with_gru=False, greedy=greedy)
@@ -100,18 +106,11 @@ def trainTestModel():
     
     # Train network
     print("Training network...")
-    # trainSeqLength = torch.zeros(trainEpochs)
     trainLoss = torch.zeros(trainEpochs)
-    # trainPositionError = [None]*trainEpochs
+    trainPositionError = torch.full((trainEpochs, maxSeqLength), torch.nan) # keep track of where there was error
+    trainMaxScore = torch.full((trainEpochs, maxSeqLength), torch.nan) # keep track of confidence of model
     for epoch in tqdm(range(trainEpochs)):
-        
-        # right now elements in a batch have to have the same sequence length 
-        #cSeqLength = np.random.randint(minSeqLength, maxSeqLength+1)
-
-        # create a data batch and put it on the right device
-        #input, target = dominoeBatch(batchSize, cSeqLength, listDominoes, dominoeValue, highestDominoe)
-        #input, target = input.to(device), target.to(device)
-
+        # generate batch
         input, target, mask = df.dominoeUnevenBatch(batchSize, minSeqLength, maxSeqLength, keepDominoes, keepValue, highestDominoe, ignoreIndex=ignoreIndex)
         input, target, mask = input.to(device), target.to(device), mask.to(device)
 
@@ -128,56 +127,76 @@ def trainTestModel():
         loss.backward()
         optimizer.step()
 
-        # # the loss spikes sometimes, and I think it might be due to the autoregressive component of pointer networks.
-        # # i.e., if the network gets the first element wrong, it'll get the rest of the elements right given the one it chose... but this will inflate the training loss
-        # # anyway, this metric is a way to measure how bad the prediction is as a function of position in sequence to try to identify that issue
-        # t = torch.gather(unrolled, dim=1, index=target.view(-1).unsqueeze(-1)).cpu().detach().view(batchSize, cSeqLength)
-        # m = torch.max(unrolled, dim=1)[0].cpu().detach().view(batchSize, cSeqLength)
-        # trainPositionError[epoch] = torch.mean(m-t,dim=0)
-
         # save training data
         trainLoss[epoch] = loss.item()
-        # trainSeqLength[epoch] = cSeqLength
+
+        # measure position dependent error 
+        with torch.no_grad():
+            # start by getting score for target at each position 
+            target_noignore = target.clone().masked_fill_(target==-1, 0)
+            target_score = torch.gather(unrolled, dim=1, index=target_noignore.view(-1,1)).view(batchSize, maxSeqLength)
+            # then get max score for each position (which would correspond to the score of the actual choice)
+            max_score = torch.max(unrolled, dim=1)[0].view(batchSize, maxSeqLength)
+            # then calculate position error
+            pos_error = max_score - target_score # high if the chosen score is much bigger than the target score
+            # now remove locations where it is masked out
+            pos_error.masked_fill_(mask==0, torch.nan)
+            # add to accounting
+            trainPositionError[epoch] = torch.nansum(pos_error, dim=0)
+            trainMaxScore[epoch] = torch.nanmean(max_score, dim=0)
+            
 
     # Test network - same thing as in testing but without updates to model
     with torch.no_grad():
         print("Testing network...")
         pnet.eval()
         
-        # testSeqLength = torch.zeros(testEpochs)
         testLoss = torch.zeros(testEpochs)
-        # testPositionError = [None]*testEpochs
         for epoch in tqdm(range(testEpochs)):
-            # input, target = getBatch(batchSize, seqLength, input_dim)
-            # cSeqLength = np.random.randint(minSeqLength, maxSeqLength+1)
-            
-            # input, target = dominoeBatch(batchSize, cSeqLength, listDominoes, dominoeValue, highestDominoe)
-            # input, target = input.to(device), target.to(device)
-
+            # generate batch
             input, target, mask = df.dominoeUnevenBatch(batchSize, minSeqLength, maxSeqLength, listDominoes, dominoeValue, highestDominoe, ignoreIndex=ignoreIndex)
             input, target, mask = input.to(device), target.to(device), mask.to(device)
 
+            # get network output
             log_scores, choices = pnet(input)
-            
+
+            # measure test loss
             unrolled = log_scores.view(-1, log_scores.size(-1))
             loss = torch.nn.functional.nll_loss(unrolled, target.view(-1), ignore_index=ignoreIndex)
-            
-            # t = torch.gather(unrolled, dim=1, index=target.view(-1).unsqueeze(-1)).cpu().detach().view(batchSize, cSeqLength)
-            # m = torch.max(unrolled, dim=1)[0].cpu().detach().view(batchSize, cSeqLength)
-            # testPositionError[epoch] = torch.mean(m-t,dim=0)
-            testLoss[epoch] = loss.item()
-            # testSeqLength[epoch] = cSeqLength
 
+            # save testing loss
+            testLoss[epoch] = loss.item()
+            
     results = {
         'trainLoss': trainLoss,
         'testLoss': testLoss,
+        'trainPositionError': trainPositionError,
+        'trainMaxScore': trainMaxScore,
     }
 
     return results
 
 
 def plotResults(results, args):
-    fig, ax = plt.subplots(1,2,figsize=(8,4))
+    # Start by finding loss spikes
+    pks = sp.signal.find_peaks(results['trainLoss'], height=1.5, threshold=0.2, distance=100)[0]
+    num_pks = len(pks)
+    
+    # Get spike-triggered loss trajectory and position-dependent error
+    epochs_before = 7
+    epochs_after = 20
+    epochs_xval = range(-epochs_before, epochs_after)
+    total_epochs = epochs_before + epochs_after
+    c_loss = torch.full((num_pks, total_epochs), torch.nan)
+    c_pos_error = torch.full((num_pks, total_epochs, results['trainPositionError'].shape[1]), torch.nan) 
+    c_max_score = torch.full((num_pks, total_epochs, results['trainMaxScore'].shape[1]), torch.nan) 
+    for ii, pp in enumerate(pks):
+        c_loss[ii] = results['trainLoss'][pp-epochs_before:pp+epochs_after]
+        c_pos_error[ii] = results['trainPositionError'][pp-epochs_before:pp+epochs_after,:]
+        c_max_score[ii] = results['trainMaxScore'][pp-epochs_before:pp+epochs_after,:]
+    
+        
+    fig, ax = plt.subplots(1,2,figsize=(8,4), layout='constrained')
     ax[0].plot(range(args.train_epochs), results['trainLoss'], color='k', lw=1)
     ax[0].set_xlabel('Epoch')
     ax[0].set_ylabel('Loss')
@@ -191,14 +210,51 @@ def plotResults(results, args):
     ax[1].set_ylim(yMin, yMax)
     ax[1].set_title('Testing Loss')
 
-    # ax[2].scatter(results['testSeqLength'], results['testLoss'], color='b', alpha=0.5)
-    # ax[2].set_xlabel('Sequence Length')
-    # ax[2].set_ylabel('Testing Loss')
-    # # ax[2].set_ylim(yMin, yMax)
-    # ax[2].set_title('Test Loss vs. Sequence Length')
-
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName()))
+    
+    plt.show()
+
+    # Then show loss-spike highlight figure
+    fig, ax = plt.subplots(2,1,figsize=(7,6), layout='constrained', sharex=True)
+    ax[0].plot(epochs_xval, c_loss.numpy().T, color='k', lw=2)
+    ax[0].set_xlabel('Epoch Re: Loss Spike')
+    ax[0].set_ylabel('Loss')
+    ax[0].set_ylim(0)
+    ax[0].set_title('Loss Spikes')
+    
+    cmap = mpl.colormaps['brg'].resampled(results['trainPositionError'].shape[1])
+    for ii in range(c_pos_error.shape[2]):
+        ax[1].plot(epochs_xval, torch.mean(c_pos_error[:,:,ii], dim=0).numpy(), lw=2, color=cmap(ii), label=f"P{ii}")
+    ax[1].set_xlabel('Epoch Re: Loss Spike')
+    ax[1].set_ylabel('Target Error')
+    ax[1].set_title('Output Position Dependent Error')
+    ax[1].legend(fontsize=8)
+
+    if not(args.nosave):
+        plt.savefig(str(figsPath/getFileName('lossSpike')))
+    
+    plt.show()
+
+    # Then show confidence around loss-spike
+    fig, ax = plt.subplots(1,2,figsize=(10,3), layout='constrained', sharey=True)
+    for ii in range(c_pos_error.shape[2]):
+        ax[0].plot(epochs_xval, torch.exp(torch.mean(c_max_score[:,:,ii], dim=0)).numpy(), lw=2, color=cmap(ii), label=f"P{ii}")
+    ax[0].set_xlabel('Epoch Re: Loss Spike')
+    ax[0].set_ylabel('P(choice)')
+    ax[0].set_ylim(0, 1)
+    ax[0].set_title('Position Dependent Confidence Post Spike')
+
+    avg_until = epochs_before//2
+    ax[1].plot(range(c_pos_error.shape[2]), torch.exp(torch.mean(c_max_score[:,:avg_until], dim=(0,1))).numpy(), lw=2, color='k')
+    for ii in range(c_pos_error.shape[2]):
+        ax[1].plot(ii, torch.exp(torch.mean(c_max_score[:,:avg_until,ii])).numpy(), marker='o', color=cmap(ii))
+        
+    ax[1].set_xlabel('Sequence Position')
+    ax[1].set_ylabel('P(choice)')
+    ax[1].set_title('Output Confidence')
+    if not(args.nosave):
+        plt.savefig(str(figsPath/getFileName('lossSpike_confidence')))
     
     plt.show()
     

@@ -114,31 +114,54 @@ task is: sort dominoes based on the sum of their value.
 ### Loss spikes during training
 During the training phase, there are some pretty large spikes in the loss. 
 What is going on? To understand why those loss spikes occur, take a look at 
-the following figure. It shows a highlight of a loss spike on the top panel 
-and the error as a function of sequence position in the bottom panel. (Note
-that this is from a different training run than the one shown above).
+the following figure. It shows a few loss-spikes (as idenitified by scipy's 
+find-peaks method) in the top panel, with the loss-spike triggered average of
+the error as a function of output sequence position in the bottom panel.
 
 ![pointer loss spike](media/pointerDemonstration_lossSpike.png)
 
 The error is defined as the average difference in the max score and the target
-score for each position. Right before the loss spike (epoch 1357), there is a 
-small spike in the target error for the higher (e.g. later) positions. 
-Interestingly, the target error increases bit by bit each position, with 
-almost no excess error for the first few outputs, but a lot by the last few. 
-Then, in the next training epoch (epoch 1358), there's a huge spike in error 
-at every position. 
+score for each position. (The score is the log-probability for each option, 
+and the max score is the one that the model "chose" for each step). 
 
-What this indicates is that as the network is generating sequential output, it
-sometimes accumulates an error that gets bigger and bigger throughout the 
-sequence. If this is too big, the network receives a large error signal from 
-the backprop algorithm which adjusts the weights so much that it loses most of
-it's progress. This is interesting! Maybe there's a way to teach a pointer 
-network how to filter error based on whether it's likely to be meaningful or 
+Right before the loss spike, there is a small increase in error for the middle
+positions (purple to brown on the colormap). These same positions are the ones
+that spike in error when the loss gets very high. Interestingly, the early and
+late positions are somewhat immune from this spike in error. Why would this
+be?
+
+In this next figure, I'm plotting the "confidence" (e.g. the max probability) 
+of each choice as a function of sequence position. As before, it's a
+loss-spike triggered average of the same epochs. On the right is the baseline
+confidence for each position. 
+
+![pointer loss spike confidence](media/pointerDemonstration_lossSpike_confidence.png)
+
+What this indicates is that the network is less confident about later output
+positions, and least confident about the middle positions. I conclude two
+things from this:
+
+- The pointer network architecture may accumulate uncertainty if it is trained
+  on problems that require it to produce long output sequences.
+- In this particular problem, the middle choices are harder (probably because
+  of the way I posed the problem, see sorting issues in the
+  [target](###Target) section above.
+
+These two points probably explain how the loss spikes occur -- sometimes the
+network is tasked with sorting a particularly challenging set of dominoes. 
+When that happens, the networks architectural challenges lead it to get the 
+output very wrong, such that a huge misleading error backpropagates through
+and confuses it for the next few epochs. Interesting! Maybe there's a way to 
+teach a pointer network how to filter error based on whether it's likely to be
 due to these shift-based failure modes. 
+
+This is probably going to come up again when I show some results on training
+pointer networks to sequence dominoes (as is done in the real game) with both
+supervised and reinforcement learning. 
 
 Also interesting: the return to good performance is much faster after one of 
 these spikes than it would be at a similar training loss after initialization.
-Curious.
+Curious. I wonder why that's happening. 
 
 
 

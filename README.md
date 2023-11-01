@@ -56,7 +56,7 @@ mamba install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvi
 Until I learn how to build a project page, the presentation and documentation
 of this repository is going to live on markdown files in the [docs](docs) 
 folder. These files explain how to use this repository and present analyses of
-the agents I have developed. 
+the agents I have developed. This is a list of them with links to the file.
 1. Groundwork for Dominoes in Python
     - [Rules of the game](docs/dominoeRules.md) -- (not written yet, sorry!)
     - [Gameplay object](docs/gameplay.md)
