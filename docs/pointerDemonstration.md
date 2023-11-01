@@ -7,7 +7,8 @@ pointer networks to sequence lines with reinforcement learning first!). This
 documentation file shows how the transformers and pointer networks work, and
 displays the results of a simple toy problem solved by pointer networks. 
 
-You can run this toy problem yourself with the following command:
+You can run this toy problem yourself with the following command, this takes
+about 5 minutes on my GPU equipped machine:
 ```
 python experiments/pointerDemonstration.py
 ```
