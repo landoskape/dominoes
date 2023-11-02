@@ -13,8 +13,7 @@ pointer network code:
 
 transformer code: 
 - from the repository: https://github.com/pbloem/former
-  - and the associated (very well-written!) blog: 
-  http://peterbloem.nl/blog/transformers
+  - and the associated (very well-written!) blog: http://peterbloem.nl/blog/transformers
 - and of course the paper: https://proceedings.neurips.cc/paper_files/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf
 """
 
@@ -433,7 +432,7 @@ class PointerModule(nn.Module):
     """
     Implementation of the decoder part of the pointer network
     """
-    def __init__(self, embedding_dim, heads=8, expansion=1, kqnorm=True, encoding_layers=1, 
+    def __init__(self, embedding_dim, heads=8, expansion=1, kqnorm=True, encoding_layers=1, thompson=False,
                  bias=False, decode_with_gru=True, pointer_method='PointerStandard', greedy=False, temperature=1):
         super().__init__()
         self.embedding_dim = embedding_dim
@@ -444,6 +443,7 @@ class PointerModule(nn.Module):
         self.decoder_method = 'gru' if decode_with_gru else 'attention'
         self.pointer_method = pointer_method
         self.greedy = greedy
+        self.thompson = thompson
         self.temperature = temperature
 
         # build decoder (updates the context vector)
@@ -549,7 +549,12 @@ class PointerModule(nn.Module):
             log_score = score if self.greedy else torch.log(score)
 
             # choose token for this sample
-            choice = torch.argmax(log_score, dim=1, keepdim=True)
+            if self.thompson:
+                # choose probabilistically
+                choice = torch.multinomial(torch.exp(log_score), 1)
+            else:
+                # choose based on maximum score
+                choice = torch.argmax(log_score, dim=1, keepdim=True)
 
             if self.greedy:
                 # next decoder_input is whatever token had the highest probability
@@ -599,7 +604,7 @@ class PointerNetwork(nn.Module):
     """
     def __init__(self, input_dim, embedding_dim,
                  heads=8, expansion=1, kqnorm=True, encoding_layers=1, bias=False, pointer_method='PointerStandard',
-                 contextual_encoder=False, decode_with_gru=True, greedy=False, temperature=1):
+                 contextual_encoder=False, decode_with_gru=True, greedy=False, thompson=False, temperature=1):
         super().__init__()
         self.input_dim = input_dim
         self.embedding_dim = embedding_dim
@@ -611,6 +616,7 @@ class PointerNetwork(nn.Module):
         self.contextual_encoder = contextual_encoder
         self.decoder_method = 'gru' if decode_with_gru else 'attention'
         self.greedy = greedy
+        self.thompson = thompson
         self.decode_with_gru = decode_with_gru
         self.pointer_method = pointer_method
         self.temperature = temperature
@@ -627,8 +633,17 @@ class PointerNetwork(nn.Module):
 
         self.pointer = PointerModule(self.embedding_dim, heads=self.heads, expansion=self.expansion, kqnorm=self.kqnorm,
                                      encoding_layers=self.encoding_layers, bias=self.bias, decode_with_gru=self.decode_with_gru,
-                                     pointer_method=self.pointer_method, greedy=self.greedy, temperature=self.temperature)
+                                     pointer_method=self.pointer_method, greedy=self.greedy, temperature=self.temperature,
+                                     thompson=self.thompson)
 
+    def setTemperature(self, temperature):
+        self.temperature = temperature
+        self.pointer.temperature = temperature
+
+    def setThompson(self, thompson):
+        self.thompson = thompson
+        self.pointer.thompson = thompson
+        
     def forwardEncoder(self, x, mask=None):
         """
         instead of using nn.Sequential just call each layer in sequence
