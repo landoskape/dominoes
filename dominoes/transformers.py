@@ -291,11 +291,11 @@ class PointerDot(nn.Module):
     def forward(self, encoded, decoder_state, mask=None, temperature=1):
         # first transform encoded representations and decoder states 
         transformEncoded = self.W1(encoded)
-        transformDecoded = self.W2(decoder_state).unsqueeze(2) # unsqueeze for broadcasting on token dimension
+        transformDecoded = self.W2(decoder_state)
 
         # instead of add, tanh, and project on learnable weights, 
         # just dot product the encoded representations with the decoder "pointer"
-        u = torch.bmm(transformEncoded, transformDecoded).squeeze(2)
+        u = torch.bmm(transformEncoded, transformDecoded.unsqueeze(2)).squeeze(2)
         
         if mask is not None:
             # u += (mask + 1e-45).log()
