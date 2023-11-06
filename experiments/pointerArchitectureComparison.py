@@ -280,7 +280,7 @@ if __name__=='__main__':
             # Save agent parameters
             for idx, name in enumerate(thompson_name):
                 for net, method in zip(pnets[idx], POINTER_METHODS):
-                    save_name = f"{method}_{name}"
+                    save_name = f"{method}_{name}.pt"
                     torch.save(net, savePath / getFileName(extra=save_name))
             np.save(prmsPath / getFileName(), vars(args))
             np.save(resPath / getFileName(), results)
