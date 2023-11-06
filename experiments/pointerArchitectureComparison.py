@@ -49,7 +49,7 @@ def handleArguments():
     parser.add_argument('-bs','--batch-size',type=int, default=512, help='number of sequences per batch')
     parser.add_argument('-ne','--train-epochs',type=int, default=5000, help='the number of training epochs')
     parser.add_argument('-te','--test-epochs',type=int, default=100, help='the number of testing epochs')
-    parser.add_argument('--gamma', type=float, default=0.5, help='discounting factor')
+    parser.add_argument('--gamma', type=float, default=1.0, help='discounting factor')
     parser.add_argument('-nr','--num-runs', type=int, default=5, help='how many networks to train of each type')
     
     parser.add_argument('--embedding-dim', type=int, default=48, help='the dimensions of the embedding')
@@ -152,7 +152,7 @@ def trainTestModel(with_thompson):
             batch = datasets.generateBatch(highestDominoe, listDominoes, batchSize, handSize, **batch_inputs)
         
             # unpack batch tuple
-            input, _, _, _, _, selection, available = batch
+            input, _, _, _, _, selection, _ = batch
             input = input.to(device)
             
             # zero gradients, get output of network
@@ -181,7 +181,7 @@ def trainTestModel(with_thompson):
         with torch.no_grad():
             # always return temperature to 1 and thompson to False for testing networks
             for pnet in pnets: 
-                pnet.setTemperature(1)
+                pnet.setTemperature(1.0)
                 pnet.setThompson(False)
                 
             print('Testing network...')
@@ -189,7 +189,7 @@ def trainTestModel(with_thompson):
                 batch = datasets.generateBatch(highestDominoe, listDominoes, batchSize, handSize, **batch_inputs)
         
                 # unpack batch tuple
-                input, _, _, _, _, selection, available = batch
+                input, _, _, _, _, selection, _ = batch
             
                 # move to correct device
                 input = input.to(device)
@@ -220,16 +220,19 @@ def trainTestModel(with_thompson):
 
 
 def plotResults(results, args):
+    numNets = results['trainReward_with_thompson'].shape[2]
+    n_string = f" (N={numNets})"
+    
     fig, ax = plt.subplots(1,4,figsize=(12,3), layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
         ax[0].plot(range(args.train_epochs), torch.mean(results['trainReward_with_thompson'][:,idx],dim=1), lw=1, label=name)
-    ax[0].set_ylabel('Reward')
+    ax[0].set_ylabel('Mean Reward'+n_string)
     ax[0].set_title('Training with Thompson')
     yMin0, yMax0 = ax[0].get_ylim()
 
     for idx, name in enumerate(POINTER_METHODS):
         ax[1].plot(range(args.test_epochs), torch.mean(results['testReward_with_thompson'][:,idx],dim=1), lw=1, label=name)
-    ax[1].set_ylabel('Reward')
+    ax[1].set_ylabel('Mean Reward'+n_string)
     ax[1].set_title('Testing with Thompson')
     yMin1, yMax1 = ax[1].get_ylim()
     
@@ -239,14 +242,14 @@ def plotResults(results, args):
     for idx, name in enumerate(POINTER_METHODS):
         ax[2].plot(range(args.train_epochs), torch.mean(results['trainReward_no_thompson'][:,idx],dim=1), lw=1, label=name)
     ax[2].set_xlabel('Epoch')
-    ax[2].set_ylabel('Reward')
+    ax[2].set_ylabel('Mean Reward'+n_string)
     ax[2].set_title('Training w/out Thompson')
     yMin2, yMax2 = ax[2].get_ylim()
 
     for idx, name in enumerate(POINTER_METHODS):
         ax[3].plot(range(args.test_epochs), torch.mean(results['testReward_no_thompson'][:,idx],dim=1), lw=1, label=name)
     ax[3].set_xlabel('Epoch')
-    ax[3].set_ylabel('Reward')
+    ax[3].set_ylabel('Mean Reward'+n_string)
     ax[3].legend(loc='best')
     ax[3].set_title('Testing w/out Thompson')
     yMin3, yMax3 = ax[3].get_ylim()
@@ -270,11 +273,11 @@ if __name__=='__main__':
         pnets = []
         for with_thompson in thompson_setting:
             c_results, c_pnets = trainTestModel(with_thompson)
+            c_pnets = [cp.to('cpu') for cp in c_pnets] # move to CPU to make sure there's room for next round of training
             for key, val in c_results.items():
                 results[key] = val
             pnets.append(c_pnets)
             
-        
         # save results if requested
         if not(args.nosave):
             # Save agent parameters
