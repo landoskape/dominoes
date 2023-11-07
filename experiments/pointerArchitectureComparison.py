@@ -68,27 +68,27 @@ def handleArguments():
     return args
     
 
+def trainTestDominoes(baseDominoes, trainFraction):
+    # figure out which dominoes need to be represented in both ways (ones with different values)
+    doubleDominoes = baseDominoes[:,0] == baseDominoes[:,1]
+    nonDoubleReverse = baseDominoes[~doubleDominoes][:,[1,0]] # represent each dominoe in both orders
+
+    # list of full set of dominoe representations and value of each
+    fullDominoes = np.concatenate((baseDominoes, nonDoubleReverse), axis=0)
+    
+    # subset dominoes for training
+    trainNumber = int(len(fullDominoes)*trainFraction)
+    trainIndex = np.sort(np.random.permutation(len(fullDominoes))[:trainNumber]) # keep random fraction (but sort in same way)
+    trainDominoes = fullDominoes[trainIndex]
+
+    return fullDominoes, trainDominoes, trainIndex
+    
+    
 def trainTestModel(with_thompson):
     # get values from the argument parser
     highestDominoe = args.highest_dominoe
-    listDominoes = df.listDominoes(highestDominoe)
-    dominoeValue = np.sum(listDominoes, axis=1)
-
-    # create full set of dominoes (representing non-doubles in both ways)
-    doubleDominoes = listDominoes[:,0] == listDominoes[:,1]
-    nonDoubleReverse = listDominoes[~doubleDominoes][:,[1,0]] # represent each dominoe in both orders
-
-    # list of full set of dominoe representations and value of each
-    listDominoes = np.concatenate((listDominoes, nonDoubleReverse), axis=0)
-    dominoeValue = np.sum(listDominoes, axis=1)
-
-    # subset dominoes
-    keepFraction = args.train_fraction
-    keepNumber = int(len(listDominoes)*keepFraction)
-    keepIndex = np.sort(np.random.permutation(len(listDominoes))[:keepNumber]) # keep random fraction (but sort in same way)
-    keepDominoes = listDominoes[keepIndex]
-    keepValue = dominoeValue[keepIndex]
-
+    baseDominoes = df.listDominoes(highestDominoe)
+    
     # other batch parameters
     ignoreIndex = -1 # this is only used when doing uneven batch sizes, which I'm not in this experiment
     handSize = args.hand_size
@@ -101,15 +101,11 @@ def trainTestModel(with_thompson):
     heads = args.heads
     encoding_layers = args.encoding_layers
     greedy = True 
-    
+
     # policy parameters
-    if with_thompson:
-        temperature = args.train_temperature
-        thompson = True
-    else:
-        temperature = 1
-        thompson = False
-    
+    temperature = args.train_temperature
+
+    # train parameters
     trainEpochs = args.train_epochs
     testEpochs = args.test_epochs
     numRuns = args.num_runs
@@ -127,29 +123,34 @@ def trainTestModel(with_thompson):
                     'return_target':False,
                    }
     
-    # create pointer networks with different pointer methods (variable defined above)
-    pnets = [transformers.PointerNetwork(input_dim, embedding_dim, temperature=temperature, pointer_method=POINTER_METHOD, thompson=thompson,
-                                         encoding_layers=encoding_layers, heads=heads, kqnorm=True, decode_with_gru=False, greedy=greedy)
-             for POINTER_METHOD in POINTER_METHODS]
-    pnets = [pnet.to(device) for pnet in pnets]
-    for pnet in pnets: pnet.train()
-    
-    # Create an optimizer, Adam with weight decay is pretty good
-    optimizers = [torch.optim.Adam(pnet.parameters(), lr=1e-3, weight_decay=1e-5) for pnet in pnets]
-    
-    numNets = len(pnets)
+    numNets = len(POINTER_METHODS)
     
     # Train network
-    train_type_string = 'with' if thompson else 'without'
+    train_type_string = 'with' if with_thompson else 'without'
     print(f"Training networks {train_type_string} thompson sampling...")
     trainReward = torch.zeros((trainEpochs, numNets, numRuns))
     testReward = torch.zeros((testEpochs, numNets, numRuns))
     trainRewardByPos = torch.zeros((trainEpochs, maxOutput, numNets, numRuns))
-    testRewardByPos = torch.zeros((trainEpochs, maxOutput, numNets, numRuns))
+    testRewardByPos = torch.zeros((testEpochs, maxOutput, numNets, numRuns))
     for run in range(numRuns):
+        # reset train set of dominoes
+        fullDominoes, trainDominoes, trainIndex = trainTestDominoes(baseDominoes, args.train_fraction)
+
+        # create pointer networks with different pointer methods
+        pnets = [transformers.PointerNetwork(input_dim, embedding_dim, temperature=temperature, pointer_method=POINTER_METHOD, 
+                                             thompson=with_thompson, encoding_layers=encoding_layers, heads=heads, kqnorm=True, 
+                                             decode_with_gru=False, greedy=greedy)
+                 for POINTER_METHOD in POINTER_METHODS]
+        pnets = [pnet.to(device) for pnet in pnets]
+        for pnet in pnets: 
+            pnet.train()
+        
+        # Create an optimizer, Adam with weight decay is pretty good
+        optimizers = [torch.optim.Adam(pnet.parameters(), lr=1e-3, weight_decay=1e-5) for pnet in pnets]
+        
         print(f"Doing training run {run+1}/{numRuns}...")
         for epoch in tqdm(range(trainEpochs)):
-            batch = datasets.generateBatch(highestDominoe, listDominoes, batchSize, handSize, **batch_inputs)
+            batch = datasets.generateBatch(highestDominoe, trainDominoes, batchSize, handSize, **batch_inputs)
         
             # unpack batch tuple
             input, _, _, _, _, selection, _ = batch
@@ -163,7 +164,7 @@ def trainTestModel(with_thompson):
             logprob_policy = [torch.gather(score, 2, choice.unsqueeze(2)).squeeze(2) for score, choice in zip(log_scores, choices)]
             
             # measure reward
-            rewards = [training.measureReward_sortDescend(listDominoes[selection], choice) for choice in choices]
+            rewards = [training.measureReward_sortDescend(trainDominoes[selection], choice) for choice in choices]
             G = [torch.bmm(reward.unsqueeze(1), gamma_transform).squeeze(1) for reward in rewards]
         
             # measure J
@@ -186,7 +187,7 @@ def trainTestModel(with_thompson):
                 
             print('Testing network...')
             for epoch in tqdm(range(testEpochs)):
-                batch = datasets.generateBatch(highestDominoe, listDominoes, batchSize, handSize, **batch_inputs)
+                batch = datasets.generateBatch(highestDominoe, fullDominoes, batchSize, handSize, **batch_inputs)
         
                 # unpack batch tuple
                 input, _, _, _, _, selection, _ = batch
@@ -201,7 +202,7 @@ def trainTestModel(with_thompson):
                 logprob_policy = [torch.gather(score, 2, choice.unsqueeze(2)).squeeze(2) for score, choice in zip(log_scores, choices)]
                 
                 # measure reward
-                rewards = [training.measureReward_sortDescend(listDominoes[selection], choice) for choice in choices]
+                rewards = [training.measureReward_sortDescend(fullDominoes[selection], choice) for choice in choices]
                 
                 # save training data
                 for i in range(numNets):

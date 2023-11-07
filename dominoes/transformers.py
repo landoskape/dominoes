@@ -256,10 +256,10 @@ class PointerStandard(nn.Module):
     def forward(self, encoded, decoder_state, mask=None, temperature=1):
         # first transform encoded representations and decoder states 
         transformEncoded = self.W1(encoded)
-        transformDecoded = self.W2(decoder_state).unsqueeze(1) # unsqueeze for broadcasting on token dimension
+        transformDecoded = self.W2(decoder_state)
 
         # then combine them and project to a new space
-        u = self.vt(torch.tanh(transformEncoded + transformDecoded)).squeeze(-1)
+        u = self.vt(torch.tanh(transformEncoded + transformDecoded.unsqueeze(1))).squeeze(2)
         if mask is not None:
             # u += (mask + 1e-45).log()
             # this produces nans for any row that is fully masked 
