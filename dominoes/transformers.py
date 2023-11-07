@@ -275,7 +275,7 @@ class PointerStandard(nn.Module):
 
 class PointerDot(nn.Module):
     """
-    PointerDot Module (variant of the original paper)
+    PointerDot Module (variant of the paper, using a simple dot product)
 
     log_softmax is preferable if the probabilities of each token are not 
     needed. However, if token embeddings are combined via their probabilities,
@@ -287,12 +287,51 @@ class PointerDot(nn.Module):
         self.log_softmax = log_softmax
         self.W1 = nn.Linear(emb, emb, bias=False)
         self.W2 = nn.Linear(emb, emb, bias=False)
+        self.eln = nn.LayerNorm(emb, bias=False)
+        self.dln = nn.LayerNorm(emb, bias=False)
 
     def forward(self, encoded, decoder_state, mask=None, temperature=1):
         # first transform encoded representations and decoder states 
-        transformEncoded = self.W1(encoded)
-        transformDecoded = self.W2(decoder_state)
+        transformEncoded = self.eln(self.W1(encoded))
+        transformDecoded = self.dln(self.W2(decoder_state))
+            
+        # instead of add, tanh, and project on learnable weights, 
+        # just dot product the encoded representations with the decoder "pointer"
+        u = torch.bmm(transformEncoded, transformDecoded.unsqueeze(2)).squeeze(2)
+        
+        if mask is not None:
+            # u += (mask + 1e-45).log()
+            # this produces nans for any row that is fully masked 
+            u.masked_fill_(mask==0, -200) # only use valid tokens
 
+        if self.log_softmax:
+            # convert to log scores
+            return torch.nn.functional.log_softmax(u/temperature, dim=1)
+        else:
+            # convert to probabilities
+            return torch.nn.functional.softmax(u/temperature, dim=1)
+
+
+class PointerDotLean(nn.Module):
+    """
+    PointerDotLean Module (variant of the paper, using a simple dot product and even less weights)
+
+    log_softmax is preferable if the probabilities of each token are not 
+    needed. However, if token embeddings are combined via their probabilities,
+    then softmax is required, so log_softmax should be set to `False`.
+    """
+    def __init__(self, emb, log_softmax=False):
+        super().__init__()
+        self.emb = emb
+        self.log_softmax = log_softmax
+        self.eln = nn.LayerNorm(emb, bias=False)
+        self.dln = nn.LayerNorm(emb, bias=False)
+
+    def forward(self, encoded, decoder_state, mask=None, temperature=1):
+        # first transform encoded representations and decoder states 
+        transformEncoded = self.eln(encoded)
+        transformDecoded = self.dln(decoder_state)
+            
         # instead of add, tanh, and project on learnable weights, 
         # just dot product the encoded representations with the decoder "pointer"
         u = torch.bmm(transformEncoded, transformDecoded.unsqueeze(2)).squeeze(2)
@@ -312,7 +351,7 @@ class PointerDot(nn.Module):
 
 class PointerAttention(nn.Module):
     """
-    PointerAttention Module (variant of paper using standard attention)
+    PointerAttention Module (variant of paper, using standard attention layer)
 
     log_softmax is preferable if the probabilities of each token are not 
     needed. However, if token embeddings are combined via their probabilities,
@@ -466,6 +505,9 @@ class PointerModule(nn.Module):
 
         elif self.pointer_method == 'PointerDot':
             self.pointer = PointerDot(self.embedding_dim, log_softmax=self.greedy)
+
+        elif self.pointer_method == 'PointerDotLean':
+            self.pointer = PointerDotLean(self.embedding_dim, log_softmax=self.greedy)
             
         elif self.pointer_method == 'PointerAttention':
             kwargs = {'heads':self.heads, 'kqnorm':self.kqnorm}
@@ -498,6 +540,8 @@ class PointerModule(nn.Module):
         if self.pointer_method == 'PointerStandard':
             decoder_state = decoder_context
         elif self.pointer_method == 'PointerDot':
+            decoder_state = decoder_context
+        elif self.pointer_method == 'PointerDotLean':
             decoder_state = decoder_context
         elif self.pointer_method == 'PointerAttention':
             decoder_state = torch.cat((decoder_input.unsqueeze(1), decoder_context.unsqueeze(1)), dim=1)
