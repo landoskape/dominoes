@@ -659,7 +659,7 @@ class PointerNetwork(nn.Module):
                 x = (x, context) # re-add context for next pass
 
         if self.contextual_encoder:
-            # only output main inputs, not context
+            # only return main inputs, not context inputs
             x = x[0]
                 
         return x
