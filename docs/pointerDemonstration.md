@@ -109,21 +109,23 @@ The testing loss is essentially identical to the final training loss. This is
 despite the fact that the network is all of a sudden seeing new dominoes 
 during the testing phase (see above for explanation of the hold out 
 procedure). What this means is that the network doesn't simply learn a look up
-table between input and output. Insteadm it really learns exactly what the 
+table between input and output. Instead it really learns exactly what the 
 task is: sort dominoes based on the sum of their value.
 
 ### Loss spikes during training
 During the training phase, there are some pretty large spikes in the loss. 
 What is going on? To understand why those loss spikes occur, take a look at 
-the following figure. It shows a few loss-spikes (as idenitified by scipy's 
-find-peaks method) in the top panel, with the loss-spike triggered average of
-the error as a function of output sequence position in the bottom panel.
+the following figure. It shows a few loss-spikes in the top panel (as 
+identified by scipy's find-peaks method), with the loss-spike triggered 
+average of the error as a function of output sequence position in the bottom
+panel.
 
 ![pointer loss spike](media/pointerDemonstration_lossSpike.png)
 
 The error is defined as the average difference in the max score and the target
 score for each position. (The score is the log-probability for each option, 
-and the max score is the one that the model "chose" for each step). 
+and the max score is the one that the model "chose" for each step based on its
+greedy policy).
 
 Right before the loss spike, there is a small increase in error for the middle
 positions (purple to brown on the colormap). These same positions are the ones
@@ -143,10 +145,12 @@ positions, and least confident about the middle positions. I conclude two
 things from this:
 
 - The pointer network architecture may accumulate uncertainty if it is trained
-  on problems that require it to produce long output sequences.
-- In this particular problem, the middle choices are harder (probably because
-  of the way I posed the problem, see sorting issues in the
-  [target](###Target) section above.
+  on problems that require it to produce long output sequences. Alternatively,
+  the pointer network might _specifically be bad_ at producing a high
+  confidence "point" towards intermediary positions in a sequence.
+- Additionally, in this particular problem, the middle choices are harder,
+  because some dominoes have the same value but have to be sorted in a certain
+  order. See the [target](###Target) section above for more explanation.
 
 These two points probably explain how the loss spikes occur -- sometimes the
 network is tasked with sorting a particularly challenging set of dominoes. 
@@ -155,10 +159,6 @@ output very wrong, such that a huge misleading error backpropagates through
 and confuses it for the next few epochs. Interesting! Maybe there's a way to 
 teach a pointer network how to filter error based on whether it's likely to be
 due to these shift-based failure modes. 
-
-This is probably going to come up again when I show some results on training
-pointer networks to sequence dominoes (as is done in the real game) with both
-supervised and reinforcement learning. 
 
 Also interesting: the return to good performance is much faster after one of 
 these spikes than it would be at a similar training loss after initialization.
