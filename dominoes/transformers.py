@@ -149,8 +149,8 @@ class ContextualAttention(nn.Module):
 
         # Linear transformations to keys, queries, and values
         self.toqueries = nn.Linear(emb, emb, bias=False)
-        self.tokeys    = nn.Linear(emb, emb, bias=False)
-        self.tovalues  = nn.Linear(emb, emb, bias=False)
+        self.tokeys = nn.Linear(emb, emb, bias=False)
+        self.tovalues = nn.Linear(emb, emb, bias=False)
 
         # Final linear layer after attention
         self.unifyheads = nn.Linear(emb, emb)
@@ -187,13 +187,13 @@ class ContextualAttention(nn.Module):
         
         # convert input tokens to their keys, queries, and values
         queries = self.toqueries(x) # context inputs don't need to query
-        keys    = self.tokeys(x_plus_context)
-        values  = self.tovalues(x_plus_context)
+        keys = self.tokeys(x_plus_context)
+        values = self.tovalues(x_plus_context)
 
         # separate heads
         queries = queries.view(batch, itokens, self.heads, self.headsize)
-        keys    = keys.view(batch, tokens, self.heads, self.headsize)
-        values  = values.view(batch, tokens, self.heads, self.headsize)
+        keys = keys.view(batch, tokens, self.heads, self.headsize)
+        values = values.view(batch, tokens, self.heads, self.headsize)
 
         # perform layer norm on each heads representation if requested
         if self.kqnorm:
@@ -208,7 +208,7 @@ class ContextualAttention(nn.Module):
         # scale queries and keys by the fourth root of the embedding size
         # same as dividing the dot product by square root of embedding size (but more memory efficient?)
         queries = queries / (emb ** (1/4))
-        keys    = keys / (emb ** (1/4))
+        keys = keys / (emb ** (1/4))
         
         # dot product between scaled queries and keys
         dot = torch.bmm(queries, keys.transpose(1, 2))
@@ -223,6 +223,134 @@ class ContextualAttention(nn.Module):
             dot += (dotMask + 1e-45).log()
             # produces nans for any rows that are fully masked
             #dot.masked_fill_(dotMask==0, float('-inf')) # assign -inf for any value that isn't used
+        
+        # and take softmax to get self-attention probabilities
+        dot = F.softmax(dot, dim=2)
+        
+        # return values according how much they are attented
+        out = torch.bmm(dot, values).view(batch, self.heads, itokens, self.headsize)
+        
+        # unify heads, change view to original input size
+        out = out.transpose(1, 2).contiguous().view(batch, itokens, self.headsize * self.heads)
+
+        # forward pass ends with a linear layer
+        return self.unifyheads(out)
+
+
+class MultiContextAttention(nn.Module):
+    """
+    Implementation of attention with contextual inputs not to be transformed
+    Each type of context inputs gets their own tokey and tovalue transforms
+    
+    Treats some inputs as context only and uses them to generate keys and 
+    values but doesn't generate queries or transformed representations. 
+    
+    I don't know if this kind of attention layer exists. If you read this and
+    have seen this kind of attention layer before, please let me know!
+    """
+    def __init__(self, emb, num_context=1, heads=8, kqnorm=False):
+        super().__init__()
+
+        # This is a requirement
+        assert emb % heads == 0, f'Embedding dimension ({emb}) should be divisible by the # of heads ({heads})'
+
+        # Store parameters 
+        self.emb = emb
+        self.heads = heads
+        self.num_context = num_context
+        
+        # Dimensionality of each head
+        self.headsize = emb // heads
+
+        # Linear transformations to keys, queries, and values
+        self.to_queries = nn.Linear(emb, emb, bias=False)
+        self.to_keys = nn.Linear(emb, emb, bias=False)
+        self.to_values = nn.Linear(emb, emb, bias=False)
+
+        # Linear transformation for each context element
+        self.to_context_keys = nn.ModuleList([nn.Linear(emb, emb, bias=False) for _ in range(num_context)])
+        self.to_context_values = nn.ModuleList([nn.Linear(emb, emb, bias=False) for _ in range(num_context)])
+
+        # Final linear layer after attention
+        self.unifyheads = nn.Linear(emb, emb)
+
+        # If requested, apply layer norm to the output of each head
+        self.kqnorm = kqnorm
+        if kqnorm:
+            self.kln = nn.LayerNorm([self.headsize])
+            self.qln = nn.LayerNorm([self.headsize])
+            self.ckln = nn.ModuleList([nn.LayerNorm([self.headsize]) for _ in range(num_context)])
+
+    def forward(self, x, context, mask=None, contextMask=None):
+        # attention layer forward pass
+        assert x.ndim==3, "x should have size: (batch_size, num_input_tokens, embedding_dimensionality)"
+        assert type(context)==tuple or type(context)==list, "context should be a tuple or a list"
+        assert len(context)==self.num_context, f"this network requires {self.num_context} context tensors but only {len(context)} were provided"
+        assert all([c.ndim==3 for c in context]), "context should have size: (batch_size, num_context_tokens, embedding_dimensionality)"
+        assert contextMask is None or len(contextMask)==self.num_context, f"if contextMask provided, must have {self.num_context} elements"
+        batch, itokens, emb = x.size() # get size of input
+        cbatch, ctokens, cemb = map(list, zip(*[c.size() for c in context])) # get size of context
+        tokens = itokens + sum(ctokens) # total number of tokens to process
+
+        assert all([batch==cb for cb in cbatch]), "batch size of x and context tensors should be the same"
+        assert all([emb==ce for ce in cemb]), "Input embedding dim and context tensor embedding dim should be the same"
+        
+        # Handle masks
+        mask = mask if mask is not None else torch.ones((batch, itokens), dtype=x.dtype).to(get_device(x))
+        contextMask = [None for _ in range(self.num_context)] if contextMask is None else contextMask
+        contextMask = [cm if cm is not None else torch.ones((cb, ct), dtype=x.dtype).to(get_device(x)) 
+                       for cm, cb, ct in zip(contextMask, cbatch, ctokens)]
+        
+        # convert input tokens to their keys, queries, and values
+        queries = self.to_queries(x) # context inputs don't need to query
+        keys = self.to_keys(x)
+        values = self.to_values(x)
+
+        # convert context tokens to keys and values
+        ckeys = [to_context_keys(c) for to_context_keys, c in zip(self.to_context_keys, context)]
+        cvalues = [to_context_values(c) for to_context_values, c in zip(self.to_context_values, context)]
+
+        # separate heads
+        queries = queries.view(batch, itokens, self.heads, self.headsize)
+        keys = keys.view(batch, itokens, self.heads, self.headsize)
+        values = values.view(batch, itokens, self.heads, self.headsize)
+
+        # separate context heads
+        ckeys = [k.view(batch, ct, self.heads, self.headsize) for k, ct in zip(ckeys, ctokens)]
+        cvalues = [v.view(batch, ct, self.heads, self.headsize) for v, ct in zip(cvalues, ctokens)]
+
+        # perform layer norm on each heads representation if requested
+        if self.kqnorm:
+            keys = self.kln(keys)
+            queries = self.qln(queries)
+            ckeys = [ckln(ck) for ckln, ck in zip(self.ckln, ckeys)]
+
+        # combine representations of main inputs and context inputs 
+        keys = torch.cat((keys, torch.cat(ckeys, dim=1)), dim=1)
+        values = torch.cat((values, torch.cat(cvalues, dim=1)), dim=1)
+        mask_plus_contextMask = torch.cat((mask, torch.cat(contextMask, dim=1)), dim=1)
+        
+        # put each head into batch dimension for straightforward batch dot products
+        queries = queries.transpose(1, 2).contiguous().view(batch * self.heads, itokens, self.headsize)
+        keys = keys.transpose(1, 2).contiguous().view(batch * self.heads, tokens, self.headsize)
+        values = values.transpose(1, 2).contiguous().view(batch * self.heads, tokens, self.headsize)
+
+        # scale queries and keys by the fourth root of the embedding size
+        # same as dividing the dot product by square root of embedding size (but more memory efficient?)
+        queries = queries / (emb ** (1/4))
+        keys = keys / (emb ** (1/4))
+        
+        # dot product between scaled queries and keys
+        dot = torch.bmm(queries, keys.transpose(1, 2))
+
+        # check to make sure this is correct
+        assert dot.size() == (batch*self.heads, itokens, tokens), "somehow the query-key dot product is an unexpected size"
+
+        # mask query key products to -inf (very small number) that are not used
+        dotMask = torch.bmm(mask.unsqueeze(2), mask_plus_contextMask.unsqueeze(1))
+        dotMask = dotMask.unsqueeze(1).expand(batch, self.heads, itokens, tokens).reshape(batch*self.heads, itokens, tokens)
+        with torch.no_grad(): floor_value = dot.min() - 100
+        dot.masked_fill_(dotMask==0, floor_value)
         
         # and take softmax to get self-attention probabilities
         dot = F.softmax(dot, dim=2)
@@ -312,6 +440,43 @@ class PointerDot(nn.Module):
             return torch.nn.functional.softmax(u/temperature, dim=1)
 
 
+class PointerDotNoLN(nn.Module):
+    """
+    PointerDotNoLN Module (variant of the paper, using a simple dot product)
+
+    log_softmax is preferable if the probabilities of each token are not 
+    needed. However, if token embeddings are combined via their probabilities,
+    then softmax is required, so log_softmax should be set to `False`.
+    """
+    def __init__(self, emb, log_softmax=False):
+        super().__init__()
+        self.emb = emb
+        self.log_softmax = log_softmax
+        self.W1 = nn.Linear(emb, emb, bias=False)
+        self.W2 = nn.Linear(emb, emb, bias=False)
+
+    def forward(self, encoded, decoder_state, mask=None, temperature=1):
+        # first transform encoded representations and decoder states 
+        transformEncoded = self.W1(encoded)
+        transformDecoded = self.W2(decoder_state)
+            
+        # instead of add, tanh, and project on learnable weights, 
+        # just dot product the encoded representations with the decoder "pointer"
+        u = torch.bmm(transformEncoded, transformDecoded.unsqueeze(2)).squeeze(2)
+        
+        if mask is not None:
+            # u += (mask + 1e-45).log()
+            # this produces nans for any row that is fully masked 
+            u.masked_fill_(mask==0, -200) # only use valid tokens
+
+        if self.log_softmax:
+            # convert to log scores
+            return torch.nn.functional.log_softmax(u/temperature, dim=1)
+        else:
+            # convert to probabilities
+            return torch.nn.functional.softmax(u/temperature, dim=1)
+
+
 class PointerDotLean(nn.Module):
     """
     PointerDotLean Module (variant of the paper, using a simple dot product and even less weights)
@@ -362,12 +527,12 @@ class PointerAttention(nn.Module):
         self.emb = emb
         self.log_softmax = log_softmax
 
-        self.attention = ContextualAttention(emb, **kwargs)
+        self.attention = MultiContextAttention(emb, num_context=1, **kwargs)
         self.vt = nn.Linear(emb, 1, bias=False)
 
     def forward(self, encoded, decoder_state, mask=None, temperature=1):
         # attention on encoded representations with decoder_state
-        updated = self.attention(encoded, decoder_state, mask=mask)
+        updated = self.attention(encoded, [decoder_state], mask=mask)
         project = self.vt(torch.tanh(updated)).squeeze(2)
         if mask is not None:
             project.masked_fill_(mask==0, -200) # pin masked tokens before softmax
@@ -395,12 +560,12 @@ class PointerTransformer(nn.Module):
         self.log_softmax = log_softmax
 
         if 'contextual' in kwargs: kwargs['contextual']=True
-        self.transform = TransformerLayer(emb, contextual=True, **kwargs)
+        self.transform = ContextualTransformerLayer(emb, num_context=1, **kwargs)
         self.vt = nn.Linear(emb, 1, bias=False)
 
     def forward(self, encoded, decoder_state, mask=None, temperature=1):
         # transform encoded representations with decoder_state
-        updated = self.transform((encoded, decoder_state), mask=mask)
+        updated = self.transform(encoded, [decoder_state], mask=mask)
         project = self.vt(torch.tanh(updated)).squeeze(2)
         if mask is not None:
             project.masked_fill_(mask==0, -200) # pin masked tokens before softmax
@@ -428,7 +593,9 @@ class TransformerLayer(nn.Module):
 
     This transformer layer has the option of using contextual attention, where
     some inputs are only used to generate keys and values that modulate the 
-    primary inputs. 
+    primary inputs. This form of contextual attention, if used, processes the
+    main inputs and the context inputs using the same key & value matrices.
+    (See ContextualAttention above).
     """
     def __init__(self, embedding_dim, heads=8, expansion=1, contextual=False, kqnorm=False, bias=False):
         super().__init__()
@@ -467,19 +634,62 @@ class TransformerLayer(nn.Module):
         return self.layerNorm2(x + withTransformation)
 
 
+class ContextualTransformerLayer(nn.Module):
+    """
+    Variant implementation of a transformer layer
+    
+    Performs multi-headed attention on input, then layer normalization, then
+    two-stage feedforward processing with an optional expansion, then layer 
+    normalization, with residual connections before each layer normalization.
+
+    This transformer layer uses contextual attention, where some inputs are 
+    only used to generate keys and values that modulate the primary inputs. 
+    This form of contextual attention uses distinct tokey and tovalue matrices
+    to transform each kind of context input (see MultiContextAttention above).
+    """
+    def __init__(self, embedding_dim, heads=8, expansion=1, num_context=1, kqnorm=False, bias=False):
+        super().__init__()
+        
+        self.embedding_dim = embedding_dim
+        self.heads = heads
+        self.num_context = num_context
+        self.kqnorm = kqnorm
+        self.bias = bias
+        assert type(expansion)==int and expansion>=1, f"expansion ({expansion}) must be a positive integer"
+        assert embedding_dim % heads == 0, f"Embedding dimension ({embedding_dim}) should be divisible by the number of heads ({heads})"
+
+        self.attention = MultiContextAttention(embedding_dim, num_context=num_context, heads=heads, kqnorm=kqnorm)
+            
+        self.layerNorm1 = nn.LayerNorm(embedding_dim)
+        self.ff = nn.Sequential(
+            nn.Linear(embedding_dim, embedding_dim*expansion, bias=bias),
+            nn.ReLU(),
+            nn.Linear(embedding_dim*expansion, embedding_dim, bias=bias)
+        )
+        self.layerNorm2 = nn.LayerNorm(embedding_dim)
+
+    def forward(self, x, context, mask=None, contextMask=None):
+        withAttention = self.attention(x, context, mask=mask, contextMask=contextMask)
+        
+        x = self.layerNorm1(x + withAttention)
+        withTransformation = self.ff(x)
+        
+        return self.layerNorm2(x + withTransformation)
+
+
 class PointerModule(nn.Module):
     """
     Implementation of the decoder part of the pointer network
     """
     def __init__(self, embedding_dim, heads=8, expansion=1, kqnorm=True, encoding_layers=1, thompson=False,
-                 bias=False, decode_with_gru=True, pointer_method='PointerStandard', greedy=False, temperature=1):
+                 bias=False, decoder_method='transformer', pointer_method='PointerStandard', greedy=False, temperature=1):
         super().__init__()
         self.embedding_dim = embedding_dim
         self.heads = heads
         self.expansion = expansion
         self.kqnorm = kqnorm
         self.bias = bias
-        self.decoder_method = 'gru' if decode_with_gru else 'attention'
+        self.decoder_method = decoder_method
         self.pointer_method = pointer_method
         self.greedy = greedy
         self.thompson = thompson
@@ -489,14 +699,13 @@ class PointerModule(nn.Module):
         if self.decoder_method == 'gru':
             # if using GRU, then make a GRU cell for the decoder
             self.decoder = nn.GRUCell(input_size=self.embedding_dim, hidden_size=self.embedding_dim, bias=self.bias)
-        
-        elif self.decoder_method == 'attention':
-            # if using attention for the decoder, make a contextual transformer for the decoder
-            self.decoder = TransformerLayer(self.embedding_dim, heads=self.heads, expansion=self.expansion, contextual=True, kqnorm=self.kqnorm)
-        
+
+        elif self.decoder_method == 'transformer':
+            # if using contextual transformer, make one
+            self.decoder = ContextualTransformerLayer(self.embedding_dim, heads=self.heads, expansion=self.expansion, 
+                                                      num_context=2, kqnorm=self.kqnorm)
         else: 
-            raise ValueError("an unexpected bug occurred and decoder_method was not set correctly"
-                             f"it should be either 'gru' or 'attention', but it is {self.decoder_method}")
+            raise ValueError(f"decoder_method={decoder_method} not recognized!")
 
         # build pointer (chooses an output)
         if self.pointer_method == 'PointerStandard':
@@ -505,6 +714,9 @@ class PointerModule(nn.Module):
 
         elif self.pointer_method == 'PointerDot':
             self.pointer = PointerDot(self.embedding_dim, log_softmax=self.greedy)
+
+        elif self.pointer_method == 'PointerDotNoLN':
+            self.pointer = PointerDotNoLN(self.embedding_dim, log_softmax=self.greedy)
 
         elif self.pointer_method == 'PointerDotLean':
             self.pointer = PointerDotLean(self.embedding_dim, log_softmax=self.greedy)
@@ -519,18 +731,17 @@ class PointerModule(nn.Module):
             self.pointer = PointerTransformer(self.embedding_dim, log_softmax=self.greedy, **kwargs)
             
         else:
-            raise ValueError("the pointer_method was not set correctly"
-                             f"it should either be 'PointerStandard' or 'PointerTransformer' but it is {self.pointer_method}")
-        
+            raise ValueError(f"the pointer_method was not set correctly, {self.pointer_method} not recognized")
+            
 
     def decode(self, encoded, decoder_input, decoder_context, mask):
         # update decoder context using RNN or contextual transformer
         if self.decoder_method == 'gru':
             decoder_context = self.decoder(decoder_input, decoder_context)
-        elif self.decoder_method == 'attention':
-            contextInputs = torch.cat((decoder_input.unsqueeze(1), encoded), dim=1)
-            contextMask = torch.cat((torch.ones((encoded.size(0),1), dtype=mask.dtype).to(get_device(mask)), mask), dim=1)
-            decoder_context = self.decoder((decoder_context.unsqueeze(1), contextInputs), contextMask=contextMask).squeeze(1)
+        elif self.decoder_method == 'transformer':
+            contextInputs = (encoded, decoder_input.unsqueeze(1))
+            contextMask = (mask, None)
+            decoder_context = self.decoder(decoder_context.unsqueeze(1), contextInputs, contextMask=contextMask).squeeze(1)
         else:
             raise ValueError("decoder_method not recognized")
             
@@ -540,6 +751,8 @@ class PointerModule(nn.Module):
         if self.pointer_method == 'PointerStandard':
             decoder_state = decoder_context
         elif self.pointer_method == 'PointerDot':
+            decoder_state = decoder_context
+        elif self.pointer_method == 'PointerDotNoLN':
             decoder_state = decoder_context
         elif self.pointer_method == 'PointerDotLean':
             decoder_state = decoder_context
@@ -648,7 +861,7 @@ class PointerNetwork(nn.Module):
     """
     def __init__(self, input_dim, embedding_dim,
                  heads=8, expansion=1, kqnorm=True, encoding_layers=1, bias=False, pointer_method='PointerStandard',
-                 contextual_encoder=False, decode_with_gru=True, greedy=False, thompson=False, temperature=1):
+                 contextual_encoder=False, decoder_method='transformer', greedy=False, thompson=False, temperature=1):
         super().__init__()
         self.input_dim = input_dim
         self.embedding_dim = embedding_dim
@@ -658,10 +871,9 @@ class PointerNetwork(nn.Module):
         self.bias = bias
         self.encoding_layers = encoding_layers
         self.contextual_encoder = contextual_encoder
-        self.decoder_method = 'gru' if decode_with_gru else 'attention'
+        self.decoder_method = decoder_method
         self.greedy = greedy
         self.thompson = thompson
-        self.decode_with_gru = decode_with_gru
         self.pointer_method = pointer_method
         self.temperature = temperature
 
@@ -676,7 +888,7 @@ class PointerNetwork(nn.Module):
         self.encoding = self.forwardEncoder # since there are masks, it's easier to write a custom forward than wrangle the transformer layers to work with nn.Sequential
 
         self.pointer = PointerModule(self.embedding_dim, heads=self.heads, expansion=self.expansion, kqnorm=self.kqnorm,
-                                     encoding_layers=self.encoding_layers, bias=self.bias, decode_with_gru=self.decode_with_gru,
+                                     encoding_layers=self.encoding_layers, bias=self.bias, decoder_method=self.decoder_method,
                                      pointer_method=self.pointer_method, greedy=self.greedy, temperature=self.temperature,
                                      thompson=self.thompson)
 
