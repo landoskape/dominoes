@@ -97,7 +97,7 @@ def trainTestModel():
     greedy = args.greedy
     
     # Create a pointer network
-    pnet = transformers.PointerNetwork(input_dim, embedding_dim, encoding_layers=encoding_layers, heads=heads, kqnorm=True, decode_with_gru=False, greedy=greedy)
+    pnet = transformers.PointerNetwork(input_dim, embedding_dim, encoding_layers=encoding_layers, heads=heads, kqnorm=True, decoder_method='transformer', greedy=greedy)
     pnet = pnet.to(device)
     pnet.train()
 

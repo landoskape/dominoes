@@ -298,7 +298,7 @@ def trainTestModel():
     
     # Create a pointer network
     pnet = transformers.PointerNetwork(input_dim, embedding_dim, encoding_layers=encoding_layers, heads=heads, expansion=expansion, kqnorm=True, 
-                                       contextual_encoder=contextual_encoder, decode_with_gru=False, greedy=greedy, temperature=temperature)
+                                       contextual_encoder=contextual_encoder, decoder_method='transformer', greedy=greedy, temperature=temperature)
     pnet = pnet.to(device)
     pnet.train()
 
