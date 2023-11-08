@@ -179,7 +179,12 @@ def trainTestModel():
                 for i in range(numNets):
                     trainReward[epoch, i, run] = torch.mean(torch.sum(rewards[i], dim=1)).detach()
                     trainRewardByPos[epoch, :, i, run] = torch.mean(rewards[i], dim=0).detach()
-                    trainScoreByPos[epoch, :, i, run] = torch.mean(torch.exp(logprob_policy[i]), dim=0).detach()
+
+                    # Measure the models confidence -- ignoring the effect of temperature
+                    pretemp_score = torch.softmax(log_scores[i] * nets[i].temperature, dim=2)
+                    pretemp_policy = torch.gather(pretemp_score, 2, choices[i].unsqueeze(2)).squeeze(2)
+                    trainScoreByPos[epoch, :, i, run] = torch.mean(pretemp_policy, dim=0).detach()
+                    
         
         with torch.no_grad():
             # always return temperature to 1 and thompson to False for testing networks
@@ -210,8 +215,12 @@ def trainTestModel():
                 for i in range(numNets):
                     testReward[epoch, i, run] = torch.mean(torch.sum(rewards[i], dim=1))
                     testRewardByPos[epoch, :, i, run] = torch.mean(rewards[i], dim=0)
-                    testScoreByPos[epoch, :, i, run] = torch.mean(torch.exp(logprob_policy[i]), dim=0)
 
+                    # Measure the models confidence -- ignoring the effect of temperature
+                    pretemp_score = torch.softmax(log_scores[i] * nets[i].temperature, dim=2)
+                    pretemp_policy = torch.gather(pretemp_score, 2, choices[i].unsqueeze(2)).squeeze(2)
+                    testScoreByPos[epoch, :, i, run] = torch.mean(pretemp_policy, dim=0).detach()
+                    
     results = {
         'trainReward': trainReward,
         'testReward': testReward,
@@ -261,7 +270,7 @@ def plotResults(results, args):
     height = new_ymax - new_ymin
     rect = mpl.patches.Rectangle([trainInspectFrom[0], new_ymin], width, height, facecolor='k', edgecolor='none', alpha=0.1)
     ax[0].add_patch(rect)
-    
+
     for idx, name in enumerate(POINTER_METHODS):
         mnTrainScore = torch.mean(results['trainScoreByPos'][trainInspect, :, idx], dim=(0,2))
         ax[2].plot(range(numPos), mnTrainScore, color=cmap(idx), lw=1, label=name)
