@@ -233,7 +233,68 @@ def trainTestModel():
     return results, nets
 
 
-def plotResults(results, args):
+@torch.no_grad()
+def eigenAnalyses(nets, args):
+    # get a "normal" batch
+    highestDominoe = args.highest_dominoe
+    listDominoes = df.listDominoes(highestDominoe)
+    
+    # do subselection for training
+    doubleDominoes = listDominoes[:,0] == listDominoes[:,1]
+    nonDoubleReverse = listDominoes[~doubleDominoes][:,[1,0]] # represent each dominoe in both orders
+    
+    # list of full set of dominoe representations and value of each
+    listDominoes = np.concatenate((listDominoes, nonDoubleReverse), axis=0)
+    dominoeValue = np.sum(listDominoes, axis=1)
+    
+    # training inputs
+    numDominoes = len(listDominoes)
+    dominoeValue = np.sum(listDominoes, axis=1)
+    batchSize = args.batch_size * 2 # lots of data!
+    handSize = args.hand_size
+    batch_inputs = {'null_token' : False, 
+                    'available_token' : False, 
+                    'ignore_index' :- 1, 
+                    'return_full' : True,
+                    'return_target' : False,
+                   }
+    
+    selection = np.array([])
+    while len(np.unique(selection))!=numDominoes:
+        batch = datasets.generateBatch(highestDominoe, listDominoes, batchSize, handSize, **batch_inputs)
+        
+        # unpack batch tuple
+        input, _, _, _, _, selection, available = batch
+        input = input.to(device)
+    
+    # pre-forward
+    batch_size, tokens, _ = input.size()
+    mask = torch.ones((batch_size, tokens), dtype=input.dtype).to(device)
+    
+    # encoding
+    embedded = [net.embedding(input) for net in nets]
+    encoded = [net.encoding(embed) for net, embed in zip(nets, embedded)]
+
+    # translate to (token x embedding)
+    encoded = [encode.view(-1, encode.size(2)).T for encode in encoded]
+
+    # get covariance
+    cov = [torch.cov(encode) for encode in encoded]
+
+    # get eigenvalues
+    eigvals, eigvecs = map(list, zip(*[torch.linalg.eigh(c) for c in cov]))
+    eigvals = [eigval.cpu().numpy() for eigval in eigvals]
+    eigvecs = [eigvec.cpu().numpy() for eigvec in eigvecs]
+
+    idx_sort = [np.argsort(-eigval) for eigval in eigvals]
+    eigvals = [eigval[isort] for eigval, isort in zip(eigvals, idx_sort)]
+    eigvecs = [eigvec[isort] for eigvec, isort in zip(eigvecs, idx_sort)]
+    
+    return eigvals, eigvecs
+
+
+
+def plotResults(results, args, eigvals):
     numNets = results['trainReward'].shape[2]
     numPos = results['testScoreByPos'].shape[1]
     n_string = f" (N={numNets})"
@@ -308,6 +369,23 @@ def plotResults(results, args):
         plt.savefig(str(figsPath/getFileName()))
     
     plt.show()
+
+    fig = plt.figure(figsize=(4,4), layout='constrained')
+    ax = plt.gca()
+    for idx, (name, eigval) in enumerate(zip(POINTER_METHODS, eigvals)):
+        ax.plot(range(len(eigval)), eigval, color=cmap(idx), lw=1.2, label=name)
+    ax.set_xlabel('Dimension')
+    ax.set_ylabel('Variance')
+    ax.set_title('Dimensionality of Encoding')
+    ax.set_yscale('log')
+    ax.legend(loc='lower left')
+
+    if not(args.nosave):
+        plt.savefig(str(figsPath/getFileName('eigenvalues')))
+        
+    plt.show()
+    
+    
     
 if __name__=='__main__':
     args = handleArguments()
@@ -336,8 +414,10 @@ if __name__=='__main__':
                 setattr(args,pk,pi)
         
         results = np.load(resPath / (getFileName()+'.npy'), allow_pickle=True).item()
-        
-    plotResults(results, args)
+        nets = [torch.load(savePath / getFileName(extra=f"{method}.pt")).to(device) for method in POINTER_METHODS]
+
+    eigval, eigvec = eigenAnalyses(nets, args)
+    plotResults(results, args, eigval)
     
     
     
