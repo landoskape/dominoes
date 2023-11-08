@@ -26,7 +26,7 @@ from dominoes import transformers
 device = 'cuda' if torchCuda.is_available() else 'cpu'
 
 # general variables for experiment
-POINTER_METHODS = ['PointerStandard', 'PointerDot', 'PointerDotLean', 'PointerAttention', 'PointerTransformer']
+POINTER_METHODS = ['PointerStandard', 'PointerDot', 'PointerDotLean', 'PointerDotNoLN', 'PointerAttention', 'PointerTransformer']
 
 # can edit this for each machine it's being used on
 savePath = Path('.') / 'experiments' / 'savedNetworks'
@@ -84,7 +84,7 @@ def trainTestDominoes(baseDominoes, trainFraction):
     return fullDominoes, trainDominoes, trainIndex
     
     
-def trainTestModel(with_thompson):
+def trainTestModel():
     # get values from the argument parser
     highestDominoe = args.highest_dominoe
     baseDominoes = df.listDominoes(highestDominoe)
@@ -103,6 +103,7 @@ def trainTestModel(with_thompson):
     greedy = True 
 
     # policy parameters
+    with_thompson = True
     temperature = args.train_temperature
 
     # train parameters
@@ -126,27 +127,26 @@ def trainTestModel(with_thompson):
     numNets = len(POINTER_METHODS)
     
     # Train network
-    train_type_string = 'with' if with_thompson else 'without'
-    print(f"Training networks {train_type_string} thompson sampling...")
+    print("Training networks...")
     trainReward = torch.zeros((trainEpochs, numNets, numRuns))
     testReward = torch.zeros((testEpochs, numNets, numRuns))
     trainRewardByPos = torch.zeros((trainEpochs, maxOutput, numNets, numRuns))
     testRewardByPos = torch.zeros((testEpochs, maxOutput, numNets, numRuns))
+    trainScoreByPos = torch.zeros((trainEpochs, maxOutput, numNets, numRuns))
+    testScoreByPos = torch.zeros((testEpochs, maxOutput, numNets, numRuns))
     for run in range(numRuns):
         # reset train set of dominoes
         fullDominoes, trainDominoes, trainIndex = trainTestDominoes(baseDominoes, args.train_fraction)
 
         # create pointer networks with different pointer methods
-        pnets = [transformers.PointerNetwork(input_dim, embedding_dim, temperature=temperature, pointer_method=POINTER_METHOD, 
+        nets = [transformers.PointerNetwork(input_dim, embedding_dim, temperature=temperature, pointer_method=POINTER_METHOD, 
                                              thompson=with_thompson, encoding_layers=encoding_layers, heads=heads, kqnorm=True, 
                                              decode_with_gru=False, greedy=greedy)
                  for POINTER_METHOD in POINTER_METHODS]
-        pnets = [pnet.to(device) for pnet in pnets]
-        for pnet in pnets: 
-            pnet.train()
+        nets = [net.to(device) for net in nets]
         
         # Create an optimizer, Adam with weight decay is pretty good
-        optimizers = [torch.optim.Adam(pnet.parameters(), lr=1e-3, weight_decay=1e-5) for pnet in pnets]
+        optimizers = [torch.optim.Adam(net.parameters(), lr=1e-3, weight_decay=1e-5) for net in nets]
         
         print(f"Doing training run {run+1}/{numRuns}...")
         for epoch in tqdm(range(trainEpochs)):
@@ -158,7 +158,7 @@ def trainTestModel(with_thompson):
             
             # zero gradients, get output of network
             for opt in optimizers: opt.zero_grad()
-            log_scores, choices = map(list, zip(*[pnet(input, max_output=maxOutput) for pnet in pnets]))
+            log_scores, choices = map(list, zip(*[net(input, max_output=maxOutput) for net in nets]))
         
             # log-probability for each chosen dominoe
             logprob_policy = [torch.gather(score, 2, choice.unsqueeze(2)).squeeze(2) for score, choice in zip(log_scores, choices)]
@@ -175,15 +175,17 @@ def trainTestModel(with_thompson):
             for opt in optimizers: opt.step()
             
             # save training data
-            for i in range(numNets):
-                trainReward[epoch, i, run] = torch.mean(torch.sum(rewards[i], dim=1))
-                trainRewardByPos[epoch, :, i, run] = torch.mean(rewards[i], dim=0)
+            with torch.no_grad():
+                for i in range(numNets):
+                    trainReward[epoch, i, run] = torch.mean(torch.sum(rewards[i], dim=1)).detach()
+                    trainRewardByPos[epoch, :, i, run] = torch.mean(rewards[i], dim=0).detach()
+                    trainScoreByPos[epoch, :, i, run] = torch.mean(torch.exp(logprob_policy[i]), dim=0).detach()
         
         with torch.no_grad():
             # always return temperature to 1 and thompson to False for testing networks
-            for pnet in pnets: 
-                pnet.setTemperature(1.0)
-                pnet.setThompson(False)
+            for net in nets: 
+                net.setTemperature(1.0)
+                net.setThompson(False)
                 
             print('Testing network...')
             for epoch in tqdm(range(testEpochs)):
@@ -196,7 +198,7 @@ def trainTestModel(with_thompson):
                 input = input.to(device)
 
                 # get output of networks
-                log_scores, choices = map(list, zip(*[pnet(input, max_output=maxOutput) for pnet in pnets]))
+                log_scores, choices = map(list, zip(*[net(input, max_output=maxOutput) for net in nets]))
             
                 # log-probability for each chosen dominoe
                 logprob_policy = [torch.gather(score, 2, choice.unsqueeze(2)).squeeze(2) for score, choice in zip(log_scores, choices)]
@@ -208,56 +210,82 @@ def trainTestModel(with_thompson):
                 for i in range(numNets):
                     testReward[epoch, i, run] = torch.mean(torch.sum(rewards[i], dim=1))
                     testRewardByPos[epoch, :, i, run] = torch.mean(rewards[i], dim=0)
+                    testScoreByPos[epoch, :, i, run] = torch.mean(torch.exp(logprob_policy[i]), dim=0)
 
-    append_name = '_with_thompson' if with_thompson else '_no_thompson'
     results = {
-        'trainReward'+append_name: trainReward,
-        'testReward'+append_name: testReward,
-        'trainRewardByPos'+append_name: trainRewardByPos,
-        'testRewardByPos'+append_name: testRewardByPos,
+        'trainReward': trainReward,
+        'testReward': testReward,
+        'trainRewardByPos': trainRewardByPos,
+        'testRewardByPos': testRewardByPos,
+        'trainScoreByPos': trainScoreByPos,
+        'testScoreByPos': testScoreByPos,
     }
 
-    return results, pnets
+    return results, nets
 
 
 def plotResults(results, args):
-    numNets = results['trainReward_with_thompson'].shape[2]
+    numNets = results['trainReward'].shape[2]
+    numPos = results['testScoreByPos'].shape[1]
     n_string = f" (N={numNets})"
+    cmap = mpl.colormaps['tab10']
+    trainInspectFrom = [2000, 2500]
+    trainInspect = slice(trainInspectFrom[0], trainInspectFrom[1])
     
-    fig, ax = plt.subplots(1,4,figsize=(12,3), layout='constrained')
+    fig, ax = plt.subplots(1,4,figsize=(13,4), layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
-        ax[0].plot(range(args.train_epochs), torch.mean(results['trainReward_with_thompson'][:,idx],dim=1), lw=1, label=name)
+        ax[0].plot(range(args.train_epochs), torch.mean(results['trainReward'][:,idx],dim=1), color=cmap(idx), lw=1, label=name)
+    ax[0].set_xlabel('Training Epoch')
     ax[0].set_ylabel('Mean Reward'+n_string)
-    ax[0].set_title('Training with Thompson')
+    ax[0].set_title('Training Performance')
     yMin0, yMax0 = ax[0].get_ylim()
-
-    for idx, name in enumerate(POINTER_METHODS):
-        ax[1].plot(range(args.test_epochs), torch.mean(results['testReward_with_thompson'][:,idx],dim=1), lw=1, label=name)
-    ax[1].set_ylabel('Mean Reward'+n_string)
-    ax[1].set_title('Testing with Thompson')
-    yMin1, yMax1 = ax[1].get_ylim()
+    ax[0].legend(loc='lower right')
     
-    ax[0].set_ylim(min(yMin0,yMin1), max(yMax0, yMax1))
-    ax[1].set_ylim(min(yMin0,yMin1), max(yMax0, yMax1))
-
     for idx, name in enumerate(POINTER_METHODS):
-        ax[2].plot(range(args.train_epochs), torch.mean(results['trainReward_no_thompson'][:,idx],dim=1), lw=1, label=name)
-    ax[2].set_xlabel('Epoch')
-    ax[2].set_ylabel('Mean Reward'+n_string)
-    ax[2].set_title('Training w/out Thompson')
+        mnTestReward = torch.mean(results['testReward'][:,idx], dim=0)
+        ax[1].scatter(idx, torch.mean(mnTestReward), marker='o', color=cmap(idx), edgecolor='k', lw=0.5, label=name)
+        ax[1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=0.5)
+    ax[1].set_xticklabels([])
+    ax[1].set_xlabel('Pointer Architecture')
+    ax[1].set_ylabel('Reward'+n_string)
+    ax[1].set_title('Testing Performance')
+    ax[1].legend(loc='lower right')
+    yMin1, yMax1 = ax[1].get_ylim()
+
+    new_ymin = min(yMin0, yMin1)
+    new_ymax = max(yMax0, yMax1)
+    ax[0].set_ylim(new_ymin, new_ymax)
+    ax[1].set_ylim(new_ymin, new_ymax)
+
+    width = trainInspectFrom[1]-trainInspectFrom[0]
+    height = new_ymax - new_ymin
+    rect = mpl.patches.Rectangle([trainInspectFrom[0], new_ymin], width, height, facecolor='k', edgecolor='none', alpha=0.1)
+    ax[0].add_patch(rect)
+    
+    for idx, name in enumerate(POINTER_METHODS):
+        mnTrainScore = torch.mean(results['trainScoreByPos'][trainInspect, :, idx], dim=(0,2))
+        ax[2].plot(range(numPos), mnTrainScore, color=cmap(idx), lw=1, label=name)
+        ax[2].scatter(range(numPos), mnTrainScore, color=cmap(idx), lw=0.5, marker='o', edgecolor='k')
+    ax[2].set_ylim(None, 1)
+    ax[2].set_xlabel('Output Position')
+    ax[2].set_ylabel('Mean Score'+n_string)
+    ax[2].set_title(f"Train Score (in patch)")
     yMin2, yMax2 = ax[2].get_ylim()
-
+    
     for idx, name in enumerate(POINTER_METHODS):
-        ax[3].plot(range(args.test_epochs), torch.mean(results['testReward_no_thompson'][:,idx],dim=1), lw=1, label=name)
-    ax[3].set_xlabel('Epoch')
-    ax[3].set_ylabel('Mean Reward'+n_string)
-    ax[3].legend(loc='best')
-    ax[3].set_title('Testing w/out Thompson')
+        mnTestScore = torch.mean(results['testScoreByPos'][:, :, idx], dim=(0,2))
+        ax[3].plot(range(numPos), mnTestScore, color=cmap(idx), lw=1, label=name)
+        ax[3].scatter(range(numPos), mnTestScore, color=cmap(idx), lw=0.5, marker='o', edgecolor='k')
+    ax[3].set_xlabel('Output Position')
+    ax[3].set_ylabel('Mean Score'+n_string)
+    ax[3].set_title('Test Score')
+    ax[3].legend(loc='lower right')
     yMin3, yMax3 = ax[3].get_ylim()
-
-    ax[2].set_ylim(min(yMin2,yMin3), max(yMax2, yMax3))
-    ax[3].set_ylim(min(yMin2,yMin3), max(yMax2, yMax3))
-
+    
+    new_ymin = min(yMin2, yMin3)
+    ax[2].set_ylim(new_ymin, 1)
+    ax[3].set_ylim(new_ymin, 1)
+    
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName()))
     
@@ -267,25 +295,15 @@ if __name__=='__main__':
     args = handleArguments()
     
     if not(args.justplot):
-        # train and test pointerNetwork with thompson sampling
-        thompson_setting = [True, False]
-        thompson_name = ['with_thompson', 'no_thompson']
-        results = {}
-        pnets = []
-        for with_thompson in thompson_setting:
-            c_results, c_pnets = trainTestModel(with_thompson)
-            c_pnets = [cp.to('cpu') for cp in c_pnets] # move to CPU to make sure there's room for next round of training
-            for key, val in c_results.items():
-                results[key] = val
-            pnets.append(c_pnets)
+        results, nets = trainTestModel()
+        nets = [net.to('cpu') for net in nets]
             
         # save results if requested
         if not(args.nosave):
             # Save agent parameters
-            for idx, name in enumerate(thompson_name):
-                for net, method in zip(pnets[idx], POINTER_METHODS):
-                    save_name = f"{method}_{name}.pt"
-                    torch.save(net, savePath / getFileName(extra=save_name))
+            for net, method in zip(nets, POINTER_METHODS):
+                save_name = f"{method}.pt"
+                torch.save(net, savePath / getFileName(extra=save_name))
             np.save(prmsPath / getFileName(), vars(args))
             np.save(resPath / getFileName(), results)
         
