@@ -229,7 +229,7 @@ def trainTestModel():
         'trainScoreByPos': trainScoreByPos,
         'testScoreByPos': testScoreByPos,
     }
-
+    
     return results, nets
 
 
@@ -247,48 +247,44 @@ def plotResults(results, args):
     ax[0,0].set_xlabel('Training Epoch')
     ax[0,0].set_ylabel('Mean Reward'+n_string)
     ax[0,0].set_title('Training Performance')
+    ax[0,0].set_ylim(None, 8)
     yMin0, yMax0 = ax[0,0].get_ylim()
-    #ax[0,0].legend(loc='lower right')
-    
+
+    xOffset = [-0.2, 0.2]
+    get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
     for idx, name in enumerate(POINTER_METHODS):
         mnTestReward = torch.mean(results['testReward'][:,idx], dim=0)
-        # ax[0,1].scatter(idx, torch.mean(mnTestReward), marker='o', color=cmap(idx), label=name)
-        ax[0,1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=4, label=name)
+        ax[0,1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
+        ax[0,1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
     ax[0,1].set_xticklabels([])
     ax[0,1].set_xlabel('Pointer Architecture')
     ax[0,1].set_ylabel('Reward'+n_string)
     ax[0,1].set_title('Testing Performance')
     ax[0,1].legend(loc='lower right')
-    yMin1, yMax1 = ax[0,1].get_ylim()
-
-    new_ymin = min(yMin0, yMin1)
-    new_ymax = max(yMax0, yMax1)
-    ax[0,0].set_ylim(new_ymin, new_ymax)
-    ax[0,1].set_ylim(new_ymin, new_ymax)
+    ax[0,1].set_ylim(6, 8)
 
     # create inset to show initial train trajectory
-    inset_bounds = [0.5, 0.1, 0.45, 0.45] #args.train_epochs/2, new_ymin+0.05*(new_ymax-new_ymin), 0.9*args.train_epochs/2, 0.45*(new_ymax-new_ymin)]
-    inset = ax[0,0].inset_axes(inset_bounds)
+    inset = ax[0,0].inset_axes([0.5, 0.1, 0.45, 0.45])
     for idx, name in enumerate(POINTER_METHODS):
-        inset.plot(range(args.train_epochs), torch.mean(results['trainReward'][:,idx],dim=1), color=cmap(idx), lw=1.0, label=name)
+        inset.plot(range(args.train_epochs), torch.mean(results['trainReward'][:,idx],dim=1), color=cmap(idx), lw=1.2, label=name)
     inset.set_xlim(-20, 400)
-    inset.set_ylim(new_ymin, new_ymax)
+    inset.set_ylim(yMin0, 8)
     inset.set_xticks([0, 200, 400])
     inset.set_xticklabels(inset.get_xticklabels(), fontsize=8)
     inset.set_yticklabels([])
     inset.set_title('Initial Epochs', fontsize=10)
     
     width = trainInspectFrom[1]-trainInspectFrom[0]
-    height = new_ymax - new_ymin
-    rect = mpl.patches.Rectangle([trainInspectFrom[0], new_ymin], width, height, facecolor='k', edgecolor='none', alpha=0.2)
+    height = yMax0 - yMin0
+    rect = mpl.patches.Rectangle([trainInspectFrom[0], yMin0], width, height, facecolor='k', edgecolor='none', alpha=0.2)
     ax[0,0].add_patch(rect)
 
     for idx, name in enumerate(POINTER_METHODS):
         mnTrainScore = torch.mean(results['trainScoreByPos'][trainInspect, :, idx], dim=(0,2))
-        ax[1,0].plot(range(numPos), mnTrainScore, color=cmap(idx), lw=1, label=name)
+        ax[1,0].plot(range(numPos), mnTrainScore, color=cmap(idx), lw=1.2, label=name)
     for idx, name in enumerate(POINTER_METHODS):
         mnTrainScore = torch.mean(results['trainScoreByPos'][trainInspect, :, idx], dim=(0,2))
-        ax[1,0].scatter(range(numPos), mnTrainScore, color=cmap(idx), lw=0.5, marker='o', s=24, edgecolor='none')
+        ax[1,0].scatter(range(numPos), mnTrainScore, color=cmap(idx), marker='o', s=24, edgecolor='none')
     ax[1,0].set_ylim(None, 1)
     ax[1,0].set_xlabel('Output Position')
     ax[1,0].set_ylabel('Mean Score'+n_string)
@@ -297,10 +293,7 @@ def plotResults(results, args):
     
     for idx, name in enumerate(POINTER_METHODS):
         mnTestScore = torch.mean(results['testScoreByPos'][:, :, idx], dim=(0,2))
-        ax[1,1].plot(range(numPos), mnTestScore, color=cmap(idx), lw=1, label=name)
-    for idx, name in enumerate(POINTER_METHODS):
-        mnTestScore = torch.mean(results['testScoreByPos'][:, :, idx], dim=(0,2))
-        ax[1,1].scatter(range(numPos), mnTestScore, color=cmap(idx), lw=0.5, marker='o', s=24, edgecolor='none')
+        ax[1,1].plot(range(numPos), mnTestScore, color=cmap(idx), lw=1.2, label=name)
     ax[1,1].set_xlabel('Output Position')
     ax[1,1].set_ylabel('Mean Score'+n_string)
     ax[1,1].set_title('Test Confidence')
