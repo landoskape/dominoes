@@ -105,8 +105,8 @@ Let $e = \text{encoded}$, $c = \text{context}$, and $o = \text{output}$.
 ### Standard Pointer Layer -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L368)
 The standard pointer layer projects the `encoded` and `context` tensors to a
 new space, adds them together (with broadcasting), then projects them onto an
-"attention" vector aftering passing them through a hyperbolic tangent 
-nonlinearity. That looks like this:
+"attention" vector after passing them through a hyperbolic tangent 
+nonlinearity.
 
 $$\large u_i = v^T \tanh (W_1 e_i + W_2 c)$$
 
@@ -124,7 +124,7 @@ One variant of the pointer dot layer is called pointer dot lean. It is
 identical to the above pointer dot layer except it drops the $W_1$ and $W_2$
 matrices. This essentially requires the encoder phase of the pointer network
 to do all the work putting the `encoded` representations into a space that 
-can be effectively "pointed" to. 
+can be effectively "pointed" to by the `context` vector.
 
 $$\large u_i = LN(e_i) \cdot LN(c) $$
 
@@ -141,13 +141,13 @@ The pointer attention layer uses a variant of self-attention that I call
 ([code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L240)). 
 This projects "main" inputs to queries, keys, and values using one set of 
 matrices. It also projects "context" inputs to keys and values using a 
-distinct set of matrices. Then, the main inputs are "attended to" using all
-keys and values (from main and context inputs). 
+different set of matrices. Then, the main inputs are "attended to" using all
+keys and values (from both main and context inputs). 
 
 For this pointer layer, the main inputs are the `encoded` representations and
 the context inputs are both the `context` representation and the `output` 
 representation. This leads to a new attended representation of the `encoded` 
-tokens, which is passed through a hyperbolic tangent and project onto an 
+tokens, which is passed through a hyperbolic tangent and projected onto an 
 "attention" vector $v^T$ just like in the standard pointer layer. 
 
 ### Pointer "Transformer" Layer -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L549)
@@ -158,7 +158,7 @@ feedforward layer used in transformers.
 
 ## Results
 I trained 5 networks of each architecture and compared their performance on 
-the problem. Each curve is an average of the performance of all networks from
+the task. Each curve is an average of the performance of all networks from
 each type. The number of tokens per "hand" is always 8, which means the best 
 the networks can do in each rollout is a total reward of 8. 
 
@@ -170,16 +170,17 @@ The main result of the problem is shown here:
 The left panel shows the average cumulative reward ($\sum_t r_t$) for each 
 rollout across training. All networks learn to solve the task close to optimal
 performance (i.e. close to an average cumulative reward of $8$). However, 
-networks that use new variants of the pointer layer tend to learn faster. The
-inset shows the first 400 epochs to show the initial learning curves for each 
-network in more detail. 
+networks that use new variants of the pointer layer tend to learn faster. (The
+standard pointer layer is in blue). The inset highlights the first 400 epochs 
+to show the initial learning curves for each network in more detail. 
 
 The right panel shows the testing performance, after returning held-out 
 dominoes to the input data and averaging across 100 epochs for all 5 networks
 of each architecture. All new architectures except for the "Dot No Layer Norm"
 (DotNoLN) perform better than the standard pointer layer. Additionally, the 
 variance in test performance is lower for the new architectures, especially 
-for the two networks that use multi-context attention. 
+for the two networks that use multi-context attention (PointerAttention and
+PointerTransformer).
 
 Note: the DotNoLN networks learn fastest, see the training inset, however, 
 once they reach asymptotic performance, their behavior becomes very noisy. I
@@ -191,33 +192,32 @@ yet.
 What might explain the weaker performance of the standard pointer layer? Since
 the new architectures vary the mechanism by which each token is selected in an
 output sequence, one difference might be the maximum probability assigned to a 
-token at each output position in a sequence. Since the maximum probability
-represents the choice of the network, I'll refer to this as the confidence of
-the choice. 
+token in the generative phase. Since the maximum probability represents the 
+choice of the network, I'll refer to this as the network confidence. 
 
-To test this, I measured the average maximum probability for each output 
+To test this, I measured the average maximum probability in each output 
 position for the networks during a window of the training phase and during
 testing. 
 
 ![pointer confidence](media/pointerArchitectureComparison_confidence.png)
 
 The left panel shows the confidence during training -- this is averaged over
-the epochs highlighted by the grey patch in the above figure. The right panel
-shows the confidence during the testing phase. (Note that I corrected for 
-the effect of temperature for the training data). 
+the epochs highlighted by the grey patch in the training/testing figure. The
+right panel shows the confidence during the testing phase. (Note that I
+corrected for the effect of temperature for the training data). 
 
 As in the previous toy problem, the confidence is lowest for the middle parts
 of the output sequence. This is partly due to the fact that many more dominoes
-have intermediate values than extreme values (like values rolled on a pair of
-dice), so it's a bit harder. However, the standard pointer layer suffers most
-from this challenge, dropping in confidence by almost 10%, where the other 
-pointer layers only drop by 3-4%. 
+have intermediate values than extreme values (like the sum rolled on a pair of
+dice), so it's a bit harder to sort in the middle. However, the standard 
+pointer layer suffers most from this challenge, dropping in confidence by 
+almost 10%, where the other pointer layers only drop by 3-4%. 
 
-All networks improve their confidence in the correct choice dramatically over
-the course of training, reaching near 100% confidence by the testing phase. 
-However, the standard pointer layer still suffers from reductions in 
-confidence for intermediate output positions during testing, clearly standing
-out from the rest of the pointer layer architectures. 
+All networks improve their confidence over the course of training, reaching 
+near 100% confidence by the testing phase. However, the standard pointer layer
+still suffers from reductions in confidence for intermediate output positions 
+during testing, clearly standing out from the rest of the pointer layer 
+architectures. 
 
 The standard pointer layer may approach equal levels of confidence if trained
 for longer; however, given the cost of training and the much greater 
@@ -225,8 +225,8 @@ complexity of real-world problems, these new architectures may be beneficial
 for getting the most out of a network with a limited time and money budget. 
 
 ### Network Representation of Input
-I am in the process of doing a detailed analysis of how these different 
-networks represent their inputs, and the precise mechanism of generating
+I am in the process of doing a detailed analysis of (1) how these different 
+networks represent their inputs and (2) the precise mechanism of generating
 scores for each token during the generative phase. As a first pass, I did a 
 simple analysis where I measured the eigenspectrum of the `encoded` 
 representations for each network architecture. 
@@ -235,10 +235,10 @@ To measure the eigenspectrum, I generated an input batch with 1024 batch
 elements (still using 8 tokens per batch element). Then, I processed it 
 through the encoder phase of each pointer network, and measured the 
 eigenvalues of the covariance matrix across the embedding dimension. Note that
-each encoding phase is identical across the different network architectures 
-and the `encoded` representations do not depend on the pointer layer. 
-Therefore the only reason this will differ is by the structure of thegradients 
-passing through the different pointer layers through training. 
+the encoding architecture is identical across the different networks and the 
+`encoded` representations do not depend on the pointer layer. Therefore, the 
+only reason this will differ across pointer layer types is because of the 
+structure of the gradients passing through the pointer layers during training.
 
 As a measure of dimensionality, I use the shannon entropy of the normalized
 eigenvalues, which is highest if each embedding dimension is used equally. 
