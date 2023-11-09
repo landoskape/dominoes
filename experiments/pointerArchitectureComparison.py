@@ -286,9 +286,13 @@ def eigenAnalyses(nets, args):
     eigvals = [eigval.cpu().numpy() for eigval in eigvals]
     eigvecs = [eigvec.cpu().numpy() for eigvec in eigvecs]
 
+    # sort highest to lowest
     idx_sort = [np.argsort(-eigval) for eigval in eigvals]
     eigvals = [eigval[isort] for eigval, isort in zip(eigvals, idx_sort)]
-    eigvecs = [eigvec[isort] for eigvec, isort in zip(eigvecs, idx_sort)]
+    eigvecs = [eigvec[:,isort] for eigvec, isort in zip(eigvecs, idx_sort)]
+
+    # negative values are numerical errors
+    eigvals = [np.maximum(eigval, 0) for eigval in eigvals] 
     
     return eigvals, eigvecs
 
@@ -302,30 +306,32 @@ def plotResults(results, args, eigvals):
     trainInspectFrom = [1500, 2000]
     trainInspect = slice(trainInspectFrom[0], trainInspectFrom[1])
     
-    fig, ax = plt.subplots(2,2,figsize=(7,7), layout='constrained')
+    fig, ax = plt.subplots(1,2,figsize=(7,3.5), width_ratios=[2, 1], layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
-        ax[0,0].plot(range(args.train_epochs), torch.mean(results['trainReward'][:,idx],dim=1), color=cmap(idx), lw=1.2, label=name)
-    ax[0,0].set_xlabel('Training Epoch')
-    ax[0,0].set_ylabel('Mean Reward'+n_string)
-    ax[0,0].set_title('Training Performance')
-    ax[0,0].set_ylim(None, 8)
-    yMin0, yMax0 = ax[0,0].get_ylim()
+        ax[0].plot(range(args.train_epochs), torch.mean(results['trainReward'][:,idx],dim=1), color=cmap(idx), lw=1.2, label=name)
+    ax[0].set_xlabel('Training Epoch')
+    ax[0].set_ylabel('Mean Reward'+n_string)
+    ax[0].set_title('Training Performance')
+    ax[0].set_ylim(None, 8)
+    yMin0, yMax0 = ax[0].get_ylim()
 
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
     for idx, name in enumerate(POINTER_METHODS):
         mnTestReward = torch.mean(results['testReward'][:,idx], dim=0)
-        ax[0,1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
-        ax[0,1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
-    ax[0,1].set_xticklabels([])
-    ax[0,1].set_xlabel('Pointer Architecture')
-    ax[0,1].set_ylabel('Reward'+n_string)
-    ax[0,1].set_title('Testing Performance')
-    ax[0,1].legend(loc='lower right')
-    ax[0,1].set_ylim(6, 8)
+        ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
+        ax[1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
+    ax[1].set_xticks(range(len(POINTER_METHODS)))
+    ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
+    ax[1].set_ylabel('Reward'+n_string)
+    ax[1].set_title('Testing Performance')
+    ax[1].legend(loc='lower center', fontsize=9)
+    ax[1].set_xlim(-1, len(POINTER_METHODS))
+    ax[1].set_ylim(6, 8)
+    ax[1].set_yticks([6, 7, 8])
 
     # create inset to show initial train trajectory
-    inset = ax[0,0].inset_axes([0.5, 0.1, 0.45, 0.45])
+    inset = ax[0].inset_axes([0.5, 0.1, 0.45, 0.45])
     for idx, name in enumerate(POINTER_METHODS):
         inset.plot(range(args.train_epochs), torch.mean(results['trainReward'][:,idx],dim=1), color=cmap(idx), lw=1.2, label=name)
     inset.set_xlim(-20, 400)
@@ -338,48 +344,69 @@ def plotResults(results, args, eigvals):
     width = trainInspectFrom[1]-trainInspectFrom[0]
     height = yMax0 - yMin0
     rect = mpl.patches.Rectangle([trainInspectFrom[0], yMin0], width, height, facecolor='k', edgecolor='none', alpha=0.2)
-    ax[0,0].add_patch(rect)
+    ax[0].add_patch(rect)
 
-    for idx, name in enumerate(POINTER_METHODS):
-        mnTrainScore = torch.mean(results['trainScoreByPos'][trainInspect, :, idx], dim=(0,2))
-        ax[1,0].plot(range(numPos), mnTrainScore, color=cmap(idx), lw=1.2, label=name)
-    for idx, name in enumerate(POINTER_METHODS):
-        mnTrainScore = torch.mean(results['trainScoreByPos'][trainInspect, :, idx], dim=(0,2))
-        ax[1,0].scatter(range(numPos), mnTrainScore, color=cmap(idx), marker='o', s=24, edgecolor='none')
-    ax[1,0].set_ylim(None, 1)
-    ax[1,0].set_xlabel('Output Position')
-    ax[1,0].set_ylabel('Mean Score'+n_string)
-    ax[1,0].set_title(f"Train Confidence (in grey patch)")
-    yMin2, yMax2 = ax[1,0].get_ylim()
-    
-    for idx, name in enumerate(POINTER_METHODS):
-        mnTestScore = torch.mean(results['testScoreByPos'][:, :, idx], dim=(0,2))
-        ax[1,1].plot(range(numPos), mnTestScore, color=cmap(idx), lw=1.2, label=name)
-    ax[1,1].set_xlabel('Output Position')
-    ax[1,1].set_ylabel('Mean Score'+n_string)
-    ax[1,1].set_title('Test Confidence')
-    ax[1,1].legend(loc='lower right')
-    yMin3, yMax3 = ax[1,1].get_ylim()
-    
-    new_ymin = min(yMin2, yMin3)
-    ax[1,0].set_ylim(new_ymin, 1)
-    ax[1,1].set_ylim(new_ymin, 1)
-    
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName()))
     
     plt.show()
 
-    fig = plt.figure(figsize=(4,4), layout='constrained')
-    ax = plt.gca()
-    for idx, (name, eigval) in enumerate(zip(POINTER_METHODS, eigvals)):
-        ax.plot(range(len(eigval)), eigval, color=cmap(idx), lw=1.2, label=name)
-    ax.set_xlabel('Dimension')
-    ax.set_ylabel('Variance')
-    ax.set_title('Dimensionality of Encoding')
-    ax.set_yscale('log')
-    ax.legend(loc='lower left')
 
+    # now show confidence by position figure
+    fig, ax = plt.subplots(1, 2, figsize=(7, 3.5), layout='constrained')
+    for idx, name in enumerate(POINTER_METHODS):
+        mnTrainScore = torch.mean(results['trainScoreByPos'][trainInspect, :, idx], dim=(0,2))
+        ax[0].plot(range(numPos), mnTrainScore, color=cmap(idx), lw=1.2, label=name)
+    for idx, name in enumerate(POINTER_METHODS):
+        mnTrainScore = torch.mean(results['trainScoreByPos'][trainInspect, :, idx], dim=(0,2))
+        ax[0].scatter(range(numPos), mnTrainScore, color=cmap(idx), marker='o', s=24, edgecolor='none')
+    ax[0].set_ylim(None, 1)
+    ax[0].set_xlabel('Output Position')
+    ax[0].set_ylabel('Mean Score'+n_string)
+    ax[0].set_title(f"Train Confidence (in grey patch)")
+    yMin2, yMax2 = ax[0].get_ylim()
+    
+    for idx, name in enumerate(POINTER_METHODS):
+        mnTestScore = torch.mean(results['testScoreByPos'][:, :, idx], dim=(0,2))
+        ax[1].plot(range(numPos), mnTestScore, color=cmap(idx), lw=1.2, marker='o', markersize=np.sqrt(24), label=name)
+    ax[1].set_xlabel('Output Position')
+    ax[1].set_ylabel('Mean Score'+n_string)
+    ax[1].set_title('Test Confidence')
+    ax[1].legend(loc='lower right', fontsize=9)
+    yMin3, yMax3 = ax[1].get_ylim()
+    
+    new_ymin = min(yMin2, yMin3)
+    ax[0].set_ylim(new_ymin, 1)
+    ax[1].set_ylim(new_ymin, 1)
+    
+    if not(args.nosave):
+        plt.savefig(str(figsPath/getFileName('confidence')))
+    
+    plt.show()
+
+
+    # Show eigenvalue analysis
+    fig, ax = plt.subplots(1, 2, figsize=(7, 3.5), width_ratios=[2,1], layout='constrained')
+    for idx, (name, eigval) in enumerate(zip(POINTER_METHODS, eigvals)):
+        ax[0].plot(range(len(eigval)), eigval/np.sum(eigval), color=cmap(idx), lw=1.2, label=name)
+    ax[0].set_xlim(-1, len(eigval))
+    ax[0].set_xlabel('Dimension')
+    ax[0].set_ylabel('Fraction of Variance')
+    ax[0].set_title('Eigenspectrum')
+    ax[0].set_yscale('log')
+    ax[0].legend(loc='lower left', fontsize=9)
+
+    for idx, (name, eigval) in enumerate(zip(POINTER_METHODS, eigvals)):
+        ax[1].plot(idx, sp.stats.entropy(eigval), color=cmap(idx), marker='o', linestyle='none', label=name)
+    ax[1].set_ylabel('Entropy of Eigenspectrum')
+    ax[1].set_title('Dimensionality')
+    ax[1].set_xticks(range(len(POINTER_METHODS)))
+    ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
+    ax[1].set_xlim(-1, len(POINTER_METHODS))
+    _, yMax = ax[1].get_ylim()
+    ax[1].set_ylim(0, 2.5)
+    ax[1].set_yticks(np.linspace(0, 2, 3))
+    
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName('eigenvalues')))
         
