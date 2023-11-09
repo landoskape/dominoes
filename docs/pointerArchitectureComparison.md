@@ -119,7 +119,7 @@ onto $v^T$. Because the nonlinearity is dropped, a `LayerNorm` is used on the
 
 $$\large u_i = LN(W_1 e_i) \cdot LN(W_2 c) $$
 
-#### Pointer "Dot" Variant 1: Pointer Dot Lean -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L480)
+### Pointer "Dot" Variant 1: Pointer Dot Lean -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L480)
 One variant of the pointer dot layer is called pointer dot lean. It is 
 identical to the above pointer dot layer except it drops the $W_1$ and $W_2$
 matrices. This essentially requires the encoder phase of the pointer network
@@ -128,7 +128,7 @@ can be effectively "pointed" to.
 
 $$\large u_i = LN(e_i) \cdot LN(c) $$
 
-#### Pointer "Dot" Variant 2: Pointer Do No Layer Norm -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L443)
+### Pointer "Dot" Variant 2: Pointer Do No Layer Norm -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L443)
 The other variant is identical to the main pointer dot layer, but doesn't use
 a layer norm. This is a bit noisy, but learns very fast, as you'll see in the
 results. 
