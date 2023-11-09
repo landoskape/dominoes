@@ -67,10 +67,9 @@ the agents I have developed. This is a list of them with links to the file.
     - [Tutorials and basic usage](docs/tutorials.md)
 2. [Experiments](experiments)
     - [Pointer Network Toy Problem](docs/pointerDemonstration.md)
-    - [Pointer Network Line Sequencer](docs/pointerSequencer.md)
-4. Reinforcement Learning Agents
+    - [Pointer Network Architecture Comparison](docs/pointerArchitectureComparison.md)
+3. Reinforcement Learning Agents
    - [The TD-Lambda Algorithm](docs/TDLambdaAgents.md)
-   - TD-Lambda Agents -- (not written yet, sorry)
 
 ## Contributing
 Feel free to contribute to this project by opening issues or submitting pull 
