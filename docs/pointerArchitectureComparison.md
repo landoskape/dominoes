@@ -84,9 +84,8 @@ the literature is the one introduced in
 [this paper](https://arxiv.org/pdf/1409.0473.pdf) and used in the original
 [paper](https://papers.nips.cc/paper_files/paper/2015/file/29921001f2f04bd3baee84a12e98098f-Paper.pdf)
 on pointer networks. Here, I introduce four new architectures (one of which
-has three variants). I'll refer to them as the "pointer layer" throughout.
-
-Note: for more detail, see the [code](../dominoes/transformers.py).
+has three variants). I'll refer to them as the "pointer layer" throughout. 
+For more detail, see the [code](../dominoes/transformers.py).
 
 #### Inputs to Pointer Layer
 Before the pass through the pointer layer, the full network generates three
