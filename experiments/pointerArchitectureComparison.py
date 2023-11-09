@@ -235,6 +235,9 @@ def trainTestModel():
 
 @torch.no_grad()
 def eigenAnalyses(nets, args):
+    # make sure everything is on the same device
+    nets = [net.to(device) for net in nets]
+    
     # get a "normal" batch
     highestDominoe = args.highest_dominoe
     listDominoes = df.listDominoes(highestDominoe)
@@ -441,7 +444,7 @@ if __name__=='__main__':
                 setattr(args,pk,pi)
         
         results = np.load(resPath / (getFileName()+'.npy'), allow_pickle=True).item()
-        nets = [torch.load(savePath / getFileName(extra=f"{method}.pt")).to(device) for method in POINTER_METHODS]
+        nets = [torch.load(savePath / getFileName(extra=f"{method}.pt")) for method in POINTER_METHODS]
 
     eigval, eigvec = eigenAnalyses(nets, args)
     plotResults(results, args, eigval)
