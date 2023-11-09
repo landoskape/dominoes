@@ -187,6 +187,11 @@ think this is because there is no dampening on the magnitude of values going
 into the dot product, so the gradient might overflow. I haven't tested this 
 yet. 
 
+For results on the supervised learning task, see 
+[this plot](media/sl_pointerArchitectureComparison.png) and 
+[this plot](media/sl_pointerArchitectureComparison_confidence.png). More 
+discussion on this will come later.
+
 ### Network Confidence
 What might explain the weaker performance of the standard pointer layer? Since
 the new architectures vary the mechanism by which each token is selected in an
