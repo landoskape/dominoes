@@ -29,7 +29,17 @@ In the demonstration, I used supervised learning to train the network. Here, I
 use the REINFORCE algorithm. Briefly, the training process performs gradient 
 ascent on a term called J:
 
-$$`\large J(\theta) = \mathbb{E}[\sum_{t=0}^{t=T-1} r_{t+1} \; | \; \pi_\theta]`$$
+$$\large J(\theta) = \mathbb{E}[\sum_{t=0}^{T-1} r_{t+1} | \pi_\theta]$$
+
+Where $J(\theta)$ represents the expected value of reward over the course of a
+"rollout" from timesteps $t=0$ to $t=T-1$ given the policy $\pi_\theta$. The
+gradient of $J(\theta)$ with respect to the policy is:
+
+$$\large \nabla_{\theta}J(\theta) = \sum_{t=0}^{T-1} \nabla_{\theta} log \pi_{\theta}(a_t | s_t)G_t $$
+
+Where $G_t$ represents the net reward up to time point $t$: 
+
+$$\large G_t = \sum_{t'=t+1}^{T-1} \gamma^{t'-t-1}r_{t'}$$. 
 
 
 
