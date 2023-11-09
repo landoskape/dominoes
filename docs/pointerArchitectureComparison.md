@@ -29,7 +29,7 @@ In the demonstration, I used supervised learning to train the network. Here, I
 use the REINFORCE algorithm. Briefly, the training process performs gradient 
 ascent on a term called J:
 
-$$\large J(\theta) = \mathbb{E}[\sum_{t=0}^{t=T-1} r_{t+1} \middle| \pi_\theta]$$
+$$\large J(\theta) = \mathbb{E}[\sum_{t=0}^{t=T-1} r_{t+1} \; | \; \pi_\theta]$$
 
 
 
