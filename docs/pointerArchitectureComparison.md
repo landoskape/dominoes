@@ -27,7 +27,7 @@ demonstration documentation for more explanation.
 
 In the demonstration, I used supervised learning to train the network. Here, I
 use the REINFORCE algorithm. Briefly, the training process performs gradient 
-ascent on a term called J:
+ascent on a term called $J(\theta)$:
 
 $$\large J(\theta) = \mathbb{E}[\sum_{t=0}^{T-1} r_{t+1} | \pi_\theta]$$
 
@@ -35,60 +35,92 @@ Where $J(\theta)$ represents the expected value of reward over the course of a
 "rollout" from timesteps $t=0$ to $t=T-1$ given the policy $\pi_\theta$. The
 gradient of $J(\theta)$ with respect to the policy is:
 
-$$\large \nabla_{\theta}J(\theta) = \sum_{t=0}^{T-1} \nabla_{\theta} log \pi_{\theta}(a_t | s_t)G_t $$
+$$\large \nabla_{\theta}J(\theta) = \sum_{t=0}^{T-1} \nabla_{\theta} \log \pi_{\theta}(a_t | s_t)G_t $$
 
-Where $G_t$ represents the net reward up to time point $t$: 
+Where $G_t$ represents the net discounted reward from time $t$ into the 
+future:
 
-$$\large G_t = \sum_{t'=t+1}^{T-1} \gamma^{t'-t-1}r_{t'}$$. 
+$$\large G_t = \sum_{t'=t+1}^{T-1} \gamma^{t'-t-1}r_{t'}$$
 
+Note: thanks to the excellent Medium 
+[article](https://medium.com/@thechrisyoon/deriving-policy-gradients-and-implementing-reinforce-f887949bd63) 
+written by [Chris Yoon](https://medium.com/@thechrisyoon) for helping me learn
+this. 
 
-
-### Target
-The value of each dominoe is the sum of the two values on the dominoe. For 
-example, the dominoe `(1 | 2)` has value `3`. The task of this toy problem is 
-to sort dominoes based on their value, from highest to lowest, and output them
-in order using a pointer network. Note that some dominoes have equal value in 
-a set, but because the dominoes are always initialized in the same order, 
-equal value dominoes are always sorted in the same way. 
-
-The target is represented as a list of integers corresponding to the arg sort
-of the dominoe values for each hand. As an example, if a hand was composed of 
-the 6 dominoes shown above as an example, the target is `[5,3,2,4,1,0]`.
-
-### Network Architecture
-The pointer network architecture consists of two stages, an encoder and a 
-decoder. The encoder generates an embedding of each element of an input 
-sequence, along with a context vector that describes the state of the whole
-set of inputs. The decoder first updates the context vector based on the last 
-output of the network. Second, it chooses one of the input elements to output 
-next by combining the embedded representations with the context vector.
-
-In the original paper by Vinyals et al., the encoder is an LSTM RNN. In this
-implementation, I have replaced the LSTM with a transfomer. Then, the context
-vector is just a sum of the transformed input representations. 
-
-![pointer encoder](media/schematics/pointerEncoderArchitecture.png)
-
-The decoder stage first updates the context vector. In the original paper, 
-this is performed with a second RNN in which the context vector is 
-equivalent to the hidden state (or cell state, depending on which RNN is 
-used). Here, I replace it with a "contextual transformer", in which the 
-transformer receives some inputs to be transformed and some inputs that are 
-purely used for context. Those "context inputs" are used to generate keys and
-value but not queries, and so are not transformed. Finally, a pointer 
-attention module combines the new context vector with the encoded 
-representations to choose one of the inputs as the next output. This is done
-however many times is requested. 
-
-![pointer decoder](media/schematics/pointerDecoderArchitecture.png)
+### Rewards
+As in any reinforcement learning problem, the reward needs to be well-defined
+and chosen well. For this task, I assign a reward of $1$ if the agent chooses 
+a dominoe that is less than or equal to the value of the previous dominoe and 
+if that dominoe has not been chosen yet. Otherwise, the reward is $-1$. This
+way, the agent maximizes total reward in a rollout by playing the dominoes in 
+decreasing order of value. Note: unlike the supervised learning method, in 
+which dominoes of equal value _have_ to be played in the same order each time,
+this RL setup affords flexibility and the order no longer matters for equal 
+value dominoes. 
 
 ### Training
 To train the network, I used the Adam optimizer with $lr=1e^{-3}$ and L2 
-regularization with $\lambda=1e^{-5}$.
+regularization with $\lambda=1e^{-5}$. The $J(\theta)$ term is flipped in sign
+so the PyTorch gradient descent algorithm effectively performs gradient ascent
+on this problem. 
 
 ### Testing
-Testing is exactly the same as training, except the remaining 1/3 of dominoe
-pairs are returned to the dataset. 
+Just like in the "demonstration" toy problem, training is done with held out
+dominoes, which are replaced for testing. This checks generalization 
+performance and confirms that the networks are really solving the intended 
+problem and not just memorizing the training data. 
+
+## New Pointer Attention Architectures
+As far as I can tell, the only pointer attention layer that is ever used in 
+the literature is the one introduced in 
+[this paper](https://arxiv.org/pdf/1409.0473.pdf) and used in the original
+[paper](https://papers.nips.cc/paper_files/paper/2015/file/29921001f2f04bd3baee84a12e98098f-Paper.pdf)
+on pointer networks. Here, I introduce four new architectures (one of which
+has three variants). I'll refer to them as the "pointer layer" throughout.
+
+#### Inputs to Pointer Layer
+Before the pass through the pointer layer, the full network generates three
+tensors. First is the `encoded` tensor, containing the encoded representation
+of each token in a batch. For example, if the batch size is 512, the maxmimum
+number of tokens is 12, and the embedding dimension is 256, then the `encoded`
+tensor will have shape `(512, 12, 256)`. Second, is the `context` tensor, 
+which characterizes the entire set of tokens per batch element. There is a 
+single `context` tensor per batch element with the same embedding dimension.
+Finally, there is an `output` tensor, which represents the last token chosen
+by the network. This can either be a weighted average of tokens or a greedy 
+representation of whatever token was chosen. 
+
+Let $e = \text{encoded}$, $c = \text{context}$, and $o = \text{output}$.
+
+### Standard Pointer Layer
+The standard pointer layer projects the `encoded` and `context` tensors to a
+new space, adds them together (with broadcasting), then projects them onto an
+"attention" vector aftering passing them through a hyperbolic tangent 
+nonlinearity. That looks like this:
+
+$$\large u_i = v^T \tanh (W_1 e_i + W_2 c)$$
+
+### Pointer "Dot" Layer
+The pointer dot layer also projects the `encoded` and `context` tensors to a 
+new space, but then takes the dot product between each projected `encoded` 
+vector and the projected `context` vector. This skips the tanh and projection
+onto $v^T$. Because the nonlinearity is dropped, a `LayerNorm` is used on the
+`encoded` and `context` representation before the dot product is taken. 
+
+$$\large u_i = LN(W_1 e_i) \cdot LN(W_2 c) $$
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## Results
 

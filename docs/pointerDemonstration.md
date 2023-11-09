@@ -79,10 +79,13 @@ equivalent to the hidden state (or cell state, depending on which RNN is
 used). Here, I replace it with a "contextual transformer", in which the 
 transformer receives some inputs to be transformed and some inputs that are 
 purely used for context. Those "context inputs" are used to generate keys and
-value but not queries, and so are not transformed. Finally, a pointer 
-attention module combines the new context vector with the encoded 
-representations to choose one of the inputs as the next output. This is done
-however many times is requested. 
+value but not queries, and so are not transformed. The transformer uses 
+distinct matrices to transform the main inputs and context inputs into keys
+and values, so it can learn a different code for each kind of input. 
+
+Finally, a pointer attention module combines the new context vector with the
+encoded representations to choose one of the inputs as the next output. This 
+is done however many times is requested. 
 
 ![pointer decoder](media/schematics/pointerDecoderArchitecture.png)
 
