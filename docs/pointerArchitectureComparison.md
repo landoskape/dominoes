@@ -50,19 +50,27 @@ this.
 ### Rewards
 As in any reinforcement learning problem, the reward needs to be well-defined
 and chosen well. For this task, I assign a reward of $1$ if the agent chooses 
-a dominoe that is less than or equal to the value of the previous dominoe and 
-if that dominoe has not been chosen yet. Otherwise, the reward is $-1$. This
-way, the agent maximizes total reward in a rollout by playing the dominoes in 
-decreasing order of value. Note: unlike the supervised learning method, in 
-which dominoes of equal value _have_ to be played in the same order each time,
-this RL setup affords flexibility and the order no longer matters for equal 
-value dominoes. 
+a dominoe that (1) is less than or equal to the value of the previous dominoe 
+and (2) if that dominoe has not been chosen yet. Otherwise, the reward is 
+$-1$. This way, the agent maximizes total reward in a rollout by playing the 
+dominoes in decreasing order of value. Note: unlike the supervised learning 
+method, in which dominoes of equal value _have_ to be played in the same order 
+each time, this RL setup affords flexibility and the order no longer matters 
+for equal value dominoes. 
+
+Since each rollout is finite (the number of dominoes the agents have to sort
+for each batch element was always set to $8$), I chose a discounting factor of
+$\gamma=1$. 
 
 ### Training
 To train the network, I used the Adam optimizer with $lr=1e^{-3}$ and L2 
 regularization with $\lambda=1e^{-5}$. The $J(\theta)$ term is flipped in sign
 so the PyTorch gradient descent algorithm effectively performs gradient ascent
 on this problem. 
+
+Additionally, the networks were trained with Thompson sampling and 
+$temperature=5$ to encourage exploration, but returned to a greedy policy with
+$temperature=1$ for testing.
 
 ### Testing
 Just like in the "demonstration" toy problem, training is done with held out
@@ -78,21 +86,23 @@ the literature is the one introduced in
 on pointer networks. Here, I introduce four new architectures (one of which
 has three variants). I'll refer to them as the "pointer layer" throughout.
 
+Note: for more detail, see the [code](../dominoes/transformers.py).
+
 #### Inputs to Pointer Layer
 Before the pass through the pointer layer, the full network generates three
 tensors. First is the `encoded` tensor, containing the encoded representation
 of each token in a batch. For example, if the batch size is 512, the maxmimum
 number of tokens is 12, and the embedding dimension is 256, then the `encoded`
-tensor will have shape `(512, 12, 256)`. Second, is the `context` tensor, 
-which characterizes the entire set of tokens per batch element. There is a 
-single `context` tensor per batch element with the same embedding dimension.
-Finally, there is an `output` tensor, which represents the last token chosen
-by the network. This can either be a weighted average of tokens or a greedy 
+tensor will have shape `(512, 12, 256)`. Second is the `context` tensor, which
+characterizes the entire set of tokens per batch element. There is a single 
+`context` tensor per batch element with the same embedding dimension. Finally, 
+there is an `output` tensor, which represents the last token chosen by the 
+network. This can either be a weighted average of tokens or a greedy 
 representation of whatever token was chosen. 
 
 Let $e = \text{encoded}$, $c = \text{context}$, and $o = \text{output}$.
 
-### Standard Pointer Layer
+### Standard Pointer Layer -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L368)
 The standard pointer layer projects the `encoded` and `context` tensors to a
 new space, adds them together (with broadcasting), then projects them onto an
 "attention" vector aftering passing them through a hyperbolic tangent 
@@ -100,7 +110,7 @@ nonlinearity. That looks like this:
 
 $$\large u_i = v^T \tanh (W_1 e_i + W_2 c)$$
 
-### Pointer "Dot" Layer
+### Pointer "Dot" Layer -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L404)
 The pointer dot layer also projects the `encoded` and `context` tensors to a 
 new space, but then takes the dot product between each projected `encoded` 
 vector and the projected `context` vector. This skips the tanh and projection
@@ -109,90 +119,142 @@ onto $v^T$. Because the nonlinearity is dropped, a `LayerNorm` is used on the
 
 $$\large u_i = LN(W_1 e_i) \cdot LN(W_2 c) $$
 
+#### Pointer "Dot" Variant 1: Pointer Dot Lean -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L480)
+One variant of the pointer dot layer is called pointer dot lean. It is 
+identical to the above pointer dot layer except it drops the $W_1$ and $W_2$
+matrices. This essentially requires the encoder phase of the pointer network
+to do all the work putting the `encoded` representations into a space that 
+can be effectively "pointed" to. 
 
+$$\large u_i = LN(e_i) \cdot LN(c) $$
 
+#### Pointer "Dot" Variant 2: Pointer Do No Layer Norm -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L443)
+The other variant is identical to the main pointer dot layer, but doesn't use
+a layer norm. This is a bit noisy, but learns very fast, as you'll see in the
+results. 
 
+$$\large u_i = (W_1 e_i) \cdot (W_2 c) $$
 
+### Pointer "Attention" Layer -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L517)
+The pointer attention layer uses a variant of self-attention that I call
+"multi context attention" 
+([code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L240)). 
+This projects "main" inputs to queries, keys, and values using one set of 
+matrices. It also projects "context" inputs to keys and values using a 
+distinct set of matrices. Then, the main inputs are "attended to" using all
+keys and values (from main and context inputs). 
 
+For this pointer layer, the main inputs are the `encoded` representations and
+the context inputs are both the `context` representation and the `output` 
+representation. This leads to a new attended representation of the `encoded` 
+tokens, which is passed through a hyperbolic tangent and project onto an 
+"attention" vector $v^T$ just like in the standard pointer layer. 
 
-
-
-
-
-
+### Pointer "Transformer" Layer -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L549)
+The pointer transformer layer is almost identical to the pointer attention
+layer, except it uses multi context attention followed by the standard double
+feedforward layer used in transformers. 
 
 
 ## Results
+I trained 5 networks of each architecture and compared their performance on 
+the problem. Each curve is an average of the performance of all networks from
+each type. The number of tokens per "hand" is always 8, which means the best 
+the networks can do in each rollout is a total reward of 8. 
 
+
+### Network Performance 
 The main result of the problem is shown here: 
-![pointer toy figure](media/pointerDemonstration.png)
+![pointer arch comp](media/pointerArchitectureComparison.png)
 
-As you can see, the network quickly learns to sort dominoes by their value 
-effectively. Pretty cool! There are two key observations to make that I'd like
-to discuss: the lack of an increase in loss for the testing phase and the loss
-spikes during the training phase. 
+The left panel shows the average cumulative reward ($\sum_t r_t$) for each 
+rollout across training. All networks learn to solve the task close to optimal
+performance (i.e. close to an average cumulative reward of $8$). However, 
+networks that use new variants of the pointer layer tend to learn faster. The
+inset shows the first 400 epochs to show the initial learning curves for each 
+network in more detail. 
 
-### Test loss is similar to final training loss
-The testing loss is essentially identical to the final training loss. This is 
-despite the fact that the network is all of a sudden seeing new dominoes 
-during the testing phase (see above for explanation of the hold out 
-procedure). What this means is that the network doesn't simply learn a look up
-table between input and output. Instead it really learns exactly what the 
-task is: sort dominoes based on the sum of their value.
+The right panel shows the testing performance, after returning held-out 
+dominoes to the input data and averaging across 100 epochs for all 5 networks
+of each architecture. All new architectures except for the "Dot No Layer Norm"
+(DotNoLN) perform better than the standard pointer layer. Additionally, the 
+variance in test performance is lower for the new architectures, especially 
+for the two networks that use multi-context attention. 
 
-### Loss spikes during training
-During the training phase, there are some pretty large spikes in the loss. 
-What is going on? To understand why those loss spikes occur, take a look at 
-the following figure. It shows a few loss-spikes in the top panel (as 
-identified by scipy's find-peaks method), with the loss-spike triggered 
-average of the error as a function of output sequence position in the bottom
-panel.
+Note: the DotNoLN networks learn fastest, see the training inset, however, 
+once they reach asymptotic performance, their behavior becomes very noisy. I
+think this is because there is no dampening on the magnitude of values going
+into the dot product, so the gradient might overflow. I haven't tested this 
+yet. 
 
-![pointer loss spike](media/pointerDemonstration_lossSpike.png)
+### Network Confidence
+What might explain the weaker performance of the standard pointer layer? Since
+the new architectures vary the mechanism by which each token is selected in an
+output sequence, one difference might be the maximum probability assigned to a 
+token at each output position in a sequence. Since the maximum probability
+represents the choice of the network, I'll refer to this as the confidence of
+the choice. 
 
-The error is defined as the average difference in the max score and the target
-score for each position. (The score is the log-probability for each option, 
-and the max score is the one that the model "chose" for each step based on its
-greedy policy).
+To test this, I measured the average maximum probability for each output 
+position for the networks during a window of the training phase and during
+testing. 
 
-Right before the loss spike, there is a small increase in error for the middle
-positions (purple to brown on the colormap). These same positions are the ones
-that spike in error when the loss gets very high. Interestingly, the early and
-late positions are somewhat immune from this spike in error. Why would this
-be?
+![pointer confidence](media/pointerArchitectureComparison_confidence.png)
 
-In this next figure, I'm plotting the "confidence" (e.g. the max probability) 
-of each choice as a function of sequence position. As before, it's a
-loss-spike triggered average of the same epochs. On the right is the baseline
-confidence for each position. 
+The left panel shows the confidence during training -- this is averaged over
+the epochs highlighted by the grey patch in the above figure. The right panel
+shows the confidence during the testing phase. (Note that I corrected for 
+the effect of temperature for the training data). 
 
-![pointer loss spike confidence](media/pointerDemonstration_lossSpike_confidence.png)
+As in the previous toy problem, the confidence is lowest for the middle parts
+of the output sequence. This is partly due to the fact that many more dominoes
+have intermediate values than extreme values (like values rolled on a pair of
+dice), so it's a bit harder. However, the standard pointer layer suffers most
+from this challenge, dropping in confidence by almost 10%, where the other 
+pointer layers only drop by 3-4%. 
 
-What this indicates is that the network is less confident about later output
-positions, and least confident about the middle positions. I conclude two
-things from this:
+All networks improve their confidence in the correct choice dramatically over
+the course of training, reaching near 100% confidence by the testing phase. 
+However, the standard pointer layer still suffers from reductions in 
+confidence for intermediate output positions during testing, clearly standing
+out from the rest of the pointer layer architectures. 
 
-- The pointer network architecture may accumulate uncertainty if it is trained
-  on problems that require it to produce long output sequences. Alternatively,
-  the pointer network might _specifically be bad_ at producing a high
-  confidence "point" towards intermediary positions in a sequence.
-- Additionally, in this particular problem, the middle choices are harder,
-  because some dominoes have the same value but have to be sorted in a certain
-  order. See the [target](###Target) section above for more explanation.
+The standard pointer layer may approach equal levels of confidence if trained
+for longer; however, given the cost of training and the much greater 
+complexity of real-world problems, these new architectures may be beneficial
+for getting the most out of a network with a limited time and money budget. 
 
-These two points probably explain how the loss spikes occur -- sometimes the
-network is tasked with sorting a particularly challenging set of dominoes. 
-When that happens, the networks architectural challenges lead it to get the 
-output very wrong, such that a huge misleading error backpropagates through
-and confuses it for the next few epochs. Interesting! Maybe there's a way to 
-teach a pointer network how to filter error based on whether it's likely to be
-due to these shift-based failure modes. 
+### Network Representation of Input
+I am in the process of doing a detailed analysis of how these different 
+networks represent their inputs, and the precise mechanism of generating
+scores for each token during the generative phase. As a first pass, I did a 
+simple analysis where I measured the eigenspectrum of the `encoded` 
+representations for each network architecture. 
 
-Also interesting: the return to good performance is much faster after one of 
-these spikes than it would be at a similar training loss after initialization.
-Curious. I wonder why that's happening. 
+To measure the eigenspectrum, I generated an input batch with 1024 batch 
+elements (still using 8 tokens per batch element). Then, I processed it 
+through the encoder phase of each pointer network, and measured the 
+eigenvalues of the covariance matrix across the embedding dimension. Note that
+each encoding phase is identical across the different network architectures 
+and the `encoded` representations do not depend on the pointer layer. 
+Therefore the only reason this will differ is by the structure of thegradients 
+passing through the different pointer layers through training. 
 
+As a measure of dimensionality, I use the shannon entropy of the normalized
+eigenvalues, which is highest if each embedding dimension is used equally. 
 
+![pointer eigenspectra](media/pointerArchitectureComparison_eigenvalues.png)
+
+The left panel shows the normalized eigenspectra for each network. Note that
+the y-axis is on a log-scale. As (I think) is expected, the first few 
+dimensions carry most of the variance, and there is a log-linear dropoff in 
+variance afterwards. The right panel shows the dimensionality of each network
+type (as measured by shannon entropy).
+
+The new architectures that perform better than the standard pointer layer have
+a higher dimensionality in the `encoded` representations. Although it is not 
+directly correlated with performance, this result could hint at how or why the
+new architectures perform this task more effectively. 
 
 
 
