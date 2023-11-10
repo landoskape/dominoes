@@ -304,11 +304,13 @@ def plotResults(results, args):
     fig, ax = plt.subplots(1, 2, figsize=(7, 3.5), layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
         mnTrainScore = torch.nanmean(results['trainScoreByPos'][trainInspect, :, idx], dim=(0,2))
-        ax[0].plot(range(numPos), mnTrainScore, color=cmap(idx), lw=1.2, label=name)
+        ax[0].plot(range(1,numPos+1), mnTrainScore, color=cmap(idx), lw=1.2, label=name)
     for idx, name in enumerate(POINTER_METHODS):
         mnTrainScore = torch.nanmean(results['trainScoreByPos'][trainInspect, :, idx], dim=(0,2))
-        ax[0].scatter(range(numPos), mnTrainScore, color=cmap(idx), marker='o', s=24, edgecolor='none')
+        ax[0].scatter(range(1,numPos+1), mnTrainScore, color=cmap(idx), marker='o', s=24, edgecolor='none')
+    ax[0].set_xlim(0.5, numPos+0.5)
     ax[0].set_ylim(None, 1)
+    ax[0].set_xticks(range(1,numPos+1))
     ax[0].set_xlabel('Output Position')
     ax[0].set_ylabel('Mean Score'+n_string)
     ax[0].set_title(f"Train Confidence (in grey patch)")
@@ -316,7 +318,10 @@ def plotResults(results, args):
     
     for idx, name in enumerate(POINTER_METHODS):
         mnTestScore = torch.nanmean(results['testScoreByPos'][:, :, idx], dim=(0,2))
-        ax[1].plot(range(numPos), mnTestScore, color=cmap(idx), lw=1.2, marker='o', markersize=np.sqrt(24), label=name)
+        ax[1].plot(range(1,numPos+1), mnTestScore, color=cmap(idx), lw=1.2, marker='o', markersize=np.sqrt(24), label=name)
+    ax[1].set_xlim(0.5, numPos+0.5)
+    ax[1].set_ylim(None, 1)
+    ax[1].set_xticks(range(1,numPos+1))
     ax[1].set_xlabel('Output Position')
     ax[1].set_ylabel('Mean Score'+n_string)
     ax[1].set_title('Test Confidence')

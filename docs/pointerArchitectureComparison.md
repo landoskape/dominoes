@@ -175,10 +175,12 @@ to show the initial learning curves for each network in more detail.
 
 The right panel shows the testing performance, after returning held-out 
 dominoes to the input data and averaging across 100 epochs for all 5 networks
-of each architecture. All new architectures except for the "Dot No Layer Norm"
-(DotNoLN) perform better than the standard pointer layer. Additionally, the 
-variance in test performance is lower for the new architectures, especially 
-for the two networks that use multi-context attention (PointerAttention and
+of each architecture. The horizontal bar indicates the average and the 
+vertical line indicates the minimum and maximum performance for each network
+type. All new architectures except for the "Dot No Layer Norm" (DotNoLN) 
+perform better than the standard pointer layer. Additionally, the variance in
+test performance is lower for the new architectures, especially for the two 
+networks that use multi-context attention (PointerAttention and
 PointerTransformer).
 
 Note: the DotNoLN networks learn fastest, see the training inset, however, 
@@ -225,13 +227,21 @@ for getting the most out of a network with a limited time and money budget.
 
 ### Variations in Task and Learning Algorithm
 I also trained the networks on a task where the hand size (number of tokens to
-sort per batch element) changes from 4-12 randomly on each batch. The training
-and testing results are [here](media/pointerArchitectureComparison_uneven.png)
-and the position dependent confidence plots are 
-[here](media/pointerArchitectureComparison_uneven_confidence.png). Networks
-with new pointer layers still learn the task faster and have higher confidence
-but the variance of the multi-context attention networks reduces their average
-test performance. 
+sort per batch element) changes from 4-12 randomly on each batch. The training 
+and testing results are here:
+
+![uneven performance](media/pointerArchitectureComparison_uneven.png)
+
+The position dependent confidence results are here:
+![uneven confidence](media/pointerArchitectureComparison_uneven_confidence.png) 
+
+Networks with new pointer layers still learn the task faster and have higher 
+confidence. However, whereas the multi-context attention networks 
+("PointerAttention" and "PointerTransformer") performed best in the previous
+task, their variance in this task reduces the average test performance. This
+appears to be due to a specific inability to maintain confidence in output 
+for the longest sequences, although 2/5 of the PointerTransformer networks
+have flat position dependent confidence curves (data not shown). 
 
 For results on the supervised learning task, see the training and testing
 [results](media/sl_pointerArchitectureComparison.png) and the plot of the 
