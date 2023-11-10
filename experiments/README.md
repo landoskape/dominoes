@@ -26,13 +26,17 @@ can find these files listed in the "Documentation" section of the repositories
 see what their code does (I think they're pretty well commented...). If you
 have a question about an experiment or an idea for a new one, let me know!
 
-### Primary Experimental Narrative
+### Constructing a Dominoes RL Agent
 - [Basic Agent ELOs](basicAgentELOs.py)
 - [Training a TD-Lambda Agent](trainValueAgent.py)
 - [Performance of TD-Lambda Agents](valueAgentELOs.py)
 
-### Supporting Experiments
+### Pointer Network Analysis
 - [Pointer Network Demonstration](pointerDemonstration.py)
+- Architecture Comparisons
+  - [With Reinforcement Learning](pointerArchitectureComparison.py)
+  - [With RL and Uneven Batch Size](pointerArchitectureComparison_uneven.py)
+  - [With Supervised Learning](pointerArchitectureComparison_SL.py)
 
 ### Additional Curiosities
 - [Best Line Agent ELOs](bestLineAgentELOs.py)

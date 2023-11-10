@@ -76,12 +76,14 @@ vector is just a sum of the transformed input representations.
 The decoder stage first updates the context vector. In the original paper, 
 this is performed with a second RNN in which the context vector is 
 equivalent to the hidden state (or cell state, depending on which RNN is 
-used). Here, I replace it with a "contextual transformer", in which the 
+used). Here, I replace it with a "multi-context transformer", in which the 
 transformer receives some inputs to be transformed and some inputs that are 
 purely used for context. Those "context inputs" are used to generate keys and
 value but not queries, and so are not transformed. The transformer uses 
 distinct matrices to transform the main inputs and context inputs into keys
-and values, so it can learn a different code for each kind of input. 
+and values, so it can learn a different code for each kind of input. For more
+detail, see the [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L637)
+to the multi-context transformer.
 
 Finally, a pointer attention module combines the new context vector with the
 encoded representations to choose one of the inputs as the next output. This 
