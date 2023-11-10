@@ -187,11 +187,6 @@ think this is because there is no dampening on the magnitude of values going
 into the dot product, so the gradient might overflow. I haven't tested this 
 yet. 
 
-For results on the supervised learning task, see 
-[this plot](media/sl_pointerArchitectureComparison.png) and 
-[this plot](media/sl_pointerArchitectureComparison_confidence.png). More 
-discussion on this will come later.
-
 ### Network Confidence
 What might explain the weaker performance of the standard pointer layer? Since
 the new architectures vary the mechanism by which each token is selected in an
@@ -227,6 +222,22 @@ The standard pointer layer may approach equal levels of confidence if trained
 for longer; however, given the cost of training and the much greater 
 complexity of real-world problems, these new architectures may be beneficial
 for getting the most out of a network with a limited time and money budget. 
+
+### Variations in Task and Learning Algorithm
+I also trained the networks on a task where the hand size (number of tokens to
+sort per batch element) changes from 4-12 randomly on each batch. The training
+and testing results are [here](media/pointerArchitectureComparison_uneven.png)
+and the position dependent confidence plots are 
+[here](media/pointerArchitectureComparison_uneven_confidence.png). Networks
+with new pointer layers still learn the task faster and have higher confidence
+but the variance of the multi-context attention networks reduces their average
+test performance. 
+
+For results on the supervised learning task, see the training and testing
+[results](media/sl_pointerArchitectureComparison.png) and the plot of the 
+position dependent 
+[confidence](media/sl_pointerArchitectureComparison_confidence.png). A full
+discussion of these results will come later when I've analyzed it more. 
 
 ### Network Representation of Input
 I am in the process of doing a detailed analysis of (1) how these different 

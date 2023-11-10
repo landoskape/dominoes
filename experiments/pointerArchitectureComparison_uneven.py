@@ -255,7 +255,7 @@ def plotResults(results, args):
     cmap = mpl.colormaps['tab10']
     trainInspectFrom = [1500, 2000]
     trainInspect = slice(trainInspectFrom[0], trainInspectFrom[1])
-    smooth_train_trajectory = np.mean(sp.signal.savgol_filter(results['trainReward'].numpy(), 10, 2, axis=0), axis=2)
+    smooth_train_trajectory = np.mean(sp.signal.savgol_filter(results['trainReward'].numpy(), 20, 1, axis=0), axis=2)
     
     fig, ax = plt.subplots(1,2,figsize=(7,3.5), width_ratios=[2, 1], layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
@@ -277,6 +277,7 @@ def plotResults(results, args):
     ax[1].set_title('Testing Performance')
     ax[1].legend(loc='lower center', fontsize=9)
     ax[1].set_xlim(-1, len(POINTER_METHODS))
+    ax[1].set_ylim(50, 100)
     
     # create inset to show initial train trajectory
     inset = ax[0].inset_axes([0.5, 0.1, 0.45, 0.45])
@@ -324,7 +325,7 @@ def plotResults(results, args):
     
     new_ymin = min(yMin2, yMin3)
     ax[0].set_ylim(new_ymin, 1)
-    ax[1].set_ylim(new_ymin, 1)
+    ax[1].set_ylim(0.94, 1)
     
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName('confidence')))
@@ -360,7 +361,7 @@ if __name__=='__main__':
                 setattr(args,pk,pi)
         
         results = np.load(resPath / (getFileName()+'.npy'), allow_pickle=True).item()
-        nets = [torch.load(savePath / getFileName(extra=f"{method}.pt")).to(device) for method in POINTER_METHODS]
+        #nets = [torch.load(savePath / getFileName(extra=f"{method}.pt")).to(device) for method in POINTER_METHODS]
 
     plotResults(results, args)
     
