@@ -41,7 +41,7 @@ def measureReward_sortDescend(hands, choices):
 
 
 @torch.no_grad()
-def measureReward_sequencer(available, hands, choices, normalize=True, return_direction=False, verbose=None):
+def measureReward_sequencer(available, hands, choices, value_method='dominoe', normalize=True, return_direction=False, verbose=None):
     assert choices.ndim==2, f"choices should be a (batch_size, max_output) tensor of indices, it is: {choices.shape}"
     batch_size, max_output = choices.shape
     num_in_hand = hands.shape[1]
@@ -53,6 +53,15 @@ def measureReward_sequencer(available, hands, choices, normalize=True, return_di
         assert 0 <= verbose < batch_size, "verbose should be an index corresponding to one of the batch elements"
     else:
         debug = False
+
+    # check value method
+    if value_method=='dominoe':
+        check_normalize = True
+    elif isinstance(value_method, str) and value_method.isdigit() and int(value_method)>0:
+        valid_play_value = float(int(value_method))
+        check_normalize = False
+    else:
+        raise ValueError("did not recognize value_method, it has to be either 'dominoe' or a string representation of a positive digit")
     
     # initialize these tracker variables
     next_available = torch.tensor(available, dtype=torch.float).to(device)
@@ -107,16 +116,22 @@ def measureReward_sequencer(available, hands, choices, normalize=True, return_di
             
         # if dominoe that is a valid_play and hasn't been played yet is selected, add reward
         idx_good_play = ~idx_null & idx_not_played & valid_play
-        rewards[idx_good_play, idx] += (torch.sum(next_play[idx_good_play], dim=1) + 1)
-    
+        if value_method == 'dominoe':
+            rewards[idx_good_play, idx] += (torch.sum(next_play[idx_good_play], dim=1) + 1) # offset so (0|0) has value
+        else:
+            rewards[idx_good_play, idx] += valid_play_value
+        
         # if a dominoe is chosen but is invalid, subtract points
         idx_bad_play = ~idx_null & (~idx_not_played | ~valid_play)
-        rewards[idx_bad_play, idx] -= (torch.sum(next_play[idx_bad_play], dim=1) + 1)
-
+        if value_method == 'dominoe':
+            rewards[idx_bad_play, idx] -= (torch.sum(next_play[idx_bad_play], dim=1) + 1) # offset so (0|0) has value
+        else:
+            rewards[idx_bad_play, idx] -= valid_play_value
+        
         # determine which hands still have playable dominoes
         idx_still_playable = torch.any((handsUpdates == next_available.view(-1, 1, 1)).view(handsUpdates.size(0), -1), dim=1)
 
-        # if the null is chosen and no other dominoes are possible, give some reward, otherwise negative reward
+        # if the null is chosen and no other dominoes are possible, give small positive reward, otherwise small negative reward
         rewards[idx_null & ~idx_still_playable, idx] += 1.0
         rewards[idx_null & idx_still_playable, idx] -= 1.0
 
@@ -131,10 +146,18 @@ def measureReward_sequencer(available, hands, choices, normalize=True, return_di
             print("Hands updated:\n", handsUpdates[verbose])
             print("Rewards[verbose,idx]:", rewards[verbose, idx])
     
-    if normalize:
+    if check_normalize and normalize:
         rewards /= (highestDominoe+1) 
         
     if return_direction:
         return rewards, direction
     else:        
         return rewards
+
+
+
+
+
+
+
+
