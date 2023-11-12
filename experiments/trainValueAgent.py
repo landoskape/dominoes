@@ -42,6 +42,10 @@ resPath = Path('.') / 'experiments' / 'savedResults'
 prmsPath = Path('.') / 'experiments' / 'savedParameters'
 figsPath = Path(mainPath) / 'docs' / 'media'
 
+for path in (resPath, prmsPath, figsPath, savePath):
+    if not(path.exists()):
+        path.mkdir()
+
 device = "cuda" if torchCuda.is_available() else "cpu"
 print(f"Using device: {device}")
 
