@@ -5,7 +5,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python
+  - python==3.9
   - pip
   - numpy
   - scipy
