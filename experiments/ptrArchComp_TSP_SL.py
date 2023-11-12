@@ -77,7 +77,7 @@ def trainTestModel():
     heads = args.heads
     encoding_layers = args.encoding_layers
     greedy = True 
-    temperature = 1
+    temperature = 1.0
     
     # train parameters
     trainEpochs = args.train_epochs
@@ -192,7 +192,7 @@ def plotResults(results, args):
     for idx, name in enumerate(POINTER_METHODS):
         inset.plot(range(args.train_epochs), torch.mean(results['trainLoss'][:,idx], dim=1), color=cmap(idx), lw=1.2, label=name)
     inset.set_xlim(-10, 300)
-    inset.set_ylim(0, 3)
+    inset.set_ylim(0, None)
     inset.set_xticks([0, 150, 300])
     inset.set_xticklabels(inset.get_xticklabels(), fontsize=8)
     inset.set_yticklabels([])
@@ -209,7 +209,7 @@ def plotResults(results, args):
     ax[1].set_ylabel(f'Loss N={numRuns}')
     ax[1].set_title('Test Performance')
     ax[1].set_xlim(-1, len(POINTER_METHODS))
-    ax[1].set_ylim(0, 1)
+    ax[1].set_ylim(0, None)
 
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName()))
