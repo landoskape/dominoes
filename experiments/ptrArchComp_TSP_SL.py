@@ -82,83 +82,85 @@ def trainTestModel():
     # train parameters
     trainEpochs = args.train_epochs
     testEpochs = args.test_epochs
+    numRuns = args.num_runs
 
     numNets = len(POINTER_METHODS)
-
-    # create pointer networks with different pointer methods
-    nets = [transformers.PointerNetwork(input_dim, embedding_dim, temperature=temperature, pointer_method=POINTER_METHOD, 
-                                         thompson=False, encoding_layers=encoding_layers, heads=heads, kqnorm=True, 
-                                         decoder_method='transformer', greedy=greedy)
-             for POINTER_METHOD in POINTER_METHODS]
-    nets = [net.to(device) for net in nets]
-    
-    # Create an optimizer, Adam with weight decay is pretty good
-    optimizers = [torch.optim.Adam(net.parameters(), lr=1e-3, weight_decay=1e-5) for net in nets]
     
     print(f"Doing training...")
-    trainLoss = torch.zeros((trainEpochs, numNets))
-    testLoss = torch.zeros((testEpochs, numNets))
-    trainPositionError = torch.full((trainEpochs, num_cities, numNets), torch.nan) # keep track of where there was error
-    trainMaxScore = torch.full((trainEpochs, num_cities, numNets), torch.nan) # keep track of confidence of model
-    testMaxScore = torch.full((testEpochs, num_cities, numNets), torch.nan) 
-    for epoch in tqdm(range(trainEpochs)):
-        # generate batch
-        input, target = datasets.tsp_batch(batchSize, num_cities)
-        input, target = input.to(device), target.to(device)
+    trainLoss = torch.zeros((trainEpochs, numNets, numRuns))
+    testLoss = torch.zeros((testEpochs, numNets, numRuns))
+    trainPositionError = torch.full((trainEpochs, num_cities, numNets, numRuns), torch.nan) # keep track of where there was error
+    trainMaxScore = torch.full((trainEpochs, num_cities, numNets, numRuns), torch.nan) # keep track of confidence of model
+    testMaxScore = torch.full((testEpochs, num_cities, numNets, numRuns), torch.nan) 
+    for run in range(numRuns):
+        # create pointer networks with different pointer methods
+        nets = [transformers.PointerNetwork(input_dim, embedding_dim, temperature=temperature, pointer_method=POINTER_METHOD, 
+                                            thompson=False, encoding_layers=encoding_layers, heads=heads, kqnorm=True, 
+                                            decoder_method='transformer', greedy=greedy)
+                for POINTER_METHOD in POINTER_METHODS]
+        nets = [net.to(device) for net in nets]
 
-        # zero gradients, get output of network
-        for opt in optimizers: opt.zero_grad()
-        log_scores, _ = map(list, zip(*[net(input) for net in nets]))
+        # Create an optimizer, Adam with weight decay is pretty good
+        optimizers = [torch.optim.Adam(net.parameters(), lr=1e-3, weight_decay=1e-5) for net in nets]
 
-        # measure loss with negative log-likelihood
-        unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]
-        loss = [torch.nn.functional.nll_loss(unroll, target.view(-1)) for unroll in unrolled]
-        assert all([not np.isnan(l.item()) for l in loss]), "model diverged :("
-
-        # update networks
-        for l in loss: l.backward()
-        for opt in optimizers: opt.step()
-            
-        # save training data
-        for i, l in enumerate(loss):
-            trainLoss[epoch, i] = l.item()
-
-        # measure position dependent error 
-        with torch.no_grad():
-            # start by getting score for target at each position 
-            target_score = [torch.gather(unroll, dim=1, index=target.view(-1,1)).view(batchSize, num_cities) for unroll in unrolled]
-            # then get max score for each position (which would correspond to the score of the actual choice)
-            max_score = [torch.max(unroll, dim=1)[0].view(batchSize, num_cities) for unroll in unrolled]
-            # then calculate position error
-            pos_error = [ms - ts for ms, ts in zip(max_score, target_score)] # high if the chosen score is much bigger than the target score
-                
-            # add to accounting
-            for i, (pe, ms) in enumerate(zip(pos_error, max_score)):
-                trainPositionError[epoch,:,i] = torch.nansum(pe, dim=0)
-                trainMaxScore[epoch,:,i] = torch.nanmean(ms, dim=0)
-                
-    
-    with torch.no_grad():
-        print('Testing network...')
-        for epoch in tqdm(range(testEpochs)):
+        for epoch in tqdm(range(trainEpochs)):
             # generate batch
             input, target = datasets.tsp_batch(batchSize, num_cities)
             input, target = input.to(device), target.to(device)
 
+            # zero gradients, get output of network
+            for opt in optimizers: opt.zero_grad()
             log_scores, _ = map(list, zip(*[net(input) for net in nets]))
-    
+
             # measure loss with negative log-likelihood
             unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]
             loss = [torch.nn.functional.nll_loss(unroll, target.view(-1)) for unroll in unrolled]
             assert all([not np.isnan(l.item()) for l in loss]), "model diverged :("
 
-            # get max score 
-            max_score = [torch.max(unroll, dim=1)[0].view(batchSize, num_cities) for unroll in unrolled]
-            
+            # update networks
+            for l in loss: l.backward()
+            for opt in optimizers: opt.step()
+                
             # save training data
-            for i, (l, ms) in enumerate(zip(loss, max_score)):
-                testLoss[epoch, i] = l.item()
-                testMaxScore[epoch,:,i] = torch.nanmean(ms, dim=0)
+            for i, l in enumerate(loss):
+                trainLoss[epoch, i] = l.item()
+
+            # measure position dependent error 
+            with torch.no_grad():
+                # start by getting score for target at each position 
+                target_score = [torch.gather(unroll, dim=1, index=target.view(-1,1)).view(batchSize, num_cities) for unroll in unrolled]
+                # then get max score for each position (which would correspond to the score of the actual choice)
+                max_score = [torch.max(unroll, dim=1)[0].view(batchSize, num_cities) for unroll in unrolled]
+                # then calculate position error
+                pos_error = [ms - ts for ms, ts in zip(max_score, target_score)] # high if the chosen score is much bigger than the target score
+                    
+                # add to accounting
+                for i, (pe, ms) in enumerate(zip(pos_error, max_score)):
+                    trainPositionError[epoch, :, i, run] = torch.nansum(pe, dim=0)
+                    trainMaxScore[epoch, :, i, run] = torch.nanmean(ms, dim=0)
+                    
+        
+        with torch.no_grad():
+            print('Testing network...')
+            for epoch in tqdm(range(testEpochs)):
+                # generate batch
+                input, target = datasets.tsp_batch(batchSize, num_cities)
+                input, target = input.to(device), target.to(device)
+
+                log_scores, _ = map(list, zip(*[net(input) for net in nets]))
+        
+                # measure loss with negative log-likelihood
+                unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]
+                loss = [torch.nn.functional.nll_loss(unroll, target.view(-1)) for unroll in unrolled]
+                assert all([not np.isnan(l.item()) for l in loss]), "model diverged :("
+
+                # get max score 
+                max_score = [torch.max(unroll, dim=1)[0].view(batchSize, num_cities) for unroll in unrolled]
+                
+                # save training data
+                for i, (l, ms) in enumerate(zip(loss, max_score)):
+                    testLoss[epoch, i, run] = l.item()
+                    testMaxScore[epoch, :, i, run] = torch.nanmean(ms, dim=0)
                 
                     
     results = {
@@ -172,14 +174,15 @@ def trainTestModel():
     return results
 
 def plotResults(results, args):
+    numRuns = args.num_runs
     cmap = mpl.colormaps['tab10']
     
     # make plot of loss trajectory
-    fig, ax = plt.subplots(1,3,figsize=(9,4), width_ratios=[2.6,1,1],layout='constrained')
+    fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
-        ax[0].plot(range(args.train_epochs), results['trainLoss'][:,idx], color=cmap(idx), lw=1.2, label=name)
+        ax[0].plot(range(args.train_epochs), torch.mean(results['trainLoss'][:,idx], dim=1), color=cmap(idx), lw=1.2, label=name)
     ax[0].set_xlabel('Training Epoch')
-    ax[0].set_ylabel('Loss')
+    ax[0].set_ylabel(f'Loss N={numRuns}')
     ax[0].set_title('Training Performance')
     ax[0].set_ylim(0, None)
     yMin0, yMax0 = ax[0].get_ylim()
@@ -187,7 +190,7 @@ def plotResults(results, args):
     # create inset to show initial train trajectory
     inset = ax[0].inset_axes([0.05, 0.52, 0.45, 0.4])
     for idx, name in enumerate(POINTER_METHODS):
-        inset.plot(range(args.train_epochs), results['trainLoss'][:,idx], color=cmap(idx), lw=1.2, label=name)
+        inset.plot(range(args.train_epochs), torch.mean(results['trainLoss'][:,idx], dim=1), color=cmap(idx), lw=1.2, label=name)
     inset.set_xlim(-10, 300)
     inset.set_ylim(0, 3)
     inset.set_xticks([0, 150, 300])
@@ -195,38 +198,18 @@ def plotResults(results, args):
     inset.set_yticklabels([])
     inset.set_title('Initial Epochs', fontsize=10)
     
-    
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
-    minFilt_trainLoss = sp.ndimage.minimum_filter1d(results['trainLoss'].numpy(), size=1500, axis=0)
-    startFrom = 1000
     for idx, name in enumerate(POINTER_METHODS):
-        mnTestReward = np.mean(minFilt_trainLoss[startFrom:,idx])
-        sdTestReward = np.std(minFilt_trainLoss[startFrom:,idx])
-        ax[1].plot(get_x(idx), [mnTestReward, mnTestReward], color=cmap(idx), lw=4, label=name)
-        ax[1].plot([idx,idx], [mnTestReward-sdTestReward, mnTestReward+sdTestReward], color=cmap(idx), lw=1.5)
+        mnTestReward = torch.mean(results['testLoss'][:,idx], dim=0)
+        ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
+        ax[1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
     ax[1].set_xticks(range(len(POINTER_METHODS)))
     ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
-    ax[1].set_ylabel('Loss')
-    ax[1].set_title('Train Perf. (MinimumFilt)')
+    ax[1].set_ylabel(f'Loss N={numRuns}')
+    ax[1].set_title('Test Performance')
     ax[1].set_xlim(-1, len(POINTER_METHODS))
     ax[1].set_ylim(0, 1)
-    ax[1].legend(loc='upper center', fontsize=8)
-
-    
-    xOffset = [-0.2, 0.2]
-    get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
-    for idx, name in enumerate(POINTER_METHODS):
-        mnTestReward = torch.mean(results['testLoss'][:,idx])
-        sdTestReward = torch.std(results['testLoss'][:,idx])
-        ax[2].plot(get_x(idx), [mnTestReward, mnTestReward], color=cmap(idx), lw=4, label=name)
-        ax[2].plot([idx,idx], [mnTestReward-sdTestReward, mnTestReward+sdTestReward], color=cmap(idx), lw=1.5)
-    ax[2].set_xticks(range(len(POINTER_METHODS)))
-    ax[2].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
-    ax[2].set_ylabel('Loss')
-    ax[2].set_title('Test Performance')
-    ax[2].set_xlim(-1, len(POINTER_METHODS))
-    ax[2].set_ylim(0, 1)
 
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName()))
@@ -237,7 +220,7 @@ def plotResults(results, args):
     numPos = results['testMaxScore'].size(1)
     fig, ax = plt.subplots(1, 1, figsize=(4,4), layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
-        ax.plot(range(numPos), torch.mean(torch.exp(results['testMaxScore'][:,:,idx]), dim=0), color=cmap(idx), lw=1, marker='o', label=name)
+        ax.plot(range(numPos), torch.mean(torch.exp(results['testMaxScore'][:,:,idx]), dim=(0,2)), color=cmap(idx), lw=1, marker='o', label=name)
     ax.set_xlabel('Output Position')
     ax.set_ylabel('Mean Score')
     ax.set_title('Confidence')
