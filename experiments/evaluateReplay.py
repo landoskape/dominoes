@@ -29,6 +29,10 @@ resPath = Path(mainPath) / 'experiments' / 'savedResults'
 prmsPath = Path(mainPath) / 'experiments' / 'savedParameters'
 figsPath = Path(mainPath) / 'docs' / 'media'
 
+for path in (resPath, prmsPath, figsPath):
+    if not(path.exists()):
+        path.mkdir()
+        
 # paths for loading previously trained agents
 networkPath = Path(mainPath) / 'experiments' / 'savedNetworks' 
 

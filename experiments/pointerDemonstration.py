@@ -28,6 +28,10 @@ resPath = Path(mainPath) / 'experiments' / 'savedResults'
 prmsPath = Path(mainPath) / 'experiments' / 'savedParameters'
 figsPath = Path(mainPath) / 'docs' / 'media'
 
+for path in (resPath, prmsPath, figsPath):
+    if not(path.exists()):
+        path.mkdir()
+
 # method for returning the name of the saved network parameters (different save for each possible opponent)
 def getFileName(extra=None):
     baseName = "pointerDemonstration"
