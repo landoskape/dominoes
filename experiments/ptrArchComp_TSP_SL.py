@@ -46,10 +46,11 @@ def getFileName(extra=None):
 
 def handleArguments():
     parser = argparse.ArgumentParser(description='Run pointer demonstration.')
-    parser.add_argument('-nc','--num-cities', type=int, default=9, help='the number of cities')
+    parser.add_argument('-nc','--num-cities', type=int, default=8, help='the number of cities')
     parser.add_argument('-bs','--batch-size',type=int, default=128, help='number of sequences per batch')
     parser.add_argument('-ne','--train-epochs',type=int, default=8000, help='the number of training epochs')
     parser.add_argument('-te','--test-epochs',type=int, default=100, help='the number of testing epochs')
+    parser.add_argument('-nr','--num-runs',type=int, default=5, help='how many runs for each network to train')
 
     parser.add_argument('--embedding_dim', type=int, default=48, help='the dimensions of the embedding')
     parser.add_argument('--heads', type=int, default=1, help='the number of heads in transformer layers')
@@ -183,7 +184,6 @@ def plotResults(results, args):
     ax[0].set_ylim(0, None)
     yMin0, yMax0 = ax[0].get_ylim()
 
-    
     # create inset to show initial train trajectory
     inset = ax[0].inset_axes([0.05, 0.52, 0.45, 0.4])
     for idx, name in enumerate(POINTER_METHODS):
