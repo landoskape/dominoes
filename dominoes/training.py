@@ -147,7 +147,7 @@ def measureReward_sequencer(available, hands, choices, value_method='dominoe', n
             print("Rewards[verbose,idx]:", rewards[verbose, idx])
     
     if check_normalize and normalize:
-        rewards /= (highestDominoe+1) 
+        rewards /= 1
         
     if return_direction:
         return rewards, direction
@@ -155,6 +155,9 @@ def measureReward_sequencer(available, hands, choices, value_method='dominoe', n
         return rewards
 
 
+@torch.no_grad()
+def measureReward_tsp(xy, dists, choice):
+    pass
 
 
 
