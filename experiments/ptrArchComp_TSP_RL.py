@@ -95,13 +95,20 @@ def trainTestModel():
     gamma_transform = (gamma ** exponent * (exponent >= 0)).unsqueeze(0).expand(batchSize, -1, -1).to(device)
 
     print(f"Doing training...")
-    trainReward = torch.zeros((trainEpochs, numNets, numRuns))
-    testReward = torch.zeros((testEpochs, numNets, numRuns))
+    trainTourLength = torch.zeros((trainEpochs, numNets, numRuns))
+    testTourLength = torch.zeros((testEpochs, numNets, numRuns))
+    trainTourValidLength = torch.full((trainEpochs, numNets, numRuns), torch.nan)
+    testTourValidLength = torch.full((testEpochs, numNets, numRuns), torch.nan)
+    trainTourComplete = torch.zeros((trainEpochs, numNets, numRuns))
+    testTourComplete = torch.zeros((testEpochs, numNets, numRuns))
     trainRewardByPosition = torch.full((trainEpochs, num_cities, numNets, numRuns), torch.nan) # keep track of where there was reward
     testRewardByPosition = torch.full((testEpochs, num_cities, numNets, numRuns), torch.nan) # keep track of where there was reward
     trainScoreByPosition = torch.full((trainEpochs, num_cities, numNets, numRuns), torch.nan) # keep track of confidence of model
     testScoreByPosition = torch.full((testEpochs, num_cities, numNets, numRuns), torch.nan) 
     for run in range(numRuns):
+        
+        print(f"Training networks {run+1}/{numRuns}...")
+        
         # create pointer networks with different pointer methods
         nets = [transformers.PointerNetwork(input_dim, embedding_dim, temperature=temperature, pointer_method=POINTER_METHOD, 
                                             thompson=True, encoding_layers=encoding_layers, heads=heads, kqnorm=True, 
@@ -114,8 +121,8 @@ def trainTestModel():
 
         for epoch in tqdm(range(trainEpochs)):
             # generate batch
-            input, _, xy, dists = datasets.tsp_batch(batchSize, num_cities, return_target=False, return_full=True)
-            input = input.to(device)
+            input, _, _, dists = datasets.tsp_batch(batchSize, num_cities, return_target=False, return_full=True)
+            input, dists = input.to(device), dists.to(device)
 
             # zero gradients, get output of network
             for opt in optimizers: opt.zero_grad()
@@ -125,7 +132,8 @@ def trainTestModel():
             logprob_policy = [torch.gather(score, 2, choice.unsqueeze(2)).squeeze(2) for score, choice in zip(log_scores, choices)]
             
             # measure rewards
-            rewards = [training.measureReward_tsp(xy, dists, choice) for choice in choices]
+            reward_loc, reward_dist = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in choices]))
+            rewards = [rl-rd for rl, rd in zip(reward_loc, reward_dist)] # distance penalized negatively
             G = [torch.matmul(reward, gamma_transform) for reward in rewards]
 
             # measure J
@@ -138,8 +146,13 @@ def trainTestModel():
             # measure position dependent error 
             with torch.no_grad():
                 for i in range(numNets):
-                    trainReward[epoch, i] = torch.mean(torch.sum(rewards[i], dim=1))
-                    trainRewardByPosition[epoch, :, i, run] = torch.nanmean(rewards, dim=0)
+                    t_len = torch.sum(reward_dist[i], dim=1)
+                    t_cpl = torch.all(reward_loc[i]==1, dim=1)
+                    t_check = torch.cat((t_len[t_cpl], torch.tensor(torch.nan).view(1).to(device)))
+                    trainTourLength[epoch, i, run] = torch.mean(t_len)
+                    trainTourComplete[epoch, i, run] = torch.mean(1.0*t_cpl)
+                    trainTourValidLength[epoch, i, run] = torch.nanmean(t_check)
+                    trainRewardByPosition[epoch, :, i, run] = torch.nanmean(rewards[i], dim=0)
                     
                     # Measure the models confidence -- ignoring the effect of temperature
                     pretemp_score = torch.softmax(log_scores[i] * nets[i].temperature, dim=2)
@@ -151,10 +164,11 @@ def trainTestModel():
                 net.setTemperature(1.0)
                 net.setThompson(False)
 
-            for epoch in tqdm(range(trainEpochs)):
+            print("testing...")
+            for epoch in tqdm(range(testEpochs)):
                 # generate batch
-                input, _, xy, dists = datasets.tsp_batch(batchSize, num_cities, return_target=False, return_full=True)
-                input = input.to(device)
+                input, _, _, dists = datasets.tsp_batch(batchSize, num_cities, return_target=False, return_full=True)
+                input, dists = input.to(device), dists.to(device)
 
                 # zero gradients, get output of network
                 for opt in optimizers: opt.zero_grad()
@@ -164,24 +178,33 @@ def trainTestModel():
                 logprob_policy = [torch.gather(score, 2, choice.unsqueeze(2)).squeeze(2) for score, choice in zip(log_scores, choices)]
                 
                 # measure rewards
-                rewards = [training.measureReward_tsp(xy, dists, choice) for choice in choices]
-                    
+                reward_loc, reward_dist = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in choices]))
+                rewards = [rl-rd for rl, rd in zip(reward_loc, reward_dist)] # distance penalized negatively
+
                 # measure position dependent error 
                 with torch.no_grad():
                     for i in range(numNets):
-                        testReward[epoch, i] = torch.mean(torch.sum(rewards[i], dim=1))
-                        testRewardByPosition[epoch, :, i, run] = torch.nanmean(rewards, dim=0)
+                        t_len = torch.sum(reward_dist[i], dim=1)
+                        t_cpl = torch.all(reward_loc[i]==1, dim=1) # complete if every column = 1 in row (if city visited twice, value is -1)
+                        t_check = torch.cat((t_len[t_cpl], torch.tensor(torch.nan).view(1).to(device)))
+                        testTourLength[epoch, i, run] = torch.mean(t_len)
+                        testTourComplete[epoch, i, run] = torch.mean(1.0*t_cpl)
+                        testTourValidLength[epoch, i, run] = torch.nanmean(t_check)
+                        testRewardByPosition[epoch, :, i, run] = torch.nanmean(rewards[i], dim=0)
                         
                         # Measure the models confidence -- ignoring the effect of temperature
                         pretemp_score = torch.softmax(log_scores[i] * nets[i].temperature, dim=2)
                         pretemp_policy = torch.gather(pretemp_score, 2, choices[i].unsqueeze(2)).squeeze(2)
                         testScoreByPosition[epoch, :, i, run] = torch.mean(pretemp_policy, dim=0).detach()
-
                 
                     
     results = {
-        'trainReward': trainReward,
-        'testReward': testReward,
+        'trainTourLength': trainTourLength,
+        'testTourLength': trainTourLength,
+        'trainTourComplete': trainTourComplete,
+        'testTourComplete': testTourComplete,
+        'trainTourValidLength': trainTourValidLength,
+        'testTourValidLength': trainTourValidLength,
         'trainRewardByPosition': trainRewardByPosition,
         'testRewardByPosition': testRewardByPosition,
         'trainScoreByPosition': trainScoreByPosition,
@@ -193,61 +216,58 @@ def trainTestModel():
 def plotResults(results, args):
     numRuns = args.num_runs
     cmap = mpl.colormaps['tab10']
-    
-    # make plot of loss trajectory
-    fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
-    for idx, name in enumerate(POINTER_METHODS):
-        ax[0].plot(range(args.train_epochs), torch.mean(results['trainLoss'][:,idx], dim=1), color=cmap(idx), lw=1.2, label=name)
-    ax[0].set_xlabel('Training Epoch')
-    ax[0].set_ylabel(f'Loss N={numRuns}')
-    ax[0].set_title('Training Performance')
-    ax[0].set_ylim(0, None)
-    yMin0, yMax0 = ax[0].get_ylim()
 
-    # create inset to show initial train trajectory
-    inset = ax[0].inset_axes([0.05, 0.52, 0.45, 0.4])
-    for idx, name in enumerate(POINTER_METHODS):
-        inset.plot(range(args.train_epochs), torch.mean(results['trainLoss'][:,idx], dim=1), color=cmap(idx), lw=1.2, label=name)
-    inset.set_xlim(-10, 300)
-    inset.set_ylim(0, 3)
-    inset.set_xticks([0, 150, 300])
-    inset.set_xticklabels(inset.get_xticklabels(), fontsize=8)
-    inset.set_yticklabels([])
-    inset.set_title('Initial Epochs', fontsize=10)
-    
-    xOffset = [-0.2, 0.2]
-    get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
-    for idx, name in enumerate(POINTER_METHODS):
-        mnTestReward = torch.mean(results['testLoss'][:,idx], dim=0)
-        ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
-        ax[1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
-    ax[1].set_xticks(range(len(POINTER_METHODS)))
-    ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
-    ax[1].set_ylabel(f'Loss N={numRuns}')
-    ax[1].set_title('Test Performance')
-    ax[1].set_xlim(-1, len(POINTER_METHODS))
-    ax[1].set_ylim(0, 1)
+    data_to_plot = (
+        (results['trainTourLength'], results['testTourLength'], 'tourLength'),
+        (results['trainTourComplete'], results['testTourComplete'], 'tourComplete'),
+        (results['trainTourValidLength'], results['testTourValidLength'], 'tourValidLength')
+    )
 
-    if not(args.nosave):
-        plt.savefig(str(figsPath/getFileName()))
-    
-    plt.show()
-
-    # now plot confidence across positions
-    numPos = results['testMaxScore'].size(1)
-    fig, ax = plt.subplots(1, 1, figsize=(4,4), layout='constrained')
-    for idx, name in enumerate(POINTER_METHODS):
-        ax.plot(range(numPos), torch.mean(torch.exp(results['testMaxScore'][:,:,idx]), dim=(0,2)), color=cmap(idx), lw=1, marker='o', label=name)
-    ax.set_xlabel('Output Position')
-    ax.set_ylabel('Mean Score')
-    ax.set_title('Confidence')
-    ax.set_ylim(0, None)
-    ax.legend(loc='lower left', fontsize=8)
-
-    if not(args.nosave):
-        plt.savefig(str(figsPath/getFileName(extra='confidence')))
+    for (train_data, test_data, data_name) in data_to_plot:
+        # make plot of loss trajectory
+        fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
+        for idx, name in enumerate(POINTER_METHODS):
+            ax[0].plot(range(args.train_epochs), torch.nanmean(train_data[:,idx], dim=1), color=cmap(idx), lw=1.2, label=name)
+        ax[0].set_xlabel('Training Epoch')
+        ax[0].set_ylabel(f'{data_name} N={numRuns}')
+        ax[0].set_title('Training')
+        #ax[0].set_ylim(0, None)
+        #yMin0, yMax0 = ax[0].get_ylim()
         
-    plt.show()
+        xOffset = [-0.2, 0.2]
+        get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
+        for idx, name in enumerate(POINTER_METHODS):
+            mnTestReward = torch.nanmean(test_data[:,idx], dim=0)
+            ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
+            ax[1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
+        ax[1].set_xticks(range(len(POINTER_METHODS)))
+        ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
+        ax[1].set_ylabel(f'{data_name} N={numRuns}')
+        ax[1].set_title('Testing')
+        ax[1].set_xlim(-1, len(POINTER_METHODS))
+        #ax[1].set_ylim(0, 1)
+    
+        if not(args.nosave):
+            plt.savefig(str(figsPath/getFileName(data_name)))
+        
+        plt.show()
+        
+
+    # # now plot confidence across positions
+    # numPos = results['testMaxScore'].size(1)
+    # fig, ax = plt.subplots(1, 1, figsize=(4,4), layout='constrained')
+    # for idx, name in enumerate(POINTER_METHODS):
+    #     ax.plot(range(numPos), torch.mean(torch.exp(results['testMaxScore'][:,:,idx]), dim=(0,2)), color=cmap(idx), lw=1, marker='o', label=name)
+    # ax.set_xlabel('Output Position')
+    # ax.set_ylabel('Mean Score')
+    # ax.set_title('Confidence')
+    # ax.set_ylim(0, None)
+    # ax.legend(loc='lower left', fontsize=8)
+
+    # if not(args.nosave):
+    #     plt.savefig(str(figsPath/getFileName(extra='confidence')))
+        
+    # plt.show()
     
 
     
