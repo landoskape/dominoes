@@ -89,10 +89,18 @@ def trainTestModel():
     print(f"Doing training...")
     trainLoss = torch.zeros((trainEpochs, numNets, numRuns))
     testLoss = torch.zeros((testEpochs, numNets, numRuns))
+    trainTourLength = torch.zeros((trainEpochs, numNets, numRuns))
+    testTourLength = torch.zeros((testEpochs, numNets, numRuns))
+    trainTourComplete = torch.zeros((trainEpochs, numNets, numRuns))
+    testTourComplete = torch.zeros((testEpochs, numNets, numRuns))
+    trainTourValidLength = torch.zeros((trainEpochs, numNets, numRuns))
+    testTourValidLength = torch.zeros((testEpochs, numNets, numRuns))
     trainPositionError = torch.full((trainEpochs, num_cities, numNets, numRuns), torch.nan) # keep track of where there was error
     trainMaxScore = torch.full((trainEpochs, num_cities, numNets, numRuns), torch.nan) # keep track of confidence of model
     testMaxScore = torch.full((testEpochs, num_cities, numNets, numRuns), torch.nan) 
     for run in range(numRuns):
+        print(f"Training round of networks {run+1}/{numRuns}...")
+        
         # create pointer networks with different pointer methods
         nets = [transformers.PointerNetwork(input_dim, embedding_dim, temperature=temperature, pointer_method=POINTER_METHOD, 
                                             thompson=False, encoding_layers=encoding_layers, heads=heads, kqnorm=True, 
@@ -105,12 +113,12 @@ def trainTestModel():
 
         for epoch in tqdm(range(trainEpochs)):
             # generate batch
-            input, target = datasets.tsp_batch(batchSize, num_cities)
-            input, target = input.to(device), target.to(device)
+            input, target, _, dists = datasets.tsp_batch(batchSize, num_cities, return_full=True)
+            input, target, dists = input.to(device), target.to(device), dists.to(device)
 
             # zero gradients, get output of network
             for opt in optimizers: opt.zero_grad()
-            log_scores, _ = map(list, zip(*[net(input) for net in nets]))
+            log_scores, choices = map(list, zip(*[net(input) for net in nets]))
 
             # measure loss with negative log-likelihood
             unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]
@@ -127,6 +135,11 @@ def trainTestModel():
 
             # measure position dependent error 
             with torch.no_grad():
+                # get distance traveled
+                tour_complete, tour_distance = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in choices]))
+                tour_complete = [torch.all(tc==1, dim=1) for tc in tour_complete]
+                tour_distance = [torch.sum(td, dim=1) for td in tour_distance]
+                
                 # start by getting score for target at each position 
                 target_score = [torch.gather(unroll, dim=1, index=target.view(-1,1)).view(batchSize, num_cities) for unroll in unrolled]
                 # then get max score for each position (which would correspond to the score of the actual choice)
@@ -135,7 +148,12 @@ def trainTestModel():
                 pos_error = [ms - ts for ms, ts in zip(max_score, target_score)] # high if the chosen score is much bigger than the target score
                     
                 # add to accounting
-                for i, (pe, ms) in enumerate(zip(pos_error, max_score)):
+                for i, (td, tc, pe, ms) in enumerate(zip(tour_distance, tour_complete, pos_error, max_score)):
+                    trainTourLength[epoch, i, run] = torch.mean(td)
+                    trainTourComplete[epoch, i, run] = torch.mean(1.0*tc)
+                    t_check = torch.cat((td[tc], torch.tensor(torch.nan).view(1).to(device)))
+                    trainTourValidLength[epoch, i, run] = torch.nanmean(t_check)
+                
                     trainPositionError[epoch, :, i, run] = torch.nansum(pe, dim=0)
                     trainMaxScore[epoch, :, i, run] = torch.nanmean(ms, dim=0)
                     
@@ -144,28 +162,43 @@ def trainTestModel():
             print('Testing network...')
             for epoch in tqdm(range(testEpochs)):
                 # generate batch
-                input, target = datasets.tsp_batch(batchSize, num_cities)
-                input, target = input.to(device), target.to(device)
+                input, target, _, dists = datasets.tsp_batch(batchSize, num_cities, return_full=True)
+                input, target, dists = input.to(device), target.to(device), dists.to(device)
 
-                log_scores, _ = map(list, zip(*[net(input) for net in nets]))
+                log_scores, choices = map(list, zip(*[net(input) for net in nets]))
         
                 # measure loss with negative log-likelihood
                 unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]
                 loss = [torch.nn.functional.nll_loss(unroll, target.view(-1)) for unroll in unrolled]
                 assert all([not np.isnan(l.item()) for l in loss]), "model diverged :("
 
+                # get distance traveled
+                tour_complete, tour_distance = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in choices]))
+                tour_complete = [torch.all(tc==1, dim=1) for tc in tour_complete]
+                tour_distance = [torch.sum(td, dim=1) for td in tour_distance]
+                
                 # get max score 
                 max_score = [torch.max(unroll, dim=1)[0].view(batchSize, num_cities) for unroll in unrolled]
-                
+
                 # save training data
-                for i, (l, ms) in enumerate(zip(loss, max_score)):
+                for i, (l, td, tc, ms) in enumerate(zip(loss, tour_distance, tour_complete, max_score)):
                     testLoss[epoch, i, run] = l.item()
+                    testTourLength[epoch, i, run] = torch.mean(td)
+                    testTourComplete[epoch, i, run] = torch.mean(1.0*tc)
+                    t_check = torch.cat((td[tc], torch.tensor(torch.nan).view(1).to(device)))
+                    testTourValidLength[epoch, i, run] = torch.nanmean(t_check)
                     testMaxScore[epoch, :, i, run] = torch.nanmean(ms, dim=0)
                 
                     
     results = {
         'trainLoss': trainLoss,
         'testLoss': testLoss,
+        'trainTourLength': trainTourLength,
+        'testTourLength': testTourLength,
+        'trainTourComplete': trainTourComplete,
+        'testTourComplete': testTourComplete,
+        'trainTourValidLength': trainTourLength,
+        'testTourValidLength': testTourLength,
         'trainPositionError': trainPositionError,
         'trainMaxScore': trainMaxScore,
         'testMaxScore': testMaxScore,
@@ -180,23 +213,14 @@ def plotResults(results, args):
     # make plot of loss trajectory
     fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
-        ax[0].plot(range(args.train_epochs), torch.mean(results['trainLoss'][:,idx], dim=1), color=cmap(idx), lw=1.2, label=name)
+        cdata = sp.ndimage.median_filter(torch.mean(results['trainLoss'][:,idx], dim=1), size=(100,))
+        ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
     ax[0].set_xlabel('Training Epoch')
     ax[0].set_ylabel(f'Loss N={numRuns}')
     ax[0].set_title('Training Performance')
     ax[0].set_ylim(0, None)
+    ax[0].legend(loc='upper right')
     yMin0, yMax0 = ax[0].get_ylim()
-
-    # create inset to show initial train trajectory
-    inset = ax[0].inset_axes([0.05, 0.52, 0.45, 0.4])
-    for idx, name in enumerate(POINTER_METHODS):
-        inset.plot(range(args.train_epochs), torch.mean(results['trainLoss'][:,idx], dim=1), color=cmap(idx), lw=1.2, label=name)
-    inset.set_xlim(-10, 300)
-    inset.set_ylim(0, None)
-    inset.set_xticks([0, 150, 300])
-    inset.set_xticklabels(inset.get_xticklabels(), fontsize=8)
-    inset.set_yticklabels([])
-    inset.set_title('Initial Epochs', fontsize=10)
     
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
@@ -209,10 +233,40 @@ def plotResults(results, args):
     ax[1].set_ylabel(f'Loss N={numRuns}')
     ax[1].set_title('Test Performance')
     ax[1].set_xlim(-1, len(POINTER_METHODS))
-    ax[1].set_ylim(0, None)
+    ax[1].set_ylim(0, 0.8)
 
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName()))
+    
+    plt.show()
+
+    # make plot of fraction complete tours
+    fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
+    for idx, name in enumerate(POINTER_METHODS):
+        cdata = sp.ndimage.median_filter(torch.mean(results['trainTourComplete'][:,idx], dim=1), size=(100,))
+        ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
+    ax[0].set_xlabel('Training Epoch')
+    ax[0].set_ylabel(f'fraction N={numRuns}')
+    ax[0].set_title('Complete Tours - Training')
+    ax[0].set_ylim(0, 1)
+    ax[0].legend(loc='lower right')
+    yMin0, yMax0 = ax[0].get_ylim()
+    
+    xOffset = [-0.2, 0.2]
+    get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
+    for idx, name in enumerate(POINTER_METHODS):
+        mnTestComplete = torch.mean(results['testTourComplete'][:,idx], dim=0)
+        ax[1].plot(get_x(idx), [mnTestComplete.mean(), mnTestComplete.mean()], color=cmap(idx), lw=4, label=name)
+        ax[1].plot([idx,idx], [mnTestComplete.min(), mnTestComplete.max()], color=cmap(idx), lw=1.5)
+    ax[1].set_xticks(range(len(POINTER_METHODS)))
+    ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
+    ax[1].set_ylabel(f'fraction N={numRuns}')
+    ax[1].set_title('Testing')
+    ax[1].set_xlim(-1, len(POINTER_METHODS))
+    ax[1].set_ylim(0, 1)
+
+    if not(args.nosave):
+        plt.savefig(str(figsPath/getFileName('completedTours')))
     
     plt.show()
 
@@ -223,8 +277,8 @@ def plotResults(results, args):
         ax.plot(range(numPos), torch.mean(torch.exp(results['testMaxScore'][:,:,idx]), dim=(0,2)), color=cmap(idx), lw=1, marker='o', label=name)
     ax.set_xlabel('Output Position')
     ax.set_ylabel('Mean Score')
-    ax.set_title('Confidence')
-    ax.set_ylim(0, None)
+    ax.set_title('Position-Dependent Confidence')
+    ax.set_ylim(0, 1)
     ax.legend(loc='lower left', fontsize=8)
 
     if not(args.nosave):
