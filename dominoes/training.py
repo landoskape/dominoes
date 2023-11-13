@@ -156,8 +156,27 @@ def measureReward_sequencer(available, hands, choices, value_method='dominoe', n
 
 
 @torch.no_grad()
-def measureReward_tsp(xy, dists, choice):
-    pass
+def measureReward_tsp(dists, choices):
+    """reward function for measuring tsp performance"""
+    batchSize, numCities = choices.shape 
+    device = transformers.get_device(choices)
+    distance = torch.zeros((batchSize, numCities)).to(device)
+    new_city = torch.ones((batchSize, numCities)).to(device)
+
+    src = torch.ones((batchSize,1), dtype=torch.bool).to(device)
+    visited = torch.zeros((batchSize, numCities), dtype=torch.bool).to(device)
+    visited.scatter_(1, choices[:,0].view(batchSize, 1), src)
+    for nc in range(1, numCities):
+        c_dist_possible = torch.gather(dists, 1, choices[:, nc-1].view(batchSize, 1, 1).expand(-1, -1, numCities)).squeeze(1)
+        c_dist = torch.gather(c_dist_possible, 1, choices[:,nc].view(batchSize,1)).squeeze()
+        distance[:,nc] = c_dist
+        c_visited = torch.gather(visited, 1, choices[:,nc].view(batchSize,1)).squeeze(1)
+        visited.scatter_(1, choices[:,nc].view(batchSize,1), src)
+        new_city[c_visited,nc] = -1.0
+        new_city[~c_visited,nc] = 1.0
+    return new_city, distance
+        
+        
 
 
 
