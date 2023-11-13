@@ -218,21 +218,26 @@ def plotResults(results, args):
     cmap = mpl.colormaps['tab10']
 
     data_to_plot = (
-        (results['trainTourLength'], results['testTourLength'], 'tourLength'),
-        (results['trainTourComplete'], results['testTourComplete'], 'tourComplete'),
-        (results['trainTourValidLength'], results['testTourValidLength'], 'tourValidLength')
+        (results['trainTourLength'], results['testTourLength'], 'tourLength', [1.5, 4]),
+        (results['trainTourComplete'], results['testTourComplete'], 'tourComplete', [0, 1]),
+        (results['trainTourValidLength'], results['testTourValidLength'], 'tourValidLength', [2, None])
     )
 
-    for (train_data, test_data, data_name) in data_to_plot:
+    for (train_data, test_data, data_name, ylim) in data_to_plot:
         # make plot of loss trajectory
         fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
         for idx, name in enumerate(POINTER_METHODS):
-            ax[0].plot(range(args.train_epochs), torch.nanmean(train_data[:,idx], dim=1), color=cmap(idx), lw=1.2, label=name)
+            cdata = torch.nanmean(train_data[:,idx], dim=1)
+            idx_nan = torch.isnan(cdata)
+            cdata.masked_fill_(idx_nan, 0)
+            cdata = sp.signal.savgol_filter(cdata, 20, 1)
+            cdata[idx_nan] = torch.nan
+            ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
         ax[0].set_xlabel('Training Epoch')
         ax[0].set_ylabel(f'{data_name} N={numRuns}')
-        ax[0].set_title('Training')
-        #ax[0].set_ylim(0, None)
-        #yMin0, yMax0 = ax[0].get_ylim()
+        ax[0].set_title(f'Training - {data_name}')
+        ax[0].set_ylim(ylim)
+        ax[0].legend(loc='best')
         
         xOffset = [-0.2, 0.2]
         get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
@@ -245,7 +250,7 @@ def plotResults(results, args):
         ax[1].set_ylabel(f'{data_name} N={numRuns}')
         ax[1].set_title('Testing')
         ax[1].set_xlim(-1, len(POINTER_METHODS))
-        #ax[1].set_ylim(0, 1)
+        ax[1].set_ylim(ylim)
     
         if not(args.nosave):
             plt.savefig(str(figsPath/getFileName(data_name)))
@@ -253,21 +258,21 @@ def plotResults(results, args):
         plt.show()
         
 
-    # # now plot confidence across positions
-    # numPos = results['testMaxScore'].size(1)
-    # fig, ax = plt.subplots(1, 1, figsize=(4,4), layout='constrained')
-    # for idx, name in enumerate(POINTER_METHODS):
-    #     ax.plot(range(numPos), torch.mean(torch.exp(results['testMaxScore'][:,:,idx]), dim=(0,2)), color=cmap(idx), lw=1, marker='o', label=name)
-    # ax.set_xlabel('Output Position')
-    # ax.set_ylabel('Mean Score')
-    # ax.set_title('Confidence')
-    # ax.set_ylim(0, None)
-    # ax.legend(loc='lower left', fontsize=8)
+    # now plot confidence across positions
+    numPos = results['testScoreByPosition'].size(1)
+    fig, ax = plt.subplots(1, 1, figsize=(4,4), layout='constrained')
+    for idx, name in enumerate(POINTER_METHODS):
+        ax.plot(range(numPos), torch.mean(results['testScoreByPosition'][:,:,idx], dim=(0,2)), color=cmap(idx), lw=1, marker='o', label=name)
+    ax.set_xlabel('Output Position')
+    ax.set_ylabel('Mean Score')
+    ax.set_title('Confidence')
+    ax.set_ylim(0.92, 1)
+    ax.legend(loc='lower left', fontsize=8)
 
-    # if not(args.nosave):
-    #     plt.savefig(str(figsPath/getFileName(extra='confidence')))
+    if not(args.nosave):
+        plt.savefig(str(figsPath/getFileName(extra='confidence')))
         
-    # plt.show()
+    plt.show()
     
 
     

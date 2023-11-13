@@ -28,7 +28,8 @@ class valueAgent(dominoeAgent):
         self.replayAlpha = 3*copy(self.alpha) # learning rate of replay
         self.replayLambda = 0.9 # how much to forget each replay every hand
         self.replayRepetitions = 1 # how many repetitions to learn from each replay batch every hand
-        self.finalScoreOutputDimension = 1
+        self.finalScoreOutputDimension = 1 if ('finalScoreOutputDimension' not in kwargs) else kwargs['finalScoreOutputDimension']
+        self.predict_score = True if ('predict_score' not in kwargs) else kwargs['predict_score']
         
         # create binary arrays for presenting gamestate information to the RL networks
         self.binaryPlayed = np.zeros(self.numDominoes)
@@ -153,7 +154,16 @@ class valueAgent(dominoeAgent):
             tdError = self.finalScoreNetwork(self.valueNetworkInput) - self.finalScoreOutput
         else:
             # if the final score is an array, then we should shift its perspective and learn from the true difference in our penultimate estimate and the actual final score
-            finalScore = self.egocentric(finalScore)[:self.finalScoreOutputDimension]
+            if self.predict_score:
+                finalScore = self.egocentric(finalScore)[:self.finalScoreOutputDimension]
+            else:
+                finalScore = self.egocentric(finalScore)
+                win = 1.0*(finalScore[0]<finalScore[1:]) # 1 if score is better than other agents
+                print(finalScore, win)
+
+
+
+            
             finalScore = torch.tensor(finalScore).float().to(self.device)
             tdError = finalScore - self.finalScoreOutput
             self.updateReplayTarget(finalScore)

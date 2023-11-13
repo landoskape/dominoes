@@ -94,7 +94,7 @@ class handRepresentationNetwork(nn.Module):
 
 
 class lineRepresentationNetwork(nn.Module):
-    def __init__(self, numPlayers, numDominoes, highestDominoe, finalScoreOutputDimension, numOutputCNN=1000, weightPrms=(0.,0.1),biasPrms=0.,actFunc=F.relu,pDropout=0):
+    def __init__(self, numPlayers, numDominoes, highestDominoe, finalScoreOutputDimension, numOutputCNN=1000, weightPrms=(0.,0.1), biasPrms=0., predict_score=True):
         super().__init__()
         assert finalScoreOutputDimension<numPlayers, "finalScoreOutputDimension can't be greater than the number of players"
         self.numPlayers = numPlayers
@@ -103,7 +103,9 @@ class lineRepresentationNetwork(nn.Module):
         self.numOutputCNN = numOutputCNN
         self.inputDimension = 2*numDominoes + (highestDominoe+1)*(numPlayers+1) + 4*numPlayers + 1 + self.numOutputCNN # see dominoesAgents>generateValueInput() for explanation of why this dimensionality
         self.outputDimension = finalScoreOutputDimension
-        self.actFunc = actFunc
+        self.predict_score = predict_score
+        if not(self.predict_score):
+            assert finalScoreOutputDimension == numPlayers-1, f"Creating lineRepresentationNetwork that predicts win probability, but output dimension is {finalScoreOutputDimension} and numPlayers is {numPlayers}"
         
         # the lineRepresentationValue gets passed through a 1d convolutional network
         # this will transform the (numDominoe, numLineFeatures) input representation into an (numOutputChannels, numLineFeatures) output representation
@@ -154,11 +156,15 @@ class lineRepresentationNetwork(nn.Module):
         cnnOutput = self.cnnForward(x[0], withBatch=withBatch)
         ffInput = torch.cat((cnnOutput, x[1]), dim=1 if withBatch else 0)
         netOutput = self.ffLayer(ffInput)
-        return netOutput
+        if not self.predict_score:
+            return netOutput
+        else:
+            # Convert to win probability
+            return torch.sigmoid(netOutput)
         
     
 class lineRepresentationNetworkSmall(nn.Module):
-    def __init__(self, numPlayers, numDominoes, highestDominoe, finalScoreOutputDimension, numOutputCNN=10, weightPrms=(0.,0.1),biasPrms=0.,actFunc=F.relu,pDropout=0):
+    def __init__(self, numPlayers, numDominoes, highestDominoe, finalScoreOutputDimension, numOutputCNN=10, weightPrms=(0.,0.1), biasPrms=0., predict_score=True):
         super().__init__()
         assert finalScoreOutputDimension<numPlayers, "finalScoreOutputDimension can't be greater than the number of players"
         self.numPlayers = numPlayers
@@ -167,7 +173,9 @@ class lineRepresentationNetworkSmall(nn.Module):
         self.numOutputCNN = numOutputCNN
         self.inputDimension = 2*numDominoes + (highestDominoe+1)*(numPlayers+1) + 4*numPlayers + 1 + self.numOutputCNN # see dominoesAgents>generateValueInput() for explanation of why this dimensionality
         self.outputDimension = finalScoreOutputDimension
-        self.actFunc = actFunc
+        self.predict_score = predict_score
+        if not(self.predict_score):
+            assert finalScoreOutputDimension == numPlayers-1, f"Creating lineRepresentationNetwork that predicts win probability, but output dimension is {finalScoreOutputDimension} and numPlayers is {numPlayers}"
         
         # the lineRepresentationValue gets passed through a 1d convolutional network
         # this will transform the (numDominoe, numLineFeatures) input representation into an (numOutputChannels, numLineFeatures) output representation
@@ -217,8 +225,10 @@ class lineRepresentationNetworkSmall(nn.Module):
         cnnOutput = self.cnnForward(x[0], withBatch=withBatch)
         ffInput = torch.cat((cnnOutput, x[1]), dim=1 if withBatch else 0)
         netOutput = self.ffLayer(ffInput)
-        return netOutput
-    
+        if self.predict_score:
+            return netOutput
+        else:
+            return torch.sigmoid(netOutput)    
     
         
 class valueNetwork(nn.Module):
