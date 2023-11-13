@@ -193,7 +193,8 @@ def tsp_batch(batch_size, num_cities, return_target=True, return_full=False):
     else:
         target = None
     if return_full:
-        return input, target, xy, dists
+        torch_dists = torch.stack([torch.tensor(sp.spatial.distance.squareform(d)) for d in dists])
+        return input, target, torch.tensor(xy), torch_dists
     else:
         return input, target
 
