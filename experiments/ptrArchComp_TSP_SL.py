@@ -197,8 +197,8 @@ def trainTestModel():
         'testTourLength': testTourLength,
         'trainTourComplete': trainTourComplete,
         'testTourComplete': testTourComplete,
-        'trainTourValidLength': trainTourLength,
-        'testTourValidLength': testTourLength,
+        'trainTourValidLength': trainTourValidLength,
+        'testTourValidLength': testTourValidLength,
         'trainPositionError': trainPositionError,
         'trainMaxScore': trainMaxScore,
         'testMaxScore': testMaxScore,
@@ -219,7 +219,7 @@ def plotResults(results, args):
     ax[0].set_ylabel(f'Loss N={numRuns}')
     ax[0].set_title('Training Performance')
     ax[0].set_ylim(0, None)
-    ax[0].legend(loc='upper right')
+    ax[0].legend(loc='best')
     yMin0, yMax0 = ax[0].get_ylim()
     
     xOffset = [-0.2, 0.2]
@@ -249,7 +249,7 @@ def plotResults(results, args):
     ax[0].set_ylabel(f'fraction N={numRuns}')
     ax[0].set_title('Complete Tours - Training')
     ax[0].set_ylim(0, 1)
-    ax[0].legend(loc='lower right')
+    ax[0].legend(loc='best')
     yMin0, yMax0 = ax[0].get_ylim()
     
     xOffset = [-0.2, 0.2]
@@ -267,6 +267,39 @@ def plotResults(results, args):
 
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName('completedTours')))
+    
+    plt.show()
+
+    # make plot of tour length for valid tours
+    fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
+    for idx, name in enumerate(POINTER_METHODS):
+        cdata = torch.nanmean(results['trainTourValidLength'][:,idx], dim=1)
+        idx_nan = torch.isnan(cdata)
+        cdata.masked_fill_(idx_nan, 0)
+        cdata = sp.signal.savgol_filter(cdata, 20, 1)
+        cdata[idx_nan] = torch.nan
+        ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
+    ax[0].set_xlabel('Training Epoch')
+    ax[0].set_ylabel(f'Tour Length N={numRuns}')
+    ax[0].set_title('Training - TourLength (Valid)')
+    ax[0].legend(loc='best')
+    yMin0, yMax0 = ax[0].get_ylim()
+    
+    xOffset = [-0.2, 0.2]
+    get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
+    for idx, name in enumerate(POINTER_METHODS):
+        mnTestReward = torch.nanmean(results['testTourValidLength'][:,idx], dim=0)
+        ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
+        ax[1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
+    ax[1].set_xticks(range(len(POINTER_METHODS)))
+    ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
+    ax[1].set_ylabel(f'Tour Length N={numRuns}')
+    ax[1].set_title('Testing')
+    ax[1].set_xlim(-1, len(POINTER_METHODS))
+    # ax[1].set_ylim(0, 0.8)
+
+    if not(args.nosave):
+        plt.savefig(str(figsPath/getFileName('tourValidLength')))
     
     plt.show()
 
