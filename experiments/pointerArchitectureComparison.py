@@ -118,7 +118,7 @@ def trainTestModel():
     # create gamma transform matrix
     gamma = args.gamma
     exponent = torch.arange(maxOutput).view(-1,1) - torch.arange(maxOutput).view(1,-1)
-    gamma_transform = (gamma ** exponent * (exponent >= 0)).unsqueeze(0).expand(batchSize, -1, -1).to(device)
+    gamma_transform = (gamma ** exponent * (exponent >= 0)).to(device)
     
     # batch inputs for reinforcement learning training
     batch_inputs = {'null_token':False, 
@@ -169,7 +169,7 @@ def trainTestModel():
             
             # measure reward
             rewards = [training.measureReward_sortDescend(trainDominoes[selection], choice) for choice in choices]
-            G = [torch.bmm(reward.unsqueeze(1), gamma_transform).squeeze(1) for reward in rewards]
+            G = [torch.matmul(reward, gamma_transform) for reward in rewards]
         
             # measure J
             J = [-torch.sum(logpol * g) for logpol, g in zip(logprob_policy, G)]
