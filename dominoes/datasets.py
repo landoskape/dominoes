@@ -165,28 +165,36 @@ def held_karp(dists):
     return opt, list(reversed(path))
 
 
-def get_path(batch):
+def get_path(xy, dists):
     """
     for batch of (batch, num_cities, 2), returns shortest path using
     held-karp algorithm that starts closest to origin and is clockwise
     """
     path = []
-    for xy in batch:
-        closest_to_origin = np.argmin(np.sum(xy**2, axis=1))
-        dists = sp.spatial.distance.squareform(sp.spatial.distance.pdist(xy))
-        _, cpath = held_karp(dists)
+    for p,d in zip(xy, dists):
+        closest_to_origin = np.argmin(np.sum(p**2, axis=1))
+        dd = sp.spatial.distance.squareform(d)
+        _, cpath = held_karp(dd)
         shift = {val: idx for idx, val in enumerate(cpath)}[closest_to_origin]
         cpath = np.roll(cpath, -shift)
-        check_points = xy[cpath[[1,-1]]] # second point and last point - check for clockwise travel
+        check_points = p[cpath[[1,-1]]] # second point and last point - check for clockwise travel
         angles = np.arctan(check_points[:,1]/check_points[:,0])
         if angles[1] > angles[0]:
             cpath = np.flip(np.roll(cpath, -1))
         path.append(cpath)
     return path
 
-def tsp_batch(batch_size, num_cities):
+def tsp_batch(batch_size, num_cities, return_target=True, return_full=False):
     xy = np.random.random((batch_size, num_cities, 2))
+    dists = np.stack([sp.spatial.distance.pdist(p) for p in xy])
     input = torch.tensor(xy, dtype=torch.float)
-    target = torch.tensor(np.stack(get_path(xy)), dtype=torch.long)
-    return input, target
+    if return_target:
+        target = torch.tensor(np.stack(get_path(xy, dists)), dtype=torch.long)
+    else:
+        target = None
+    if return_full:
+        return input, target, xy, dists
+    else:
+        return input, target
+
 
