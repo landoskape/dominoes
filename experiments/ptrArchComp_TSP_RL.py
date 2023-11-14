@@ -137,7 +137,7 @@ def trainTestModel():
             rewards = [rl-rd for rl, rd in zip(reward_loc, reward_dist)] # distance penalized negatively
             G = [torch.matmul(reward, gamma_transform) for reward in rewards]
             for i, l in enumerate(rewards):
-                assert not np.any(np.isnan(rewards)), f"model type {POINTER_METHOD[i]} diverged :("
+                assert not np.any(np.isnan(rewards)), f"model type {POINTER_METHODS[i]} diverged :("
 
             # measure J
             J = [-torch.sum(logpol * g) for logpol, g in zip(logprob_policy, G)] # flip sign for gradient ascent

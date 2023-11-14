@@ -125,7 +125,7 @@ def trainTestModel():
             unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]
             loss = [torch.nn.functional.nll_loss(unroll, target.view(-1)) for unroll in unrolled]
             for i, l in enumerate(loss):
-                assert not np.isnan(l.item()), f"model type {POINTER_METHOD[i]} diverged :("
+                assert not np.isnan(l.item()), f"model type {POINTER_METHODS[i]} diverged :("
 
             # update networks
             for l in loss: l.backward()
@@ -173,7 +173,7 @@ def trainTestModel():
                 unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]
                 loss = [torch.nn.functional.nll_loss(unroll, target.view(-1)) for unroll in unrolled]
                 for i, l in enumerate(loss):
-                    assert not np.isnan(l.item()), f"model type {POINTER_METHOD[i]} diverged :("
+                    assert not np.isnan(l.item()), f"model type {POINTER_METHODS[i]} diverged :("
 
                 # get distance traveled
                 tour_complete, tour_distance = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in choices]))
