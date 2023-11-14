@@ -230,13 +230,14 @@ def plotResults(results, args):
     for idx, name in enumerate(POINTER_METHODS):
         mnTestReward = torch.mean(results['testLoss'][:,idx], dim=0)
         ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
+        for mtr in mnTestReward:
+            ax[1].plot(get_x(idx), [mtr, mtr], color=cmap(idx), lw=1.5)
         ax[1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
     ax[1].set_xticks(range(len(POINTER_METHODS)))
     ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
     ax[1].set_ylabel(f'Loss N={numRuns}')
     ax[1].set_title('Test Performance')
     ax[1].set_xlim(-1, len(POINTER_METHODS))
-    ax[1].set_ylim(0, 0.8)
 
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName()))
@@ -260,6 +261,8 @@ def plotResults(results, args):
     for idx, name in enumerate(POINTER_METHODS):
         mnTestComplete = torch.mean(results['testTourComplete'][:,idx], dim=0)
         ax[1].plot(get_x(idx), [mnTestComplete.mean(), mnTestComplete.mean()], color=cmap(idx), lw=4, label=name)
+        for mtc in mnTestComplete:
+            ax[1].plot(get_x(idx), [mtc, mtc], color=cmap(idx), lw=1.5)
         ax[1].plot([idx,idx], [mnTestComplete.min(), mnTestComplete.max()], color=cmap(idx), lw=1.5)
     ax[1].set_xticks(range(len(POINTER_METHODS)))
     ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
@@ -294,6 +297,8 @@ def plotResults(results, args):
     for idx, name in enumerate(POINTER_METHODS):
         mnTestReward = torch.nanmean(results['testTourValidLength'][:,idx], dim=0)
         ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
+        for mtr in mnTestReward:
+            ax[1].plot(get_x(idx), [mtr, mtr], color=cmap(idx), lw=1.5)
         ax[1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
     ax[1].set_xticks(range(len(POINTER_METHODS)))
     ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
@@ -307,16 +312,31 @@ def plotResults(results, args):
     
     plt.show()
 
+    
     # now plot confidence across positions
     numPos = results['testMaxScore'].size(1)
-    fig, ax = plt.subplots(1, 1, figsize=(4,4), layout='constrained')
+    fig, ax = plt.subplots(1, 2, figsize=(6,4), width_ratios=[2.6,1], layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
-        ax.plot(range(numPos), torch.mean(torch.exp(results['testMaxScore'][:,:,idx]), dim=(0,2)), color=cmap(idx), lw=1, marker='o', label=name)
-    ax.set_xlabel('Output Position')
-    ax.set_ylabel('Mean Score')
-    ax.set_title('Position-Dependent Confidence')
-    ax.set_ylim(0, 1)
-    ax.legend(loc='lower left', fontsize=8)
+        ax[0].plot(range(numPos), torch.mean(torch.exp(results['testMaxScore'][:,:,idx]), dim=(0,2)), color=cmap(idx), lw=1, marker='o', label=name)
+    ax[0].set_xlabel('Output Position')
+    ax[0].set_ylabel('Mean Score')
+    ax[0].set_title('Position-Dependent Confidence')
+    ax[0].legend(loc='best', fontsize=8)
+    ax[0].set_ylim(0.7, 1)
+    
+    xOffset = [-0.2, 0.2]
+    get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
+    for idx, name in enumerate(POINTER_METHODS):
+        mnScoreByPosition = torch.mean(torch.exp(results['testMaxScore'][:,:,idx]), dim=(0,1))
+        ax[1].plot(get_x(idx), [mnScoreByPosition.mean(), mnScoreByPosition.mean()], color=cmap(idx), lw=4, label=name)
+        for msbp in mnScoreByPosition:
+            ax[1].plot(get_x(idx), [msbp, msbp], color=cmap(idx), lw=1.5)
+        ax[1].plot([idx,idx], [mnScoreByPosition.min(), mnScoreByPosition.max()], color=cmap(idx), lw=1.5)
+    ax[1].set_xticks(range(len(POINTER_METHODS)))
+    ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
+    ax[1].set_title('Average')
+    ax[1].set_xlim(-1, len(POINTER_METHODS))
+    ax[1].set_ylim(0.7, 1)
 
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName(extra='confidence')))
