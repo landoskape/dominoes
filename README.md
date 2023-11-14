@@ -65,11 +65,13 @@ the agents I have developed. This is a list of them with links to the file.
         - [Basic policies](docs/basicPolicies.md)
     - [Multiplayer ELO System](docs/multiplayerElo.md)
     - [Tutorials and basic usage](docs/tutorials.md)
-2. [Experiments](experiments)
-    - [Pointer Network Toy Problem](docs/pointerDemonstration.md)
-    - [Pointer Network Architecture Comparison](docs/pointerArchitectureComparison.md)
-3. Reinforcement Learning Agents
+2. Reinforcement Learning Agents
    - [The TD-Lambda Algorithm](docs/TDLambdaAgents.md)
+
+## Documentation for Pointer Network Experiments
+1. [Toy Problem (& intro to pointer networks)](docs/pointerDemonstration.md)
+2. [Novel Architecture Comparison on Toy Problem](docs/pointerArchitectureComparison.md)
+3. [Tests on the Traveling Salesman Problem](docs/pointerArchComp_TSP.md)
 
 ## Contributing
 Feel free to contribute to this project by opening issues or submitting pull 
