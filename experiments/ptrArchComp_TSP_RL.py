@@ -137,7 +137,7 @@ def trainTestModel():
             rewards = [rl-rd for rl, rd in zip(reward_loc, reward_dist)] # distance penalized negatively
             G = [torch.matmul(reward, gamma_transform) for reward in rewards]
             for i, l in enumerate(rewards):
-                assert not np.any(np.isnan(rewards)), f"model type {POINTER_METHODS[i]} diverged :("
+                assert not torch.any(torch.isnan(l)), f"model type {POINTER_METHODS[i]} diverged :("
 
             # measure J
             J = [-torch.sum(logpol * g) for logpol, g in zip(logprob_policy, G)] # flip sign for gradient ascent
@@ -269,7 +269,7 @@ def plotResults(results, args):
     ax.set_xlabel('Output Position')
     ax.set_ylabel('Mean Score')
     ax.set_title('Confidence')
-    ax.set_ylim(0.92, 1)
+    # ax.set_ylim(0.92, 1)
     ax.legend(loc='lower left', fontsize=8)
 
     if not(args.nosave):

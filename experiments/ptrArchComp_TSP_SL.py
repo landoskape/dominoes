@@ -77,7 +77,7 @@ def trainTestModel():
     embedding_dim = args.embedding_dim
     heads = args.heads
     encoding_layers = args.encoding_layers
-    greedy = args.greedy
+    greedy = True # args.greedy
     temperature = 1.0
     
     # train parameters
