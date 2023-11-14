@@ -233,7 +233,7 @@ def plotResults(results, args):
             cdata = torch.nanmean(train_data[:,idx], dim=1)
             idx_nan = torch.isnan(cdata)
             cdata.masked_fill_(idx_nan, 0)
-            cdata = sp.signal.savgol_filter(cdata, 20, 1)
+            cdata = sp.signal.savgol_filter(cdata, 50, 1)
             cdata[idx_nan] = torch.nan
             ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
         ax[0].set_xlabel('Training Epoch')
@@ -247,6 +247,8 @@ def plotResults(results, args):
         for idx, name in enumerate(POINTER_METHODS):
             mnTestReward = torch.nanmean(test_data[:,idx], dim=0)
             ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
+            for mtr in mnTestReward:
+                ax[1].plot(get_x(idx), [mtr, mtr], color=cmap(idx), lw=1.5)
             ax[1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
         ax[1].set_xticks(range(len(POINTER_METHODS)))
         ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
@@ -263,14 +265,28 @@ def plotResults(results, args):
 
     # now plot confidence across positions
     numPos = results['testScoreByPosition'].size(1)
-    fig, ax = plt.subplots(1, 1, figsize=(4,4), layout='constrained')
+    fig, ax = plt.subplots(1, 2, figsize=(6,4), width_ratios=[2.6,1], layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
-        ax.plot(range(numPos), torch.mean(results['testScoreByPosition'][:,:,idx], dim=(0,2)), color=cmap(idx), lw=1, marker='o', label=name)
-    ax.set_xlabel('Output Position')
-    ax.set_ylabel('Mean Score')
-    ax.set_title('Confidence')
-    # ax.set_ylim(0.92, 1)
-    ax.legend(loc='lower left', fontsize=8)
+        ax[0].plot(range(numPos), torch.mean(results['testScoreByPosition'][:,:,idx], dim=(0,2)), color=cmap(idx), lw=1, marker='o', label=name)
+    ax[0].set_xlabel('Output Position')
+    ax[0].set_ylabel('Mean Score')
+    ax[0].set_title('Confidence')
+    ax[0].legend(loc='best', fontsize=8)
+    ax[0].set_ylim(0, 1)
+    
+    xOffset = [-0.2, 0.2]
+    get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
+    for idx, name in enumerate(POINTER_METHODS):
+        mnScoreByPosition = torch.mean(results['testScoreByPosition'][:,:,idx], dim=(0,1))
+        ax[1].plot(get_x(idx), [mnScoreByPosition.mean(), mnScoreByPosition.mean()], color=cmap(idx), lw=4, label=name)
+        for msbp in mnScoreByPosition:
+            ax[1].plot(get_x(idx), [msbp, msbp], color=cmap(idx), lw=1.5)
+        ax[1].plot([idx,idx], [mnScoreByPosition.min(), mnScoreByPosition.max()], color=cmap(idx), lw=1.5)
+    ax[1].set_xticks(range(len(POINTER_METHODS)))
+    ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
+    ax[1].set_title('Average')
+    ax[1].set_xlim(-1, len(POINTER_METHODS))
+    ax[1].set_ylim(0, 1)
 
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName(extra='confidence')))
