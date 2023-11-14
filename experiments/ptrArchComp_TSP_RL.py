@@ -29,11 +29,12 @@ device = 'cuda' if torchCuda.is_available() else 'cpu'
 POINTER_METHODS = ['PointerStandard', 'PointerDot', 'PointerDotLean', 'PointerDotNoLN', 'PointerAttention', 'PointerTransformer']
 
 # can edit this for each machine it's being used on
+savePath = Path('.') / 'experiments' / 'savedNetworks'
 resPath = Path(mainPath) / 'experiments' / 'savedResults'
 prmsPath = Path(mainPath) / 'experiments' / 'savedParameters'
 figsPath = Path(mainPath) / 'docs' / 'media'
 
-for path in (resPath, prmsPath, figsPath):
+for path in (resPath, prmsPath, figsPath, savePath):
     if not(path.exists()):
         path.mkdir()
         
@@ -48,14 +49,14 @@ def handleArguments():
     parser = argparse.ArgumentParser(description='Run pointer demonstration.')
     parser.add_argument('-nc','--num-cities', type=int, default=8, help='the number of cities')
     parser.add_argument('-bs','--batch-size',type=int, default=128, help='number of sequences per batch')
-    parser.add_argument('-ne','--train-epochs',type=int, default=8000, help='the number of training epochs')
-    parser.add_argument('-te','--test-epochs',type=int, default=100, help='the number of testing epochs')
+    parser.add_argument('-ne','--train-epochs',type=int, default=12000, help='the number of training epochs')
+    parser.add_argument('-te','--test-epochs',type=int, default=200, help='the number of testing epochs')
     parser.add_argument('-nr','--num-runs',type=int, default=5, help='how many runs for each network to train')
     parser.add_argument('--gamma', type=float, default=1.0, help='discounting factor')
     parser.add_argument('--temperature',type=float, default=5.0, help='temperature for training')
     
-    parser.add_argument('--embedding_dim', type=int, default=48, help='the dimensions of the embedding')
-    parser.add_argument('--heads', type=int, default=1, help='the number of heads in transformer layers')
+    parser.add_argument('--embedding_dim', type=int, default=96, help='the dimensions of the embedding')
+    parser.add_argument('--heads', type=int, default=4, help='the number of heads in transformer layers')
     parser.add_argument('--encoding-layers', type=int, default=1, help='the number of stacked transformers in the encoder')
     parser.add_argument('--justplot', default=False, action='store_true', help='if used, will only plot the saved results (results have to already have been run and saved)')
     parser.add_argument('--nosave', default=False, action='store_true')
@@ -135,9 +136,11 @@ def trainTestModel():
             reward_loc, reward_dist = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in choices]))
             rewards = [rl-rd for rl, rd in zip(reward_loc, reward_dist)] # distance penalized negatively
             G = [torch.matmul(reward, gamma_transform) for reward in rewards]
+            for i, l in enumerate(rewards):
+                assert not np.any(np.isnan(rewards)), f"model type {POINTER_METHOD[i]} diverged :("
 
             # measure J
-            J = [-torch.sum(logpol * g) for logpol, g in zip(logprob_policy, G)]
+            J = [-torch.sum(logpol * g) for logpol, g in zip(logprob_policy, G)] # flip sign for gradient ascent
             for j in J: j.backward()
 
             # update networks
@@ -211,7 +214,7 @@ def trainTestModel():
         'testScoreByPosition': testScoreByPosition
     }
     
-    return results
+    return results, nets
 
 def plotResults(results, args):
     numRuns = args.num_runs
@@ -281,10 +284,14 @@ if __name__=='__main__':
     
     if not(args.justplot):
         # train and test pointerNetwork 
-        results = trainTestModel()
+        results, nets = trainTestModel()
         
         # save results if requested
         if not(args.nosave):
+            # Save agent parameters
+            for net, method in zip(nets, POINTER_METHODS):
+                save_name = f"{method}.pt"
+                torch.save(net, savePath / getFileName(extra=save_name))
             # Save agent parameters
             np.save(prmsPath / getFileName(), vars(args))
             np.save(resPath / getFileName(), results)

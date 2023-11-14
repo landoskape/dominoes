@@ -29,11 +29,12 @@ device = 'cuda' if torchCuda.is_available() else 'cpu'
 POINTER_METHODS = ['PointerStandard', 'PointerDot', 'PointerDotLean', 'PointerDotNoLN', 'PointerAttention', 'PointerTransformer']
 
 # can edit this for each machine it's being used on
+savePath = Path('.') / 'experiments' / 'savedNetworks'
 resPath = Path(mainPath) / 'experiments' / 'savedResults'
 prmsPath = Path(mainPath) / 'experiments' / 'savedParameters'
 figsPath = Path(mainPath) / 'docs' / 'media'
 
-for path in (resPath, prmsPath, figsPath):
+for path in (resPath, prmsPath, figsPath, savePath):
     if not(path.exists()):
         path.mkdir()
         
@@ -48,12 +49,12 @@ def handleArguments():
     parser = argparse.ArgumentParser(description='Run pointer demonstration.')
     parser.add_argument('-nc','--num-cities', type=int, default=8, help='the number of cities')
     parser.add_argument('-bs','--batch-size',type=int, default=128, help='number of sequences per batch')
-    parser.add_argument('-ne','--train-epochs',type=int, default=8000, help='the number of training epochs')
-    parser.add_argument('-te','--test-epochs',type=int, default=100, help='the number of testing epochs')
+    parser.add_argument('-ne','--train-epochs',type=int, default=12000, help='the number of training epochs')
+    parser.add_argument('-te','--test-epochs',type=int, default=200, help='the number of testing epochs')
     parser.add_argument('-nr','--num-runs',type=int, default=5, help='how many runs for each network to train')
 
-    parser.add_argument('--embedding_dim', type=int, default=48, help='the dimensions of the embedding')
-    parser.add_argument('--heads', type=int, default=1, help='the number of heads in transformer layers')
+    parser.add_argument('--embedding_dim', type=int, default=96, help='the dimensions of the embedding')
+    parser.add_argument('--heads', type=int, default=4, help='the number of heads in transformer layers')
     parser.add_argument('--encoding-layers', type=int, default=1, help='the number of stacked transformers in the encoder')
     parser.add_argument('--greedy', default=False, action='store_true', help='if used, will generate greedy predictions of each step rather than probability-weighted predictions')
     parser.add_argument('--justplot', default=False, action='store_true', help='if used, will only plot the saved results (results have to already have been run and saved)')
@@ -76,7 +77,7 @@ def trainTestModel():
     embedding_dim = args.embedding_dim
     heads = args.heads
     encoding_layers = args.encoding_layers
-    greedy = True 
+    greedy = args.greedy
     temperature = 1.0
     
     # train parameters
@@ -123,7 +124,8 @@ def trainTestModel():
             # measure loss with negative log-likelihood
             unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]
             loss = [torch.nn.functional.nll_loss(unroll, target.view(-1)) for unroll in unrolled]
-            assert all([not np.isnan(l.item()) for l in loss]), "model diverged :("
+            for i, l in enumerate(loss):
+                assert not np.isnan(l.item()), f"model type {POINTER_METHOD[i]} diverged :("
 
             # update networks
             for l in loss: l.backward()
@@ -170,7 +172,8 @@ def trainTestModel():
                 # measure loss with negative log-likelihood
                 unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]
                 loss = [torch.nn.functional.nll_loss(unroll, target.view(-1)) for unroll in unrolled]
-                assert all([not np.isnan(l.item()) for l in loss]), "model diverged :("
+                for i, l in enumerate(loss):
+                    assert not np.isnan(l.item()), f"model type {POINTER_METHOD[i]} diverged :("
 
                 # get distance traveled
                 tour_complete, tour_distance = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in choices]))
@@ -204,7 +207,7 @@ def trainTestModel():
         'testMaxScore': testMaxScore,
     }
     
-    return results
+    return results, nets
 
 def plotResults(results, args):
     numRuns = args.num_runs
@@ -283,6 +286,7 @@ def plotResults(results, args):
     ax[0].set_ylabel(f'Tour Length N={numRuns}')
     ax[0].set_title('Training - TourLength (Valid)')
     ax[0].legend(loc='best')
+    ax[0].set_ylim(0.9, 2.5)
     yMin0, yMax0 = ax[0].get_ylim()
     
     xOffset = [-0.2, 0.2]
@@ -326,10 +330,14 @@ if __name__=='__main__':
     
     if not(args.justplot):
         # train and test pointerNetwork 
-        results = trainTestModel()
+        results, nets = trainTestModel()
         
         # save results if requested
         if not(args.nosave):
+            # Save agent parameters
+            for net, method in zip(nets, POINTER_METHODS):
+                save_name = f"{method}.pt"
+                torch.save(net, savePath / getFileName(extra=save_name))
             # Save agent parameters
             np.save(prmsPath / getFileName(), vars(args))
             np.save(resPath / getFileName(), results)
