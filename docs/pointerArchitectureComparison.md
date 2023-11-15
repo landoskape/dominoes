@@ -225,7 +225,7 @@ for longer; however, given the cost of training and the much greater
 complexity of real-world problems, these new architectures may be beneficial
 for getting the most out of a network with a limited time and money budget. 
 
-### Variations in Task and Learning Algorithm
+### Variations in Task: Variable Hand Size
 I also trained the networks on a task where the hand size (number of tokens to
 sort per batch element) changes from 4-12 randomly on each batch. The training 
 and testing results are here:
@@ -243,13 +243,27 @@ appears to be due to a specific inability to maintain confidence in output
 for the longest sequences, although 2/5 of the PointerTransformer networks
 have flat position dependent confidence curves (data not shown). 
 
-For results on the supervised learning task, see the training and testing
-[results](media/sl_pointerArchitectureComparison.png) and the plot of the 
-position dependent 
-[confidence](media/sl_pointerArchitectureComparison_confidence.png). A full
-discussion of these results will come later when I've analyzed it more. 
+### Variations in Learning Algorithm: Supervised Learning 
+I also trained these networks on the same task with supervised learning (using
+negative log-likelihood loss). When trained with supervised learning, the 
+network performance is much more similar, with the standard pointer layer 
+doing a bit better than the new networks. Here's the plot of training and 
+testing performance:
+
+![sl results](media/sl_pointerArchitectureComparison.png) 
+
+And here's the plot of the position dependent confidence:
+
+![sl confidence](media/sl_pointerArchitectureComparison_confidence.png). 
+
+These plots indicate that the benefits gleaned from the new pointer layers are
+specific to the reinforcement learning context. However, I'd like to point out
+that the test performance is partly biased by when the loss spikes occur - so
+that needs a bit more analysis and more careful end stopping of the training. 
 
 ### Network Representation of Input
+~ in progress! ~
+
 I am in the process of doing a detailed analysis of (1) how these different 
 networks represent their inputs and (2) the precise mechanism of generating
 scores for each token during the generative phase. As a first pass, I did a 

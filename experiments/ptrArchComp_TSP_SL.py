@@ -47,7 +47,7 @@ def getFileName(extra=None):
 
 def handleArguments():
     parser = argparse.ArgumentParser(description='Run pointer demonstration.')
-    parser.add_argument('-nc','--num-cities', type=int, default=8, help='the number of cities')
+    parser.add_argument('-nc','--num-cities', type=int, default=10, help='the number of cities')
     parser.add_argument('-bs','--batch-size',type=int, default=128, help='number of sequences per batch')
     parser.add_argument('-ne','--train-epochs',type=int, default=12000, help='the number of training epochs')
     parser.add_argument('-te','--test-epochs',type=int, default=200, help='the number of testing epochs')
