@@ -70,7 +70,7 @@ the agents I have developed. This is a list of them with links to the file.
 2. Reinforcement Learning Agents
    - [The TD-Lambda Algorithm](docs/TDLambdaAgents.md)
 
-## Documentation for Pointer Network Experiments
+### Documentation for Pointer Network Experiments
 1. [Toy Problem (& intro to pointer networks)](docs/pointerDemonstration.md)
 2. [Novel Architecture Comparison on Toy Problem](docs/pointerArchitectureComparison.md)
 3. [Tests on the Traveling Salesman Problem](docs/pointerArchComp_TSP.md)
