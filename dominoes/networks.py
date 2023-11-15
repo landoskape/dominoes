@@ -14,7 +14,7 @@ class handRepresentationNetwork(nn.Module):
                 embedding_dim=128, heads=8, expansion=2, kqnorm=True, bias=False, encoding_layers=1,
                 include_hand_index=True, weightPrms=(0.,0.1),biasPrms=0.):
         super().__init__()
-        assert finalScoreOutputDimension<numPlayers, "finalScoreOutputDimension can't be greater than the number of players"
+        assert finalScoreOutputDimension<=numPlayers, "finalScoreOutputDimension can't be greater than the number of players"
         self.numPlayers = numPlayers
         self.numDominoes = numDominoes
         self.highestDominoe = highestDominoe
@@ -96,7 +96,7 @@ class handRepresentationNetwork(nn.Module):
 class lineRepresentationNetwork(nn.Module):
     def __init__(self, numPlayers, numDominoes, highestDominoe, finalScoreOutputDimension, numOutputCNN=1000, weightPrms=(0.,0.1), biasPrms=0., predict_score=True):
         super().__init__()
-        assert finalScoreOutputDimension<numPlayers, "finalScoreOutputDimension can't be greater than the number of players"
+        assert finalScoreOutputDimension<=numPlayers, "finalScoreOutputDimension can't be greater than the number of players"
         self.numPlayers = numPlayers
         self.numDominoes = numDominoes
         self.highestDominoe = highestDominoe
@@ -105,7 +105,8 @@ class lineRepresentationNetwork(nn.Module):
         self.outputDimension = finalScoreOutputDimension
         self.predict_score = predict_score
         if not(self.predict_score):
-            assert finalScoreOutputDimension == numPlayers-1, f"Creating lineRepresentationNetwork that predicts win probability, but output dimension is {finalScoreOutputDimension} and numPlayers is {numPlayers}"
+            message = f"Creating lineRepresentationNetwork that predicts win probability, but output dimension is {finalScoreOutputDimension} and numPlayers is {numPlayers}"
+            assert finalScoreOutputDimension == numPlayers-1, message
         
         # the lineRepresentationValue gets passed through a 1d convolutional network
         # this will transform the (numDominoe, numLineFeatures) input representation into an (numOutputChannels, numLineFeatures) output representation

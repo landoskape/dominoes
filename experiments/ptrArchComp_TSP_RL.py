@@ -29,7 +29,7 @@ device = 'cuda' if torchCuda.is_available() else 'cpu'
 POINTER_METHODS = ['PointerStandard', 'PointerDot', 'PointerDotLean', 'PointerDotNoLN', 'PointerAttention', 'PointerTransformer']
 
 # can edit this for each machine it's being used on
-savePath = Path('.') / 'experiments' / 'savedNetworks'
+savePath = Path(mainPath) / 'experiments' / 'savedNetworks'
 resPath = Path(mainPath) / 'experiments' / 'savedResults'
 prmsPath = Path(mainPath) / 'experiments' / 'savedParameters'
 figsPath = Path(mainPath) / 'docs' / 'media'

@@ -156,18 +156,16 @@ class valueAgent(dominoeAgent):
             # if the final score is an array, then we should shift its perspective and learn from the true difference in our penultimate estimate and the actual final score
             if self.predict_score:
                 finalScore = self.egocentric(finalScore)[:self.finalScoreOutputDimension]
+                finalScore = torch.tensor(finalScore).float().to(self.device)
+                tdError = finalScore - self.finalScoreOutput
+                self.updateReplayTarget(finalScore)
             else:
-                finalScore = self.egocentric(finalScore)
-                win = 1.0*(finalScore[0]<finalScore[1:]) # 1 if score is better than other agents
-                print(finalScore, win)
-
-
-
-            
-            finalScore = torch.tensor(finalScore).float().to(self.device)
-            tdError = finalScore - self.finalScoreOutput
-            self.updateReplayTarget(finalScore)
-
+                raise ValueError("win prediction hasn't been coded yet!")
+                # finalScore = self.egocentric(finalScore)
+                # win = 1.0*(finalScore[0]<finalScore[1:]) # 1 if score is better than other agents
+                # win = torch.tensor(win).float().to(self.device)
+                # tdError = finalScore - self.finalScoreOutput
+                # self.updateReplayTarget(win)
         for idx,td in enumerate(tdError):
             for prmIdx,prms in enumerate(self.finalScoreNetwork.parameters()):
                 assert self.finalScoreEligibility[idx][prmIdx].shape == prms.shape, "oops!"
@@ -244,8 +242,8 @@ class basicValueAgent(valueAgent):
         # prepare replay 
         self.replayBufferIndex = []
         self.replayBuffer = [torch.zeros((0, self.finalScoreNetwork.inputDimension)).to(self.device), ]
-        self.replayTarget = torch.zeros((0,1)).to(self.device)
-        self.replayWeight = torch.zeros((0,1)).to(self.device)
+        self.replayTarget = torch.zeros((0,self.finalScoreNetwork.outputDimension)).to(self.device)
+        self.replayWeight = torch.zeros((0,self.finalScoreNetwork.outputDimension)).to(self.device)
         self.loss = torch.nn.L1Loss(reduction='none')
         self.optimizer = torch.optim.SGD(self.finalScoreNetwork.parameters(), lr=self.replayAlpha)
         
@@ -278,8 +276,8 @@ class basicValueAgent(valueAgent):
         
         if any(rbi>(self.replayTarget.size(0)-1) for rbi in self.replayBufferIndex):
             num2add = max(self.replayBufferIndex) + 1 - self.replayTarget.size(0)
-            self.replayTarget = torch.cat((self.replayTarget, torch.zeros((num2add,1)).to(self.device)))
-            self.replayWeight = torch.cat((self.replayWeight, torch.zeros((num2add,1)).to(self.device)))
+            self.replayTarget = torch.cat((self.replayTarget, torch.zeros((num2add,self.finalScoreNetwork.outputDimension)).to(self.device)))
+            self.replayWeight = torch.cat((self.replayWeight, torch.zeros((num2add,self.finalScoreNetwork.outputDimension)).to(self.device)))
         
         self.replayTarget[self.replayBufferIndex]=finalScore.clone()
         self.replayWeight[self.replayBufferIndex]=1 # initial replay weight always 1
@@ -358,8 +356,8 @@ class lineValueAgent(valueAgent):
         replayDims1 = (self.finalScoreNetwork.inputDimension-self.finalScoreNetwork.numOutputCNN, )
         self.replayBufferIndex = []
         self.replayBuffer = [torch.zeros((0, *replayDims0)).to(self.device), torch.zeros((0, *replayDims1)).to(self.device)]
-        self.replayTarget = torch.zeros((0,1)).to(self.device)
-        self.replayWeight = torch.zeros((0,1)).to(self.device)
+        self.replayTarget = torch.zeros((0,self.finalScoreNetwork.outputDimension)).to(self.device)
+        self.replayWeight = torch.zeros((0,self.finalScoreNetwork.outputDimension)).to(self.device)
         self.loss = torch.nn.L1Loss(reduction='none')
         self.optimizer = torch.optim.SGD(self.finalScoreNetwork.parameters(), lr=self.replayAlpha)
         
@@ -410,8 +408,8 @@ class lineValueAgent(valueAgent):
         
         if any(rbi>(self.replayTarget.size(0)-1) for rbi in self.replayBufferIndex):
             num2add = max(self.replayBufferIndex) + 1 - self.replayTarget.size(0)
-            self.replayTarget = torch.cat((self.replayTarget, torch.zeros((num2add,1)).to(self.device)))
-            self.replayWeight = torch.cat((self.replayWeight, torch.zeros((num2add,1)).to(self.device)))
+            self.replayTarget = torch.cat((self.replayTarget, torch.zeros((num2add,self.finalScoreNetwork.outputDimension)).to(self.device)))
+            self.replayWeight = torch.cat((self.replayWeight, torch.zeros((num2add,self.finalScoreNetwork.outputDimension)).to(self.device)))
             
         self.replayTarget[self.replayBufferIndex]=finalScore.clone()
         self.replayWeight[self.replayBufferIndex]=1
@@ -431,7 +429,7 @@ class lineValueAgent(valueAgent):
             
     def prepareNetwork(self):
         # initialize valueNetwork -- predicts next hand value of each player along with final score for each player (using omniscient information to begin with...) 
-        self.finalScoreNetwork = dnn.lineRepresentationNetwork(self.numPlayers,self.numDominoes,self.highestDominoe,self.finalScoreOutputDimension)
+        self.finalScoreNetwork = dnn.lineRepresentationNetwork(self.numPlayers,self.numDominoes,self.highestDominoe,self.finalScoreOutputDimension, predict_score=self.predict_score)
         self.finalScoreNetwork.to(self.device)
 
         # Prepare Training Functions & Optimizers
