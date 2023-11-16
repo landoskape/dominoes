@@ -1,41 +1,46 @@
 # standard imports
-from copy import copy
 from pathlib import Path
-from tqdm import tqdm
 import numpy as np
 import scipy as sp
-import matplotlib.pyplot as plt
-import matplotlib as mpl
 import torch
-import torch.cuda as torchCuda
 
 # dominoes package
+from .. import fileManagement as fm
 from .. import functions as df
 from .. import datasets
 from .. import training
-from .. import transformers
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # general variables for analysis
 POINTER_METHODS = ['PointerStandard', 'PointerDot', 'PointerDotLean', 'PointerDotNoLN', 'PointerAttention', 'PointerTransformer']
 
-# method for returning the name of the saved network parameters (different save for each possible opponent)
-def getFileName(extra=None):
-    baseName = "pointerArchitectureComparison_analysis"
+# can edit this for each machine it's being used on
+savePath = Path(fm.codePath()) / 'experiments' / 'savedNetworks'
+resPath = Path(fm.codePath()) / 'experiments' / 'savedResults'
+prmsPath = Path(fm.codePath()) / 'experiments' / 'savedParameters'
+figsPath = Path(fm.codePath()) / 'docs' / 'media'
+
+# method for returning the name of the file name for saving data to
+def getFileName(baseName, extra=None):
+    baseName = f"{baseName}_analysis"
     if extra is not None:
         baseName = baseName + f"_{extra}"
     return baseName
     
 # method for loading results of experiment by same name
-def loadNetworks():    
-    results = np.load(resPath / 'pointerArchitectureComparison.npy', allow_pickle=True).item()
+def loadNetworks(baseName):    
+    results = np.load(resPath / (baseName+'.npy'), allow_pickle=True).item()
     
     nets = []
     for pointer_method in POINTER_METHODS:
-        name = f"pointerArchitectureComparison_{pointer_method}.pt"
+        name = f"{baseName}_{pointer_method}.pt"
         nets.append(torch.load(savePath / name))
     nets = [net.to(device) for net in nets]
+    return results, nets
+
+def torch_pdist(tensor):
+    return torch.norm(tensor[:, None] - tensor, dim=2, p=2)
 
 # method for doing a forward pass of the pointer module of pointer networks and storing intermediate activations
 @torch.no_grad()
@@ -131,6 +136,26 @@ def unpackIntermediateActivations(net, intermediate):
                         'p_u': u
                        }
         
+    elif net.pointer_method == 'PointerAttention':
+        tEncoded, tDecoded, u = map(list, zip(*intermediate))
+        tEncoded = torch.stack(tEncoded, dim=3)
+        tDecoded = torch.stack(tDecoded, dim=3)
+        u = torch.stack(u, dim=2)
+        intermediate = {'p_encoded': tEncoded,
+                        'p_decoded': tDecoded,
+                        'p_u': u
+                        }
+    
+    elif net.pointer_method == 'PointerTransformer':
+        tEncoded, tDecoded, u = map(list, zip(*intermediate))
+        tEncoded = torch.stack(tEncoded, dim=3)
+        tDecoded = torch.stack(tDecoded, dim=3)
+        u = torch.stack(u, dim=2)
+        intermediate = {'p_encoded': tEncoded,
+                        'p_decoded': tDecoded,
+                        'p_u': u
+                        }
+        
     else:
         raise ValueError(f"Pointer method: {net.pointer_method} not recognized.")
 
@@ -158,6 +183,20 @@ def pointerLayer(net, encoded, decoder_state, mask=None):
         tEncoded = net.pointer.pointer.eln(encoded)
         tDecoded = net.pointer.pointer.dln(decoder_state)
         u = torch.bmm(tEncoded, tDecoded.unsqueeze(2)).squeeze(2)
+
+    elif net.pointer_method == 'PointerAttention':
+        tEncoded = net.pointer.pointer.attention(encoded, [decoder_state], mask=mask)
+        tDecoded = decoder_state
+        u = net.pointer.pointer.vt(torch.tanh(tEncoded)).squeeze(2)
+        if mask is not None:
+            u.masked_fill_(mask==0, -200) # pin masked tokens before softmax
+
+    elif net.pointer_method == 'PointerTransformer':
+        tEncoded = net.pointer.pointer.transform(encoded, [decoder_state], mask=mask)
+        tDecoded = decoder_state
+        u = net.pointer.pointer.vt(torch.tanh(tEncoded)).squeeze(2)
+        if mask is not None:
+            u.masked_fill_(mask==0, -200) # pin masked tokens before softmax
         
     else:
         raise ValueError(f"Pointer method: {net.pointer_method} not recognized.")
@@ -178,7 +217,7 @@ def pointerLayer(net, encoded, decoder_state, mask=None):
 
 # method for processing dominoes data through the networks 
 @torch.no_grad()
-def processData(nets, batchSize):
+def process_dominoe_data(nets, batchSize):
     
     # get a "normal" batch
     highestDominoe = 9
@@ -240,6 +279,35 @@ def processData(nets, batchSize):
 
 
 
+# method for processing traveling salesman data through the networks 
+@torch.no_grad()
+def process_tsp_data(nets, batchSize, num_cities):
+    # generate batch
+    input, _, xy, dists = datasets.tsp_batch(batchSize, num_cities, return_target=False, return_full=True)
+    input, xy, dists = input.to(device), xy.to(device), dists.to(device)
+
+    batch = (input, xy, dists)
+
+    # pre-forward
+    batch_size, tokens, _ = input.size()
+    mask = torch.ones((batch_size, tokens), dtype=input.dtype).to(device)
+    
+    # encoding
+    embedded = [net.embedding(input) for net in nets]
+    encoded = [net.encoding(embed) for net, embed in zip(nets, embedded)]
+    
+    numerator= [torch.sum(enc*mask.unsqueeze(2), dim=1) for enc in encoded]
+    denominator = [torch.sum(mask, dim=1, keepdim=True) for _ in nets]
+    decoder_context = [num/den for num, den in zip(numerator, denominator)]
+    decoder_input = [torch.zeros((batch_size, net.embedding_dim)).to(device) for net in nets]
+
+    # get outputs and intermediate activations of decoder phase for each network
+    outs = [pointerModule(nets[ii], encoded[ii], decoder_input[ii], decoder_context[ii], num_cities+1, mask) 
+            for ii in range(len(nets))]
+    scores, choices, decoder_context, decoder_input, intermediate = map(list, zip(*outs))
+    
+    # lists of output for each stage
+    return embedded, encoded, intermediate, decoder_context, decoder_input, scores, choices, batch
 
 
 
@@ -255,9 +323,54 @@ def processData(nets, batchSize):
 
 
 
-
-
-
-
-
-
+def seriate_matrix(dist_mat, res_order):
+    N = len(dist_mat)
+    seriated_dist = np.zeros((N,N))
+    a,b = np.triu_indices(N,k=1)
+    seriated_dist[a,b] = dist_mat[ [res_order[i] for i in a], [res_order[j] for j in b]]
+    seriated_dist[b,a] = seriated_dist[a,b]
+    return seriated_dist
+    
+def seriation(Z,N,cur_index):
+    '''
+        input:
+            - Z is a hierarchical tree (dendrogram)
+            - N is the number of points given to the clustering process
+            - cur_index is the position in the tree for the recursive traversal
+        output:
+            - order implied by the hierarchical tree Z
+            
+        seriation computes the order implied by a hierarchical tree (dendrogram)
+    '''
+    if cur_index < N:
+        return [cur_index]
+    else:
+        left = int(Z[cur_index-N,0])
+        right = int(Z[cur_index-N,1])
+        return (seriation(Z,N,left) + seriation(Z,N,right))
+    
+def compute_serial_matrix(dist_mat,method="ward"):
+    '''
+        input:
+            - dist_mat is a distance matrix
+            - method = ["ward","single","average","complete"]
+        output:
+            - seriated_dist is the input dist_mat,
+              but with re-ordered rows and columns
+              according to the seriation, i.e. the
+              order implied by the hierarchical tree
+            - res_order is the order implied by
+              the hierarhical tree
+            - res_linkage is the hierarhical tree (dendrogram)
+        
+        compute_serial_matrix transforms a distance matrix into 
+        a sorted distance matrix according to the order implied 
+        by the hierarchical tree (dendrogram)
+    '''
+    N = len(dist_mat)
+    flat_dist_mat = sp.spatial.distance.squareform(dist_mat)
+    res_linkage = sp.cluster.hierarchy.linkage(flat_dist_mat, method=method)
+    res_order = seriation(res_linkage, N, N + N-2)
+    seriated_dist = seriate_matrix(dist_mat, res_order)
+    
+    return seriated_dist, res_order, res_linkage
