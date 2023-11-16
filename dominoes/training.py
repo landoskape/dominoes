@@ -158,22 +158,29 @@ def measureReward_sequencer(available, hands, choices, value_method='dominoe', n
 @torch.no_grad()
 def measureReward_tsp(dists, choices):
     """reward function for measuring tsp performance"""
-    batchSize, numCities = choices.shape 
+    numCities = dists.shape[1]
+    batchSize, numChoices = choices.shape
+    assert 1 < numChoices <= (numCities+1), "numChoices per batch element should be more than 1 and no more than twice the number of cities"  
     device = transformers.get_device(choices)
-    distance = torch.zeros((batchSize, numCities)).to(device)
-    new_city = torch.ones((batchSize, numCities)).to(device)
+    distance = torch.zeros((batchSize, numChoices)).to(device)
+    new_city = torch.ones((batchSize, numChoices)).to(device)
 
     src = torch.ones((batchSize,1), dtype=torch.bool).to(device)
-    visited = torch.zeros((batchSize, numCities), dtype=torch.bool).to(device)
+    visited = torch.zeros((batchSize, numChoices), dtype=torch.bool).to(device)
     visited.scatter_(1, choices[:,0].view(batchSize, 1), src)
-    for nc in range(1, numCities):
+    for nc in range(1, numChoices):
         c_dist_possible = torch.gather(dists, 1, choices[:, nc-1].view(batchSize, 1, 1).expand(-1, -1, numCities)).squeeze(1)
         c_dist = torch.gather(c_dist_possible, 1, choices[:,nc].view(batchSize,1)).squeeze()
         distance[:,nc] = c_dist
-        c_visited = torch.gather(visited, 1, choices[:,nc].view(batchSize,1)).squeeze(1)
-        visited.scatter_(1, choices[:,nc].view(batchSize,1), src)
-        new_city[c_visited,nc] = -1.0
-        new_city[~c_visited,nc] = 1.0
+        if nc<numCities:
+            c_visited = torch.gather(visited, 1, choices[:,nc].view(batchSize,1)).squeeze(1)
+            visited.scatter_(1, choices[:,nc].view(batchSize,1), src)
+            new_city[c_visited,nc] = -1.0
+            new_city[~c_visited,nc] = 1.0
+        else:
+            c_same_as_first = choices[:,0] == choices[:,-1]
+            new_city[c_same_as_first, nc] = 1.0
+            new_city[~c_same_as_first, nc] = -1.0
     return new_city, distance
         
         

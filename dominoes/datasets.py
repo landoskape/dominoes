@@ -184,12 +184,14 @@ def get_path(xy, dists):
         path.append(cpath)
     return path
 
-def tsp_batch(batch_size, num_cities, return_target=True, return_full=False):
+def tsp_batch(batch_size, num_cities, return_target=True, full_cycle=True, return_full=False):
     xy = np.random.random((batch_size, num_cities, 2))
     dists = np.stack([sp.spatial.distance.pdist(p) for p in xy])
     input = torch.tensor(xy, dtype=torch.float)
     if return_target:
         target = torch.tensor(np.stack(get_path(xy, dists)), dtype=torch.long)
+        if full_cycle:
+            target = torch.cat((target, target[:,[0]]), dim=1) # make it a full cycle
     else:
         target = None
     if return_full:
