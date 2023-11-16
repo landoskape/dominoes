@@ -47,11 +47,11 @@ def getFileName(extra=None):
 
 def handleArguments():
     parser = argparse.ArgumentParser(description='Run pointer demonstration.')
-    parser.add_argument('-nc','--num-cities', type=int, default=8, help='the number of cities')
+    parser.add_argument('-nc','--num-cities', type=int, default=10, help='the number of cities')
     parser.add_argument('-bs','--batch-size',type=int, default=128, help='number of sequences per batch')
     parser.add_argument('-ne','--train-epochs',type=int, default=12000, help='the number of training epochs')
     parser.add_argument('-te','--test-epochs',type=int, default=200, help='the number of testing epochs')
-    parser.add_argument('-nr','--num-runs',type=int, default=5, help='how many runs for each network to train')
+    parser.add_argument('-nr','--num-runs',type=int, default=8, help='how many runs for each network to train')
     parser.add_argument('--gamma', type=float, default=1.0, help='discounting factor')
     parser.add_argument('--temperature',type=float, default=5.0, help='temperature for training')
     
@@ -71,7 +71,8 @@ def handleArguments():
 def trainTestModel():
     # get values from the argument parser
     num_cities = args.num_cities
-    
+    num_in_cycle = num_cities + 1
+
     # other batch parameters
     batchSize = args.batch_size
     
@@ -92,7 +93,7 @@ def trainTestModel():
     
     # create gamma transform matrix
     gamma = args.gamma
-    exponent = torch.arange(num_cities).view(-1,1) - torch.arange(num_cities).view(1,-1)
+    exponent = torch.arange(num_in_cycle).view(-1,1) - torch.arange(num_in_cycle).view(1,-1)
     gamma_transform = (gamma ** exponent * (exponent >= 0)).unsqueeze(0).expand(batchSize, -1, -1).to(device)
 
     print(f"Doing training...")
@@ -102,10 +103,10 @@ def trainTestModel():
     testTourValidLength = torch.full((testEpochs, numNets, numRuns), torch.nan)
     trainTourComplete = torch.zeros((trainEpochs, numNets, numRuns))
     testTourComplete = torch.zeros((testEpochs, numNets, numRuns))
-    trainRewardByPosition = torch.full((trainEpochs, num_cities, numNets, numRuns), torch.nan) # keep track of where there was reward
-    testRewardByPosition = torch.full((testEpochs, num_cities, numNets, numRuns), torch.nan) # keep track of where there was reward
-    trainScoreByPosition = torch.full((trainEpochs, num_cities, numNets, numRuns), torch.nan) # keep track of confidence of model
-    testScoreByPosition = torch.full((testEpochs, num_cities, numNets, numRuns), torch.nan) 
+    trainRewardByPosition = torch.full((trainEpochs, num_in_cycle, numNets, numRuns), torch.nan) # keep track of where there was reward
+    testRewardByPosition = torch.full((testEpochs, num_in_cycle, numNets, numRuns), torch.nan) # keep track of where there was reward
+    trainScoreByPosition = torch.full((trainEpochs, num_in_cycle, numNets, numRuns), torch.nan) # keep track of confidence of model
+    testScoreByPosition = torch.full((testEpochs, num_in_cycle, numNets, numRuns), torch.nan) 
     for run in range(numRuns):
         
         print(f"Training networks {run+1}/{numRuns}...")
@@ -127,7 +128,7 @@ def trainTestModel():
 
             # zero gradients, get output of network
             for opt in optimizers: opt.zero_grad()
-            log_scores, choices = map(list, zip(*[net(input) for net in nets]))
+            log_scores, choices = map(list, zip(*[net(input, max_output=num_in_cycle) for net in nets]))
             
             # log-probability for each chosen dominoe
             logprob_policy = [torch.gather(score, 2, choice.unsqueeze(2)).squeeze(2) for score, choice in zip(log_scores, choices)]
@@ -175,7 +176,7 @@ def trainTestModel():
 
                 # zero gradients, get output of network
                 for opt in optimizers: opt.zero_grad()
-                log_scores, choices = map(list, zip(*[net(input) for net in nets]))
+                log_scores, choices = map(list, zip(*[net(input, max_output=num_in_cycle) for net in nets]))
                 
                 # log-probability for each chosen dominoe
                 logprob_policy = [torch.gather(score, 2, choice.unsqueeze(2)).squeeze(2) for score, choice in zip(log_scores, choices)]

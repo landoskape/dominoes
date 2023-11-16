@@ -51,7 +51,7 @@ def handleArguments():
     parser.add_argument('-bs','--batch-size',type=int, default=128, help='number of sequences per batch')
     parser.add_argument('-ne','--train-epochs',type=int, default=12000, help='the number of training epochs')
     parser.add_argument('-te','--test-epochs',type=int, default=200, help='the number of testing epochs')
-    parser.add_argument('-nr','--num-runs',type=int, default=5, help='how many runs for each network to train')
+    parser.add_argument('-nr','--num-runs',type=int, default=8, help='how many runs for each network to train')
 
     parser.add_argument('--embedding_dim', type=int, default=96, help='the dimensions of the embedding')
     parser.add_argument('--heads', type=int, default=4, help='the number of heads in transformer layers')
@@ -68,7 +68,8 @@ def handleArguments():
 def trainTestModel():
     # get values from the argument parser
     num_cities = args.num_cities
-    
+    num_in_cycle = num_cities + 1
+
     # other batch parameters
     batchSize = args.batch_size
     
@@ -96,9 +97,9 @@ def trainTestModel():
     testTourComplete = torch.zeros((testEpochs, numNets, numRuns))
     trainTourValidLength = torch.zeros((trainEpochs, numNets, numRuns))
     testTourValidLength = torch.zeros((testEpochs, numNets, numRuns))
-    trainPositionError = torch.full((trainEpochs, num_cities, numNets, numRuns), torch.nan) # keep track of where there was error
-    trainMaxScore = torch.full((trainEpochs, num_cities, numNets, numRuns), torch.nan) # keep track of confidence of model
-    testMaxScore = torch.full((testEpochs, num_cities, numNets, numRuns), torch.nan) 
+    trainPositionError = torch.full((trainEpochs, num_in_cycle, numNets, numRuns), torch.nan) # keep track of where there was error
+    trainMaxScore = torch.full((trainEpochs, num_in_cycle, numNets, numRuns), torch.nan) # keep track of confidence of model
+    testMaxScore = torch.full((testEpochs, num_in_cycle, numNets, numRuns), torch.nan) 
     for run in range(numRuns):
         print(f"Training round of networks {run+1}/{numRuns}...")
         
@@ -119,7 +120,7 @@ def trainTestModel():
 
             # zero gradients, get output of network
             for opt in optimizers: opt.zero_grad()
-            log_scores, choices = map(list, zip(*[net(input) for net in nets]))
+            log_scores, choices = map(list, zip(*[net(input, max_output=num_in_cycle) for net in nets]))
 
             # measure loss with negative log-likelihood
             unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]
@@ -143,9 +144,9 @@ def trainTestModel():
                 tour_distance = [torch.sum(td, dim=1) for td in tour_distance]
                 
                 # start by getting score for target at each position 
-                target_score = [torch.gather(unroll, dim=1, index=target.view(-1,1)).view(batchSize, num_cities) for unroll in unrolled]
+                target_score = [torch.gather(unroll, dim=1, index=target.view(-1,1)).view(batchSize, num_in_cycle) for unroll in unrolled]
                 # then get max score for each position (which would correspond to the score of the actual choice)
-                max_score = [torch.max(unroll, dim=1)[0].view(batchSize, num_cities) for unroll in unrolled]
+                max_score = [torch.max(unroll, dim=1)[0].view(batchSize, num_in_cycle) for unroll in unrolled]
                 # then calculate position error
                 pos_error = [ms - ts for ms, ts in zip(max_score, target_score)] # high if the chosen score is much bigger than the target score
                     
@@ -167,7 +168,7 @@ def trainTestModel():
                 input, target, _, dists = datasets.tsp_batch(batchSize, num_cities, return_full=True)
                 input, target, dists = input.to(device), target.to(device), dists.to(device)
 
-                log_scores, choices = map(list, zip(*[net(input) for net in nets]))
+                log_scores, choices = map(list, zip(*[net(input, max_output=num_in_cycle) for net in nets]))
         
                 # measure loss with negative log-likelihood
                 unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]
@@ -181,7 +182,7 @@ def trainTestModel():
                 tour_distance = [torch.sum(td, dim=1) for td in tour_distance]
                 
                 # get max score 
-                max_score = [torch.max(unroll, dim=1)[0].view(batchSize, num_cities) for unroll in unrolled]
+                max_score = [torch.max(unroll, dim=1)[0].view(batchSize, num_in_cycle) for unroll in unrolled]
 
                 # save training data
                 for i, (l, td, tc, ms) in enumerate(zip(loss, tour_distance, tour_complete, max_score)):
