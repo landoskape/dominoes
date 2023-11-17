@@ -18,6 +18,8 @@ import torch.cuda as torchCuda
 # dominoes package
 from dominoes import functions as df
 from dominoes import transformers
+from dominoes import datasets
+from dominoes import training
 
 device = 'cuda' if torchCuda.is_available() else 'cpu'
 
@@ -73,194 +75,6 @@ def handleArguments():
 
     return args
 
-@torch.no_grad()
-def measureReward(available, hands, choices, normalize=True, return_direction=False, verbose=None):
-    assert choices.ndim==2, f"choices should be a (batch_size, max_output) tensor of indices, it is: {choices.shape}"
-    batch_size, max_output = choices.shape
-    num_in_hand = hands.shape[1]
-    device = transformers.get_device(choices)
-
-    # check verbose
-    if verbose is not None:
-        debug = True
-        assert 0 <= verbose < batch_size, "verbose should be an index corresponding to one of the batch elements"
-    else:
-        debug = False
-    
-    # initialize these tracker variables
-    next_available = torch.tensor(available, dtype=torch.float).to(device)
-    havent_played = torch.ones((batch_size, num_in_hand+1), dtype=torch.bool).to(device) # True until dominoe has been played (include null for easier coding b/c out_choices includes idx to null
-    hands = torch.tensor(hands, dtype=torch.float).to(device)
-    handsOriginal = torch.cat((hands, -torch.ones((hands.size(0),1,2)).to(device)), dim=1) # keep track of original values
-    handsUpdates = torch.cat((hands, -torch.ones((hands.size(0),1,2)).to(device)), dim=1) # Add null choice as [-1,-1]
-    
-    rewards = torch.zeros((batch_size, max_output), dtype=torch.float).to(device)
-    if return_direction: 
-        direction = -torch.ones((batch_size, max_output), dtype=torch.float).to(device)
-
-    if debug:
-        print("Original hand:\n", hands[verbose])
-        
-    # then for each output:
-    for idx in range(max_output):
-        # idx of outputs that chose the null token
-        idx_null = choices[:,idx] == num_in_hand
-
-        if debug:
-            print('')
-            print("\nNew loop in measure reward:\n")
-            print("next_available:", next_available[verbose])
-            print("Choice: ", choices[verbose,idx])
-            print("IdxNull: ", idx_null[verbose])
-        
-        # idx of outputs that have not already been chosen
-        idx_not_played = torch.gather(havent_played, 1, choices[:, idx].view(-1,1)).squeeze(1)
-        havent_played.scatter_(1, choices[:,idx].view(-1,1), torch.zeros((batch_size,1), dtype=torch.bool).to(device))
-
-        # idx of play (not the null token and a dominoe that hasn't been played yet)
-        idx_play = ~idx_null & idx_not_played
-        
-        # the dominoe that is chosen (including the null token)
-        next_play = torch.gather(handsOriginal, 1, choices[:, idx].view(-1, 1, 1).expand(-1, 1, 2)).squeeze(1)
-
-        # figure out whether play was valid, whcih direction, and next available
-        valid_play = torch.any(next_play.T == next_available, 0) # figure out if available matches a value in each dominoe
-        next_value_idx = 1*(next_play[:,0]==next_available) # if true, then 1 is next value, if false then 0 is next value (for valid plays)
-        new_available = torch.gather(next_play, 1, next_value_idx.view(-1,1)).squeeze(1) # get next available value
-        next_available[valid_play] = new_available[valid_play] # update available for all valid plays
-
-        # after getting next play, set any dominoe that has been played to [-1, -1]
-        insert_values = next_play.clone()
-        insert_values[valid_play] = -1
-        handsUpdates.scatter_(1, choices[:, idx].view(-1,1,1).expand(-1,-1,2), insert_values.unsqueeze(1))
-
-        if return_direction:
-            play_direction = 1.0*(next_value_idx==0)
-            direction[idx_play & valid_play, idx] = play_direction[idx_play & valid_play].float()
-            
-        # if dominoe that is a valid_play and hasn't been played yet is selected, add reward
-        idx_good_play = ~idx_null & idx_not_played & valid_play
-        rewards[idx_good_play, idx] += (torch.sum(next_play[idx_good_play], dim=1) + 1)
-    
-        # if a dominoe is chosen but is invalid, subtract points
-        idx_bad_play = ~idx_null & (~idx_not_played | ~valid_play)
-        rewards[idx_bad_play, idx] -= (torch.sum(next_play[idx_bad_play], dim=1) + 1)
-
-        # determine which hands still have playable dominoes
-        idx_still_playable = torch.any((handsUpdates == next_available.view(-1, 1, 1)).view(handsUpdates.size(0), -1), dim=1)
-
-        # if the null is chosen and no other dominoes are possible, give some reward, otherwise negative reward
-        rewards[idx_null & ~idx_still_playable, idx] += 1.0
-        rewards[idx_null & idx_still_playable, idx] -= 1.0
-
-        if debug:
-            print("Next play: ", next_play[verbose])
-            if return_direction:
-                print("play_direction:", play_direction[verbose])
-            print("next available: ", next_available[verbose])
-            print("valid_play:", valid_play[verbose])
-            print("idx_still_playable:", idx_still_playable[verbose])
-            print("idx_play: ", idx_play[verbose])
-            print("Hands updated:\n", handsUpdates[verbose])
-            print("Rewards[verbose,idx]:", rewards[verbose, idx])
-    
-    if normalize:
-        rewards /= (highestDominoe+1) 
-        
-    if return_direction:
-        return rewards, direction
-    else:        
-        return rewards
-
-def randomDominoeHand(numInHand, listDominoes, highestDominoe, batch_size=1, null_token=True, available_token=True):
-    """method to produce an encoded random hand"""
-    numDominoes = len(listDominoes)
-    
-    # choose dominoes from the batch, and get their value (in points)
-    selection = np.stack([np.random.choice(numDominoes, numInHand, replace=False) for _ in range(batch_size)])
-    if available_token:
-        available = np.random.randint(0, highestDominoe+1, batch_size)
-    else:
-        available = [None]*batch_size
-    
-    # create tensor representations
-    input = torch.stack([df.twohotDominoe(sel, listDominoes, highestDominoe, available=ava,
-                                          available_token=available_token, null_token=null_token, with_batch=False) 
-                         for sel,ava in zip(selection, available)])
-    return input, selection, available
-    
-def getBestLine(dominoes, selection, highestDominoe):
-    bestSequence = []
-    bestDirection = []
-    for sel in selection:
-        cBestSeq = []
-        cBestDir = []
-        cBestVal = []
-        for available in range(highestDominoe+1):
-            cseq, cdir = df.constructLineRecursive(dominoes, sel, available)
-            cval = [np.sum(dominoes[cs]) for cs in cseq]
-            cidx = max(enumerate(cval), key=lambda x: x[1])[0]
-            cBestSeq.append(cseq[cidx])
-            cBestDir.append(cdir[cidx])
-            cBestVal.append(cval[cidx])
-
-        cBestIdx = max(enumerate(cBestVal), key=lambda x: x[1])[0]
-        bestSequence.append(cBestSeq[cBestIdx])
-        bestDirection.append(cBestDir[cBestIdx])
-
-    return bestSequence, bestDirection
-
-def getBestLineFromAvailable(dominoes, selection, highestDominoe, available):
-    bestSequence = []
-    bestDirection = []
-    for sel, ava in zip(selection, available):
-        cseq, cdir = df.constructLineRecursive(dominoes, sel, ava)
-        cval = [np.sum(dominoes[cs]) for cs in cseq]
-        cidx = max(enumerate(cval), key=lambda x: x[1])[0]
-        bestSequence.append(cseq[cidx])
-        bestDirection.append(cdir[cidx])
-    return bestSequence, bestDirection
-    
-def convertToHandIndex(selection, bestSequence):
-    indices = []
-    for sel,seq in zip(selection, bestSequence):
-        # look up table for current selection
-        elementIdx = {element:idx for idx, element in enumerate(sel)}
-        indices.append([elementIdx[element] for element in seq])
-    return indices
-    
-def padBestLine(bestSequence, max_output, ignore_index=-1):
-    for bs in bestSequence:
-        bs += [ignore_index]*(max_output-len(bs))
-    return bestSequence
-
-def generateBatch(highestDominoe, dominoes, batch_size, numInHand, return_target=True,
-                  available_token=False, null_token=False, ignore_index=-1, return_full=False):
-    input, selection, available = randomDominoeHand(numInHand, dominoes, highestDominoe, batch_size=batch_size, null_token=null_token, available_token=available_token)
-
-    mask_tokens = numInHand + (1 if null_token else 0) + (1 if available_token else 0)
-    mask = torch.ones((batch_size, mask_tokens), dtype=torch.float)
-
-    if return_target:
-        # then measure best line and convert it to a "target" array
-        if available_token:
-            bestSequence, bestDirection = getBestLineFromAvailable(dominoes, selection, highestDominoe, available)
-        else:
-            bestSequence, bestDirection = getBestLine(dominoes, selection, highestDominoe)
-
-        # convert sequence to hand index
-        iseq = convertToHandIndex(selection, bestSequence)
-        # create target and append null_index for ignoring impossible plays
-        null_index = ignore_index if not(null_token) else numInHand
-        target = torch.tensor(np.stack(padBestLine(iseq, numInHand+(1 if null_token else 0), ignore_index=null_index)), dtype=torch.long)
-    else:
-        # otherwise set these to None so we can use the same return structure
-        target, bestSequence, bestDirection = None, None, None
-        
-    if return_full:
-        return input, target, mask, bestSequence, bestDirection, selection, available
-    return input, target, mask
-
 def get_gamma_transform(gamma, N, B):
     exponent = torch.arange(N).view(-1,1) - torch.arange(N).view(1,-1)
     gamma_transform = (gamma ** exponent * (exponent >= 0)).unsqueeze(0).expand(B, -1, -1)
@@ -275,7 +89,7 @@ def trainTestModel():
     batchSize = args.batch_size
     null_token=True
     available_token=True
-    num_output = handSize + (1 if null_token else 0)
+    num_output = copy(handSize)+1 # always require end on null token
     ignore_index = -1
     
     input_dim = (2 if not(available_token) else 3)*(highestDominoe+1) + (1 if null_token else 0)
@@ -289,6 +103,7 @@ def trainTestModel():
 
     use_rl = args.use_rl
     return_target = not(use_rl) # if not using RL, then using supervised learning and we need the target
+    thompson = copy(use_rl) # only do thompson sampling if in reinforcement learning
 
     if use_rl:
         gamma = args.gamma
@@ -301,13 +116,13 @@ def trainTestModel():
     weight_decay = 1e-5
     
     # Create a pointer network
-    pnet = transformers.PointerNetwork(input_dim, embedding_dim, encoding_layers=encoding_layers, heads=heads, expansion=expansion, kqnorm=True, 
-                                       contextual_encoder=contextual_encoder, decoder_method='transformer', greedy=greedy, temperature=temperature)
-    pnet = pnet.to(device)
-    pnet.train()
-
+    net = transformers.PointerNetwork(input_dim, embedding_dim, encoding_layers=encoding_layers, heads=heads, expansion=expansion, 
+                                      kqnorm=True, contextual_encoder=contextual_encoder, decoder_method='transformer', 
+                                      greedy=greedy, temperature=temperature, pointer_method='PointerStandard', thompson=thompson)
+    net = net.to(device)
+    
     # Create an optimizer, Adam with weight decay is pretty good
-    optimizer = torch.optim.Adam(pnet.parameters(), lr=alpha, weight_decay=weight_decay)
+    optimizer = torch.optim.Adam(net.parameters(), lr=alpha, weight_decay=weight_decay)
     
     # Train network
     print("Training network...")
@@ -317,8 +132,8 @@ def trainTestModel():
         optimizer.zero_grad()
     
         # generate input batch
-        batch = generateBatch(highestDominoe, listDominoes, batchSize, handSize, return_target=return_target,
-                              null_token=null_token, available_token=available_token, ignore_index=ignore_index, return_full=True)
+        batch = datasets.generateBatch(highestDominoe, listDominoes, batchSize, handSize, return_target=return_target, null_token=null_token,
+                                       available_token=available_token, ignore_index=ignore_index, return_full=True)
 
         # unpack batch tuple
         input, target, _, _, _, selection, available = batch
@@ -333,12 +148,12 @@ def trainTestModel():
         input = (x, context)
         
         # propagate it through the network
-        out_scores, out_choices = pnet(input, max_output=num_output)
+        out_scores, out_choices = net(input, max_output=num_output)
         
         # measure loss and do backward pass
         if use_rl:
             # measure rewards for each sequence
-            rewards = measureReward(available, listDominoes[selection], out_choices, normalize=False)
+            rewards = training.measureReward_sequencer(available, listDominoes[selection], out_choices, value_method='3', normalize=False)
             G = torch.bmm(rewards.unsqueeze(1), gamma_transform).squeeze(1)
             logprob_policy = torch.gather(out_scores, 2, out_choices.unsqueeze(2)).squeeze(2) # log-probability for each chosen dominoe
             
@@ -347,6 +162,7 @@ def trainTestModel():
             J.backward()
 
             c_train_value = torch.mean(torch.sum(G, dim=1))
+            
         else:
             unrolled = out_scores.view(batchSize * num_output, -1)
             loss = torch.nn.functional.nll_loss(unrolled, target.view(-1), ignore_index=ignore_index)
@@ -362,14 +178,14 @@ def trainTestModel():
     # Test network - same thing as in testing but without updates to model
     with torch.no_grad():
         print("Testing network...")
-        pnet.eval()
-        pnet.temperature = 1
+        net.setTemperature(1.0)
+        net.setThompson(False)
         
         testValue = torch.zeros(testEpochs)
         for epoch in tqdm(range(testEpochs)):
             # generate input batch
-            batch = generateBatch(highestDominoe, listDominoes, batchSize, handSize, return_target=return_target,
-                                  null_token=null_token, available_token=available_token, ignore_index=ignore_index, return_full=True)
+            batch = datasets.generateBatch(highestDominoe, listDominoes, batchSize, handSize, return_target=return_target,
+                                           null_token=null_token, available_token=available_token, ignore_index=ignore_index, return_full=True)
     
             # unpack batch tuple
             input, target, _, _, _, selection, available = batch
@@ -384,12 +200,12 @@ def trainTestModel():
             input = (x, context)
             
             # propagate it through the network
-            out_scores, out_choices = pnet(input, max_output=num_output)
+            out_scores, out_choices = net(input, max_output=num_output)
             
             # measure loss and do backward pass
             if use_rl:
                 # measure rewards for each sequence
-                rewards = measureReward(available, listDominoes[selection], out_choices, normalize=False)
+                rewards = training.measureReward_sequencer(available, listDominoes[selection], out_choices, value_method='3', normalize=False)
                 G = torch.bmm(rewards.unsqueeze(1), gamma_transform).squeeze(1)
                 c_test_value = torch.mean(torch.sum(G, dim=1))
             else:
@@ -405,7 +221,7 @@ def trainTestModel():
         'testValue': testValue,
     }
 
-    return results, pnet
+    return results, net
 
 
 def plotResults(results, args):
