@@ -94,7 +94,7 @@ def trainTestModel():
     # create gamma transform matrix
     gamma = args.gamma
     exponent = torch.arange(num_in_cycle).view(-1,1) - torch.arange(num_in_cycle).view(1,-1)
-    gamma_transform = (gamma ** exponent * (exponent >= 0)).unsqueeze(0).expand(batchSize, -1, -1).to(device)
+    gamma_transform = (gamma ** exponent * (exponent >= 0)).to(device)
 
     print(f"Doing training...")
     trainTourLength = torch.zeros((trainEpochs, numNets, numRuns))
