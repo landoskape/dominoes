@@ -64,9 +64,13 @@ def convertToHandIndex(selection, bestSequence):
         indices.append([elementIdx[element] for element in seq])
     return indices
     
-def padBestLine(bestSequence, max_output, ignore_index=-1):
+def padBestLine(bestSequence, max_output, null_index, ignore_index=-1):
     for bs in bestSequence:
-        bs += [ignore_index]*(max_output-len(bs))
+        c_length = len(bs)
+        append_null = [null_index] if max_output > c_length else []
+        append_ignore = [ignore_index]*(max_output - (c_length+1))
+        bs += append_null + append_ignore
+        # bs += [ignore_index]*(max_output-len(bs))
     return bestSequence
 
 def generateBatch(highestDominoe, dominoes, batch_size, numInHand, return_target=True,
@@ -85,9 +89,11 @@ def generateBatch(highestDominoe, dominoes, batch_size, numInHand, return_target
 
         # convert sequence to hand index
         iseq = convertToHandIndex(selection, bestSequence)
-        # create target and append null_index for ignoring impossible plays
-        null_index = ignore_index if not(null_token) else numInHand
-        target = torch.tensor(np.stack(padBestLine(iseq, numInHand, ignore_index=null_index)), dtype=torch.long)
+
+        # create target and append null_index once, then ignore_index afterwards
+        # the idea is that the agent should play the best line, then indicate that the line is over, then anything else doesn't matter
+        null_index = numInHand if null_token else ignore_index
+        target = torch.tensor(np.stack(padBestLine(iseq, numInHand+1, null_index, ignore_index=ignore_index)), dtype=torch.long)
     else:
         # otherwise set these to None so we can use the same return structure
         target, bestSequence, bestDirection = None, None, None
