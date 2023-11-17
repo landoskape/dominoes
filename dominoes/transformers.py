@@ -931,6 +931,7 @@ class PointerNetwork(nn.Module):
         max_output should be an integer determining when to cut off decoder output
         """
         if self.contextual_encoder:
+            assert isinstance(x, tuple), "if using contextual encoding, input 'x' must be tuple of (mainInputs, contextInputs)"
             x, context = x
             assert context.ndim == 3, "context (x[1]) must have shape (batch, tokens, input_dim)"
             

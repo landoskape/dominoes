@@ -8,13 +8,23 @@ REINFORCE algorithm).
 For more detail on the new architectures, go
 [here](pointerArchitectureComparison.md).
 
-To reproduce the plots in this file, you'll need to run two python scripts. As
-before, I train 5 networks for each architecture type, so each of these 
-scripts takes about 3-4 hours to run. For a faster test that trains only one
-network per type, use the argument ``--num-runs 1``. 
+To reproduce the plots in this file, you'll need to run two python scripts. I
+train 8 networks for each architecture type to get a better readout of their
+average performance on the task. The supervised learning script takes quite a
+while to run (~2 hours for each round of networks, so ~16 hours total with the
+default script parameters). This is primarily because the SL task requires the
+optimal solution to the problem, which is exponential with the number of 
+cities. I train with $N=10$ cities. To speed it up, change the arguments to
+`--num-runs 1` and `--num-cities 8`, which is already considerably faster.
 ```
-python experiments/ptrArchComp_TSP_SL.py
-python experiments/ptrArchComp_TSP_RL.py
+python experiments/ptrArchComp_TSP_SL.py --num-runs 8 --num-cities 10
+```
+
+The reinforcement learning version is much faster because no target needs to 
+be computed. This takes ~30 minutes for each round of networks on my computer
+with default parameters, or ~4 hours total.
+```
+python experiments/ptrArchComp_TSP_RL.py --num-runs 8 --num-cities 10
 ```
 
 ## The Traveling Salesman Problem
@@ -34,17 +44,21 @@ feature of being able to generate a sequential output with a variable length
 dictionary, where in this case the pointer network needs to generate a 
 sequence from a variable number of cities. 
 
-As in the original paper, I generated a list of N (N=8) cities with 
-coordinates inside the unit square $0 <= x,y < 1$.
+As in the original paper, I generated a list of N cities with coordinates 
+inside the unit square $0 <= x,y < 1$. To make direct comparisons with the
+paper, I trained the networks to solve the problem for $N=10$ cities, which
+has an optimal "tour length" of 2.87.
 
 #### Training with Supervised Learning 
-To train networks on this problem with supervised learning, we need to first 
-define the target. As in the original paper, I measured the optimal path with
-the held-karp algorithm using an existing python implementation (thanks to 
+To train networks on this problem with supervised learning, we need to define
+the target. As in the original paper, I measured the optimal path with the 
+held-karp algorithm using an existing python implementation (thanks to 
 [Carl Ekerot](https://github.com/CarlEkerot/held-karp/blob/master/held-karp.py)).
 Then, to keep the target consistent, I shifted and reversed the path as 
 required such that the first city visited was always closest to the origin, 
-and such that the path traveled is always clockwise. 
+and such that the path traveled is always clockwise. The networks are required
+to complete a full cycle (returning to the original city) in $N+1$ decoder 
+steps, which is the minimum number of steps for $N$ cities. 
 
 #### Training with Reinforcement Learning
 To train networks on this problem with reinforcement learning, we first need
@@ -53,23 +67,34 @@ to solve. First, it needs to travel to every city without revisiting any city.
 Second, it needs to take the shortest possible path. These two features lead
 to two independent reward functions. 
 
-- I assign a reward of 1 for every new city that is reached and a reward
-of -1 for every revisited city. 
+- I assign a reward of $1$ for every new city that is reached and a reward of
+$-1$ for every revisited city. The last step gets a reward of $1$ if it is 
+the same city as the first city (i.e. it completes a cycle) and $-1$ 
+otherwise. 
 - For every step taken with euclidean distance traveled $d$, I assign a reward
 of $-d$ (because REINFORCE performs gradient ascent, and the goal is to 
-minimize distance traveled). The first step has a reward of 0. 
+minimize distance traveled). The first step has a reward of $0$ because
+the first city is arbitrary. 
 
 
 ## Results
 There are three natural methods of measuring the performance on the supervised
-learning formulation of the problem. (1) Of course, we can measure the loss 
-(defined as the negative log-likelihood loss between the output and target). 
-However, due to the nature of the problem, we can also measure: (2) the 
-fraction of completed tours (e.g. how frequently the network accurately visits
-every city) and (3) the average tour length of completed tours (e.g. the total
-distance traveled). For the summary plots of the testing performance in the 
-right panel, I show the average with a thick horizontal bar, the result for 
-each network with a thin horizontal bar, and the range with the vertical bar. 
+learning formulation of the problem. 
+
+1. We can measure the loss (defined as the negative log-likelihood loss 
+between the output and target). This is lowest when the network produces the 
+optimal cycle of cities and is 100% confident in its choice.
+2. The fraction of completed tours. This measures how frequently the network
+visits each city and returns to the first city in $N+1$ steps.
+3. The average tour length of completed tours. This measures the path length
+through the $N$ cities (and back to the first) for the sets of cities that it 
+performed a full tour. It's important to only show the tour length of 
+completed tours, because the path length can be $0$ if the same city is 
+selected at each step in the cycle. 
+
+For the summary plots of the testing performance in the right panel, I show 
+the average with a thick horizontal bar, the result for each network with a
+thin horizontal bar, and the range with the vertical bar. 
 
 ### Supervised Learning Results
 Here's the loss:
@@ -79,8 +104,8 @@ Here's the loss:
 The loss of the networks with standard pointer layers does well compared to
 the dot-product based pointer layers. However, the pointer "attention" and 
 pointer "transformer" layers do even better than the standard network. That
-improvement in performance is reflected in the fraction of completed tours and
-the average tour length for completed tours.
+improvement in performance is primarily reflected in the fraction of completed
+tours and the average tour length for completed tours.
 
 
 Here's the fraction of completed tours:
@@ -92,9 +117,16 @@ And here's the average tour length for completed tours:
 ![tsp sl - valid tour length](media/ptrArchComp_TSP_SL_tourValidLength.png)
 
 As you can see, the attention and transformer based pointer layers 
-consistently complete more tours and do so in a smaller distance. Overall, 
-however, this result is in agreement with the supervised learning results on 
-the [toy problem](pointerArchitectureComparison.md#variations-in-learning-algorithm-supervised-learning).
+consistently complete more tours (and do so in the optimal distance, which is
+$2.87$). While the attention- and transformer- based pointer layers have 
+comparable performance to the standard pointer layer in terms of tour length,
+the fact that they perform more completed tours may motivate their use for 
+complex problems in which a high hit-rate is important (e.g. in language-based
+tasks when pointer networks are the backend of a human-serving interface like 
+ChatGPT).
+
+Overall, however, this result is in agreement with the supervised learning 
+results on the [toy problem](pointerArchitectureComparison.md#variations-in-learning-algorithm-supervised-learning).
 Generally, all the pointer layers have similar performance when trained with
 supervised learning.
 

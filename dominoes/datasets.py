@@ -87,7 +87,7 @@ def generateBatch(highestDominoe, dominoes, batch_size, numInHand, return_target
         iseq = convertToHandIndex(selection, bestSequence)
         # create target and append null_index for ignoring impossible plays
         null_index = ignore_index if not(null_token) else numInHand
-        target = torch.tensor(np.stack(padBestLine(iseq, numInHand+(1 if null_token else 0), ignore_index=null_index)), dtype=torch.long)
+        target = torch.tensor(np.stack(padBestLine(iseq, numInHand, ignore_index=null_index)), dtype=torch.long)
     else:
         # otherwise set these to None so we can use the same return structure
         target, bestSequence, bestDirection = None, None, None
