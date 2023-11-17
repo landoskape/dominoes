@@ -1,3 +1,4 @@
+from copy import copy
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -42,9 +43,41 @@ def measureReward_sortDescend(hands, choices):
 
 @torch.no_grad()
 def measureReward_sequencer(available, hands, choices, value_method='dominoe', normalize=True, return_direction=False, verbose=None):
+    """
+    reward function for sequencer
+    
+    there is a positive reward in two conditions:
+    1. Valid dominoe play:
+        - a dominoe is played that hasn't been played yet and for which one of the values on the dominoe matches the next available value
+        - in this case, the reward value is either (1+sum(dominoe_values)) or a flat integer rate (determined by value_method)
+    2. Valid null token:
+        - a null token is played for the first time and no remaining unplayed dominoes match the available one
+        - in this case, the reward value is 1
+
+    there is a negative reward in these conditions:
+    1. Repeat play
+        - a dominoe is played that has already been played
+        - reward value is negative but magnitude same as in a valid dominoe play
+    2. Non-match play
+        - a dominoe is played that hasn't been played yet but the values on it don't match next available
+        - reward value is negative but magnitude same as in a valid dominoe play
+    3. Invalid null token:
+        - a null token is played for the first time but there are still dominoes that match the available one
+        - in this case, the reward value is -1
+    
+    after any negative reward, any remaining plays have a value of 0
+    - examples:
+        - after first null token, all plays have 0 reward
+        - after first repeat play or non-match play, all plays have 0 reward
+    - note:
+        - I'm considering allowing the agent to keep playing after a repeat or non-match play (and return that failed play back to the hand...)
+        - If so, this will get an extra keyword argument so it can be turned on or off    
+    """
+
     assert choices.ndim==2, f"choices should be a (batch_size, max_output) tensor of indices, it is: {choices.shape}"
     batch_size, max_output = choices.shape
     num_in_hand = hands.shape[1]
+    null_index = copy(num_in_hand)
     device = transformers.get_device(choices)
 
     # check verbose
@@ -65,10 +98,16 @@ def measureReward_sequencer(available, hands, choices, value_method='dominoe', n
     
     # initialize these tracker variables
     next_available = torch.tensor(available, dtype=torch.float).to(device)
-    havent_played = torch.ones((batch_size, num_in_hand+1), dtype=torch.bool).to(device) # True until dominoe has been played (include null for easier coding b/c out_choices includes idx to null
+    already_played = torch.zeros((batch_size, num_in_hand+1), dtype=torch.bool).to(device) # False until dominoe has been played (including null, even though those are handled differently)
+    made_mistake = torch.zeros((batch_size,), dtype=torch.bool).to(device) # False until a mistake is made
+    played_null = torch.zeros((batch_size,), dtype=torch.bool).to(device) # False until the null dominoe has been played
     hands = torch.tensor(hands, dtype=torch.float).to(device)
-    handsOriginal = torch.cat((hands, -torch.ones((hands.size(0),1,2)).to(device)), dim=1) # keep track of original values
-    handsUpdates = torch.cat((hands, -torch.ones((hands.size(0),1,2)).to(device)), dim=1) # Add null choice as [-1,-1]
+
+    # keep track of original values -- append the null token as [-1, -1]
+    handsOriginal = torch.cat((hands, -torch.ones((hands.size(0),1,2)).to(device)), dim=1)
+
+    # keep track of remaining playable values -- with null appended -- and will update values of played dominoes
+    handsUpdates = torch.cat((hands, -torch.ones((hands.size(0),1,2)).to(device)), dim=1) 
     
     rewards = torch.zeros((batch_size, max_output), dtype=torch.float).to(device)
     if return_direction: 
@@ -79,71 +118,83 @@ def measureReward_sequencer(available, hands, choices, value_method='dominoe', n
         
     # then for each output:
     for idx in range(max_output):
-        # idx of outputs that chose the null token
-        idx_null = choices[:,idx] == num_in_hand
+        if idx==1:
+            pass
+        # First order checks
+        idx_chose_null = choices[:, idx] == null_index # True if chosen dominoe is null token
+        idx_repeat = torch.gather(already_played, 1, choices[:, idx].view(-1, 1)).squeeze(1) # True if chosen dominoe has already been played
+        chosen_play = torch.gather(handsOriginal, 1, choices[:, idx].view(-1, 1, 1).expand(-1, 1, 2)).squeeze(1) # (batch, 2) size tensor of choice of next play
+        idx_match = torch.any(chosen_play.T == next_available, 0) # True if chosen play has a value that matches the next available dominoe
+        idx_possible_match = torch.any((handsUpdates == next_available.view(-1, 1, 1)).view(handsUpdates.size(0), -1), dim=1) # True if >0 remaining dominoes matche next available 
 
+        # Valid dominoe play if didn't choose null, didn't repeat a dominoe, matched the available value, hasn't chosen null yet, and hasn't made mistakes
+        valid_dominoe_play = ~idx_chose_null & ~idx_repeat & idx_match & ~played_null & ~made_mistake
+
+        # Valid null play if chose null, there aren't possible matches remaining, hasn't chosen null yet, and hasn't made mistakes
+        valid_null_play = idx_chose_null & ~idx_possible_match & ~played_null & ~made_mistake
+        
+        # First invalid dominoe play if didn't choose null, repeated a choice or didn't match available values, and hasn't chosen null yet or hasn't made mistakes
+        first_invalid_dominoe_play = ~idx_chose_null & (idx_repeat | ~idx_match) & ~played_null & ~made_mistake
+
+        # First invalid null play if chose null, there are possible matches remaining, and hasn't chosen null yet or hasn't made mistakes
+        first_invalid_null_play = idx_chose_null & idx_possible_match & ~played_null & ~made_mistake
+        
+        # debug block after first order checks
         if debug:
             print('')
             print("\nNew loop in measure reward:\n")
-            print("next_available:", next_available[verbose])
+            print("NextAvailable:", next_available[verbose])
+            print("PlayAvailable: ", idx_possible_match[verbose])
             print("Choice: ", choices[verbose,idx])
-            print("IdxNull: ", idx_null[verbose])
-        
-        # idx of outputs that have not already been chosen
-        idx_not_played = torch.gather(havent_played, 1, choices[:, idx].view(-1,1)).squeeze(1)
-        havent_played.scatter_(1, choices[:,idx].view(-1,1), torch.zeros((batch_size,1), dtype=torch.bool).to(device))
+            print("ChosenPlay: ", chosen_play[verbose])
+            print("IdxNull: ", idx_chose_null[verbose])
+            print("IdxMatch: ", idx_match[verbose])
+            print("IdxRepeat: ", idx_repeat[verbose])
+            print("ValidDominoePlay: ", valid_dominoe_play[verbose])
+            print("ValidNullPlay: ", valid_null_play[verbose])
+            print("FirstInvalidDominoePlay: ", first_invalid_dominoe_play[verbose])
+            print("FirstInvalidNullPlay: ", first_invalid_null_play[verbose])
 
-        # idx of play (not the null token and a dominoe that hasn't been played yet)
-        idx_play = ~idx_null & idx_not_played
-        
-        # the dominoe that is chosen (including the null token)
-        next_play = torch.gather(handsOriginal, 1, choices[:, idx].view(-1, 1, 1).expand(-1, 1, 2)).squeeze(1)
+        # Figure out what the next available dominoe is for valid plays
+        next_value_idx = 1*(chosen_play[:,0]==next_available) # if True, then 1 is index to next value, if False then 0 is index to next value
+        new_available = torch.gather(chosen_play, 1, next_value_idx.view(-1,1)).squeeze(1) # next available value (as of now, this includes invalid plays!!!)
 
-        # figure out whether play was valid, whcih direction, and next available
-        valid_play = torch.any(next_play.T == next_available, 0) # figure out if available matches a value in each dominoe
-        next_value_idx = 1*(next_play[:,0]==next_available) # if true, then 1 is next value, if false then 0 is next value (for valid plays)
-        new_available = torch.gather(next_play, 1, next_value_idx.view(-1,1)).squeeze(1) # get next available value
-        next_available[valid_play] = new_available[valid_play] # update available for all valid plays
+        # If valid dominoe play, update next_available
+        next_available[valid_dominoe_play] = new_available[valid_dominoe_play]
 
-        # after getting next play, set any dominoe that has been played to [-1, -1]
-        insert_values = next_play.clone()
-        insert_values[valid_play] = -1
-        handsUpdates.scatter_(1, choices[:, idx].view(-1,1,1).expand(-1,-1,2), insert_values.unsqueeze(1))
-
+        # Output direction of play if requested for reconstructing the line
         if return_direction:
-            play_direction = 1.0*(next_value_idx==0)
-            direction[idx_play & valid_play, idx] = play_direction[idx_play & valid_play].float()
-            
-        # if dominoe that is a valid_play and hasn't been played yet is selected, add reward
-        idx_good_play = ~idx_null & idx_not_played & valid_play
-        if value_method == 'dominoe':
-            rewards[idx_good_play, idx] += (torch.sum(next_play[idx_good_play], dim=1) + 1) # offset so (0|0) has value
-        else:
-            rewards[idx_good_play, idx] += valid_play_value
-        
-        # if a dominoe is chosen but is invalid, subtract points
-        idx_bad_play = ~idx_null & (~idx_not_played | ~valid_play)
-        if value_method == 'dominoe':
-            rewards[idx_bad_play, idx] -= (torch.sum(next_play[idx_bad_play], dim=1) + 1) # offset so (0|0) has value
-        else:
-            rewards[idx_bad_play, idx] -= valid_play_value
-        
-        # determine which hands still have playable dominoes
-        idx_still_playable = torch.any((handsUpdates == next_available.view(-1, 1, 1)).view(handsUpdates.size(0), -1), dim=1)
+            play_direction = 1.0*(next_value_idx==0) # direction is 1 if "forward" and 0 if "backward"
+            direction[valid_dominoe_play, idx] = play_direction[valid_dominoe_play].float()
 
-        # if the null is chosen and no other dominoes are possible, give small positive reward, otherwise small negative reward
-        rewards[idx_null & ~idx_still_playable, idx] += 1.0
-        rewards[idx_null & idx_still_playable, idx] -= 1.0
+        # Set rewards for dominoe plays
+        if value_method == 'dominoe':
+            rewards[valid_dominoe_play, idx] += (torch.sum(chosen_play[valid_dominoe_play], dim=1) + 1) # offset by 1 so (0|0) has value
+            rewards[first_invalid_dominoe_play, idx] -= (torch.sum(chosen_play[first_invalid_dominoe_play], dim=1) + 1)
+        else:
+            rewards[valid_dominoe_play, idx] += valid_play_value
+            rewards[first_invalid_dominoe_play, idx] -= valid_play_value
+        
+        # Set rewards for null plays
+        rewards[valid_null_play, idx] += 1.0
+        rewards[first_invalid_null_play, idx] -= 1.0
+
+        # Now prepare tracking variables for next round
+        played_null[idx_chose_null] = True # Played null becomes True if chose null on this round
+        made_mistake[idx_repeat | ~idx_match] = True # Made mistake becomes True if chose null on this round
+
+        # Clone chosen play and set it to -1 for any valid dominoe play 
+        insert_values = chosen_play.clone()
+        insert_values[valid_dominoe_play] = -1
+
+        # Then set the hands updates tensor to the "insert values", will change it to -1's if it's a valid_dominoe_play
+        handsUpdates.scatter_(1, choices[:, idx].view(-1,1,1).expand(-1,-1,2), insert_values.unsqueeze(1)) 
 
         if debug:
-            print("Next play: ", next_play[verbose])
             if return_direction:
                 print("play_direction:", play_direction[verbose])
-            print("next available: ", next_available[verbose])
-            print("valid_play:", valid_play[verbose])
-            print("idx_still_playable:", idx_still_playable[verbose])
-            print("idx_play: ", idx_play[verbose])
-            print("Hands updated:\n", handsUpdates[verbose])
+            print("NextAvailable: ", next_available[verbose])
+            print("HandsUpdated:\n", handsUpdates[verbose])
             print("Rewards[verbose,idx]:", rewards[verbose, idx])
     
     if check_normalize and normalize:
