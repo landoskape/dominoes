@@ -237,7 +237,7 @@ def plotResults(results, args):
     ax[1].set_xticks(range(len(POINTER_METHODS)))
     ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
     ax[1].set_ylabel(f'Loss N={numRuns}')
-    ax[1].set_title('Test Performance')
+    ax[1].set_title('Testing')
     ax[1].set_xlim(-1, len(POINTER_METHODS))
 
     if not(args.nosave):
@@ -283,15 +283,14 @@ def plotResults(results, args):
         cdata = torch.nanmean(results['trainTourValidLength'][:,idx], dim=1)
         idx_nan = torch.isnan(cdata)
         cdata.masked_fill_(idx_nan, 0)
-        cdata = sp.signal.savgol_filter(cdata, 20, 1)
+        cdata = sp.signal.savgol_filter(cdata, 50, 1)
         cdata[idx_nan] = torch.nan
         ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
     ax[0].set_xlabel('Training Epoch')
     ax[0].set_ylabel(f'Tour Length N={numRuns}')
     ax[0].set_title('Training - TourLength (Valid)')
     ax[0].legend(loc='best')
-    ax[0].set_ylim(0.9, 2.5)
-    yMin0, yMax0 = ax[0].get_ylim()
+    ax[0].set_ylim(2.85, 2.975)
     
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
@@ -306,7 +305,6 @@ def plotResults(results, args):
     ax[1].set_ylabel(f'Tour Length N={numRuns}')
     ax[1].set_title('Testing')
     ax[1].set_xlim(-1, len(POINTER_METHODS))
-    # ax[1].set_ylim(0, 0.8)
 
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName('tourValidLength')))
@@ -323,7 +321,7 @@ def plotResults(results, args):
     ax[0].set_ylabel('Mean Score')
     ax[0].set_title('Position-Dependent Confidence')
     ax[0].legend(loc='best', fontsize=8)
-    ax[0].set_ylim(0.7, 1)
+    ax[0].set_ylim(0.65, 1)
     
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
@@ -337,7 +335,7 @@ def plotResults(results, args):
     ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
     ax[1].set_title('Average')
     ax[1].set_xlim(-1, len(POINTER_METHODS))
-    ax[1].set_ylim(0.7, 1)
+    ax[1].set_ylim(0.65, 1)
 
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName(extra='confidence')))
