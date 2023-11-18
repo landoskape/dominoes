@@ -71,7 +71,7 @@ def handleArguments():
 def trainTestModel():
     # get values from the argument parser
     num_cities = args.num_cities
-    num_in_cycle = num_cities + 1
+    num_in_cycle = num_cities# + 1
 
     # other batch parameters
     batchSize = args.batch_size

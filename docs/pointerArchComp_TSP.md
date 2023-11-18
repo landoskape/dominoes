@@ -140,6 +140,10 @@ temperature of 5, so although the curves provide some information about the
 learning trajectory, it is much more informative to focus on the testing 
 results. 
 
+NOTE: I trained the SL networks to perform a complete cycle (i.e. go to every
+city and return to the first one) but trained the RL networks to perform the 
+cycle without returning to the initial city - hence the shorter tour lengths.
+
 Here's the fraction of completed tours:
 
 ![tsp rl - fraction completed](media/ptrArchComp_TSP_RL_tourComplete.png)
