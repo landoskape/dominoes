@@ -71,7 +71,7 @@ def handleArguments():
 def trainTestModel():
     # get values from the argument parser
     num_cities = args.num_cities
-    num_in_cycle = num_cities# + 1
+    num_in_cycle = num_cities
 
     # other batch parameters
     batchSize = args.batch_size
@@ -123,8 +123,9 @@ def trainTestModel():
 
         for epoch in tqdm(range(trainEpochs)):
             # generate batch
-            input, _, _, dists = datasets.tsp_batch(batchSize, num_cities, return_target=False, return_full=True)
-            input, dists = input.to(device), dists.to(device)
+            input, _, xy, dists = datasets.tsp_batch(batchSize, num_cities, return_target=False, return_full=True)
+            input, xy, dists = input.to(device), xy.to(device), dists.to(device)
+            start = torch.argmin(torch.sum(xy**2, dim=2), dim=1) # use this as default starting city
 
             # zero gradients, get output of network
             for opt in optimizers: opt.zero_grad()
@@ -134,7 +135,7 @@ def trainTestModel():
             logprob_policy = [torch.gather(score, 2, choice.unsqueeze(2)).squeeze(2) for score, choice in zip(log_scores, choices)]
             
             # measure rewards
-            reward_loc, reward_dist = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in choices]))
+            reward_loc, reward_dist = map(list, zip(*[training.measureReward_tsp(dists, choice, start) for choice in choices]))
             rewards = [rl-rd for rl, rd in zip(reward_loc, reward_dist)] # distance penalized negatively
             G = [torch.matmul(reward, gamma_transform) for reward in rewards]
             for i, l in enumerate(rewards):
@@ -171,8 +172,9 @@ def trainTestModel():
             print("testing...")
             for epoch in tqdm(range(testEpochs)):
                 # generate batch
-                input, _, _, dists = datasets.tsp_batch(batchSize, num_cities, return_target=False, return_full=True)
-                input, dists = input.to(device), dists.to(device)
+                input, _, xy, dists = datasets.tsp_batch(batchSize, num_cities, return_target=False, return_full=True)
+                input, xy, dists = input.to(device), xy.to(device), dists.to(device)
+                start = torch.argmin(torch.sum(xy**2, dim=2), dim=1) # use this as default starting city
 
                 # zero gradients, get output of network
                 for opt in optimizers: opt.zero_grad()
@@ -182,7 +184,7 @@ def trainTestModel():
                 logprob_policy = [torch.gather(score, 2, choice.unsqueeze(2)).squeeze(2) for score, choice in zip(log_scores, choices)]
                 
                 # measure rewards
-                reward_loc, reward_dist = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in choices]))
+                reward_loc, reward_dist = map(list, zip(*[training.measureReward_tsp(dists, choice, start) for choice in choices]))
                 rewards = [rl-rd for rl, rd in zip(reward_loc, reward_dist)] # distance penalized negatively
 
                 # measure position dependent error 
