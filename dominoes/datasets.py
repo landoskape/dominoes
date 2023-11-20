@@ -5,6 +5,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from . import functions as df
+from multiprocessing import Pool
 
 # code for generating a hand
 def randomDominoeHand(numInHand, listDominoes, highestDominoe, batch_size=1, null_token=True, available_token=True):
@@ -170,34 +171,42 @@ def held_karp(dists):
 
     return opt, list(reversed(path))
 
+def make_path(input):
+    pos, distmat = input
+    closest_to_origin = np.argmin(np.sum(pos**2, axis=1))
+    dd = sp.spatial.distance.squareform(distmat)
+    _, cpath = held_karp(dd)
+    shift = {val: idx for idx, val in enumerate(cpath)}[closest_to_origin]
+    cpath = np.roll(cpath, -shift)
+    check_points = pos[cpath[[1,-1]]] # second point and last point - check for clockwise travel
+    angles = np.arctan(check_points[:,1]/check_points[:,0])
+    if angles[1] > angles[0]:
+        cpath = np.flip(np.roll(cpath, -1))
+    # finally, move it so the origin is the last location
+    return np.roll(cpath, -1)
 
 def get_path(xy, dists):
     """
     for batch of (batch, num_cities, 2), returns shortest path using
-    held-karp algorithm that starts closest to origin and is clockwise
+    held-karp algorithm that ends closest to origin and is clockwise
     """
-    path = []
-    for p,d in zip(xy, dists):
-        closest_to_origin = np.argmin(np.sum(p**2, axis=1))
-        dd = sp.spatial.distance.squareform(d)
-        _, cpath = held_karp(dd)
-        shift = {val: idx for idx, val in enumerate(cpath)}[closest_to_origin]
-        cpath = np.roll(cpath, -shift)
-        check_points = p[cpath[[1,-1]]] # second point and last point - check for clockwise travel
-        angles = np.arctan(check_points[:,1]/check_points[:,0])
-        if angles[1] > angles[0]:
-            cpath = np.flip(np.roll(cpath, -1))
-        path.append(cpath)
+    return [make_path(input) for input in zip(xy, dists)]
+    
+def get_path_pool(xy, dists, threads=8):
+    with Pool(threads) as p:
+        path = list(p.map(make_path, zip(xy, dists)))
     return path
 
-def tsp_batch(batch_size, num_cities, return_target=True, full_cycle=True, return_full=False):
+def tsp_batch(batch_size, num_cities, return_target=True, return_full=False, threads=12):
+    """parallelized preparation of batch, better to use 1 thread if num_cities~<10 or batch_size<=256"""
     xy = np.random.random((batch_size, num_cities, 2))
     dists = np.stack([sp.spatial.distance.pdist(p) for p in xy])
     input = torch.tensor(xy, dtype=torch.float)
     if return_target:
-        target = torch.tensor(np.stack(get_path(xy, dists)), dtype=torch.long)
-        if full_cycle:
-            target = torch.cat((target, target[:,[0]]), dim=1) # make it a full cycle
+        if threads>1:
+            target = torch.tensor(np.stack(get_path_pool(xy, dists, threads)), dtype=torch.long)
+        else:
+            target = torch.tensor(np.stack(get_path(xy, dists)), dtype=torch.long)
     else:
         target = None
     if return_full:
