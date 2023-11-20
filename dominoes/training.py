@@ -346,11 +346,16 @@ def measurePossibleRewards_sequencer(available, hands, choices, value_method='do
 
 
 @torch.no_grad()
-def measureReward_tsp(dists, choices):
-    """reward function for measuring tsp performance"""
-    numCities = dists.shape[1]
+def measureReward_tsp(dists, choices, start):
+    """reward function for measuring tsp performance from starting city"""
+    assert start.ndim==1, "start should be a 1-d tensor of the starting index"
+    assert choices.ndim==2, "choices should be a 2-d tensor of the sequence of choices for each batch element"
+    assert dists.ndim==3, "dists should be a 3-d tensor of the distance matrix across cities for each batch element"
+    numCities = dists.size(1)
     batchSize, numChoices = choices.shape
+    assert start.size(0)==dists.size(0)==batchSize, "start and dists need same batch size as choices"
     assert 1 < numChoices <= (numCities+1), "numChoices per batch element should be more than 1 and no more than twice the number of cities"  
+    assert torch.all((0<=start) & (start<numCities)), "start index should be in [0, numcities)"
     device = transformers.get_device(choices)
     distance = torch.zeros((batchSize, numChoices)).to(device)
     new_city = torch.ones((batchSize, numChoices)).to(device)
@@ -359,18 +364,15 @@ def measureReward_tsp(dists, choices):
     visited = torch.zeros((batchSize, numChoices), dtype=torch.bool).to(device)
     visited.scatter_(1, choices[:,0].view(batchSize, 1), src)
     for nc in range(1, numChoices):
-        c_dist_possible = torch.gather(dists, 1, choices[:, nc-1].view(batchSize, 1, 1).expand(-1, -1, numCities)).squeeze(1)
-        c_dist = torch.gather(c_dist_possible, 1, choices[:,nc].view(batchSize,1)).squeeze()
+        last_location = choices[:, nc-1] if nc>1 else start
+        next_location = choices[:, nc]
+        c_dist_possible = torch.gather(dists, 1, last_location.view(batchSize, 1, 1).expand(-1, -1, numCities)).squeeze(1)
+        c_dist = torch.gather(c_dist_possible, 1, next_location.view(batchSize, 1)).squeeze(1)
         distance[:,nc] = c_dist
-        if nc<numCities:
-            c_visited = torch.gather(visited, 1, choices[:,nc].view(batchSize,1)).squeeze(1)
-            visited.scatter_(1, choices[:,nc].view(batchSize,1), src)
-            new_city[c_visited,nc] = -1.0
-            new_city[~c_visited,nc] = 1.0
-        else:
-            c_same_as_first = choices[:,0] == choices[:,-1]
-            new_city[c_same_as_first, nc] = 1.0
-            new_city[~c_same_as_first, nc] = -1.0
+        c_visited = torch.gather(visited, 1, choices[:, nc].view(batchSize, 1)).squeeze(1)
+        visited.scatter(1, next_location.view(batchSize, 1), src)
+        new_city[c_visited, nc] = -1.0
+        new_city[~c_visited, nc] = 1.0
     return new_city, distance
         
         
