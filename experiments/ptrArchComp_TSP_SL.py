@@ -74,14 +74,16 @@ def trainTestModel():
     # other batch parameters
     batchSize = args.batch_size
     
+    # For given batch size and number of cities, try out whether using multiple workers is better
     t = time.time()
-    batch = datasets.tsp_batch(batchSize, num_cities, return_full=True, return_target=True, threads=12)
+    _ = datasets.tsp_batch(batchSize, num_cities, return_full=True, return_target=True, threads=12)
     time_parallel = time.time() - t
 
     t = time.time()
-    batch = datasets.tsp_batch(batchSize, num_cities, return_full=True, return_target=True, threads=1)
+    _ = datasets.tsp_batch(batchSize, num_cities, return_full=True, return_target=True, threads=1)
     time_noparallel = time.time() - t
     
+    # Make decision and tell user about it
     threads = 12 if time_parallel < time_noparallel else 1
     print(f"Time checks: parallel={time_parallel:.3f}, noParallel={time_noparallel:.3f}, using threads={threads}")
     
