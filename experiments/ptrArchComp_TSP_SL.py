@@ -8,6 +8,7 @@ sys.path.append(mainPath)
 # standard imports
 from copy import copy
 import argparse
+import time
 from pathlib import Path
 from tqdm import tqdm
 import numpy as np
@@ -68,10 +69,21 @@ def handleArguments():
 def trainTestModel():
     # get values from the argument parser
     num_cities = args.num_cities
-    num_in_cycle = num_cities + 1
+    num_in_cycle = num_cities
 
     # other batch parameters
     batchSize = args.batch_size
+    
+    t = time.time()
+    batch = datasets.tsp_batch(batchSize, num_cities, return_full=True, return_target=True, threads=12)
+    time_parallel = time.time() - t
+
+    t = time.time()
+    batch = datasets.tsp_batch(batchSize, num_cities, return_full=True, return_target=True, threads=1)
+    time_noparallel = time.time() - t
+    
+    threads = 12 if time_parallel < time_noparallel else 1
+    print(f"Time checks: parallel={time_parallel:.3f}, noParallel={time_noparallel:.3f}, using threads={threads}")
     
     # network parameters
     input_dim = 2
@@ -115,7 +127,7 @@ def trainTestModel():
 
         for epoch in tqdm(range(trainEpochs)):
             # generate batch
-            input, target, _, dists = datasets.tsp_batch(batchSize, num_cities, return_full=True)
+            input, target, _, dists = datasets.tsp_batch(batchSize, num_cities, return_full=True, threads=threads)
             input, target, dists = input.to(device), target.to(device), dists.to(device)
 
             # zero gradients, get output of network
@@ -139,7 +151,8 @@ def trainTestModel():
             # measure position dependent error 
             with torch.no_grad():
                 # get distance traveled
-                tour_complete, tour_distance = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in choices]))
+                start = target[:, -1] # get "start" city, closest to origin (set this way by tsp_batch)
+                tour_complete, tour_distance = map(list, zip(*[training.measureReward_tsp(dists, choice, start) for choice in choices]))
                 tour_complete = [torch.all(tc==1, dim=1) for tc in tour_complete]
                 tour_distance = [torch.sum(td, dim=1) for td in tour_distance]
                 
@@ -165,7 +178,7 @@ def trainTestModel():
             print('Testing network...')
             for epoch in tqdm(range(testEpochs)):
                 # generate batch
-                input, target, _, dists = datasets.tsp_batch(batchSize, num_cities, return_full=True)
+                input, target, _, dists = datasets.tsp_batch(batchSize, num_cities, return_full=True, threads=threads)
                 input, target, dists = input.to(device), target.to(device), dists.to(device)
 
                 log_scores, choices = map(list, zip(*[net(input, max_output=num_in_cycle) for net in nets]))
@@ -177,7 +190,8 @@ def trainTestModel():
                     assert not np.isnan(l.item()), f"model type {POINTER_METHODS[i]} diverged :("
 
                 # get distance traveled
-                tour_complete, tour_distance = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in choices]))
+                start = target[:, -1] # get start city (the one closest to origin)
+                tour_complete, tour_distance = map(list, zip(*[training.measureReward_tsp(dists, choice, start) for choice in choices]))
                 tour_complete = [torch.all(tc==1, dim=1) for tc in tour_complete]
                 tour_distance = [torch.sum(td, dim=1) for td in tour_distance]
                 
