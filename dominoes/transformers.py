@@ -381,7 +381,7 @@ class PointerStandard(nn.Module):
         self.W2 = nn.Linear(emb, emb, bias=False)
         self.vt = nn.Linear(emb, 1, bias=False)
 
-    def forward(self, encoded, decoder_state, mask=None, temperature=1):
+    def forward(self, encoded, decoder_state, mask=None, temperature=1.0):
         # first transform encoded representations and decoder states 
         transformEncoded = self.W1(encoded)
         transformDecoded = self.W2(decoder_state)
@@ -395,10 +395,10 @@ class PointerStandard(nn.Module):
 
         if self.log_softmax:
             # convert to log scores
-            return torch.nn.functional.log_softmax(u/temperature, dim=-1)
+            return torch.nn.functional.log_softmax(u/temperature, dim=1)
         else:
             # convert to probabilities
-            return torch.nn.functional.softmax(u/temperature, dim=-1)
+            return torch.nn.functional.softmax(u/temperature, dim=1)
 
 
 class PointerDot(nn.Module):
@@ -418,7 +418,7 @@ class PointerDot(nn.Module):
         self.eln = nn.LayerNorm(emb, bias=False)
         self.dln = nn.LayerNorm(emb, bias=False)
 
-    def forward(self, encoded, decoder_state, mask=None, temperature=1):
+    def forward(self, encoded, decoder_state, mask=None, temperature=1.0):
         # first transform encoded representations and decoder states 
         transformEncoded = self.eln(self.W1(encoded))
         transformDecoded = self.dln(self.W2(decoder_state))
@@ -455,7 +455,7 @@ class PointerDotNoLN(nn.Module):
         self.W1 = nn.Linear(emb, emb, bias=False)
         self.W2 = nn.Linear(emb, emb, bias=False)
 
-    def forward(self, encoded, decoder_state, mask=None, temperature=1):
+    def forward(self, encoded, decoder_state, mask=None, temperature=1.0):
         # first transform encoded representations and decoder states 
         transformEncoded = self.W1(encoded)
         transformDecoded = self.W2(decoder_state)
@@ -492,7 +492,7 @@ class PointerDotLean(nn.Module):
         self.eln = nn.LayerNorm(emb, bias=False)
         self.dln = nn.LayerNorm(emb, bias=False)
 
-    def forward(self, encoded, decoder_state, mask=None, temperature=1):
+    def forward(self, encoded, decoder_state, mask=None, temperature=1.0):
         # first transform encoded representations and decoder states 
         transformEncoded = self.eln(encoded)
         transformDecoded = self.dln(decoder_state)
@@ -530,7 +530,7 @@ class PointerAttention(nn.Module):
         self.attention = MultiContextAttention(emb, num_context=1, **kwargs)
         self.vt = nn.Linear(emb, 1, bias=False)
 
-    def forward(self, encoded, decoder_state, mask=None, temperature=1):
+    def forward(self, encoded, decoder_state, mask=None, temperature=1.0):
         # attention on encoded representations with decoder_state
         updated = self.attention(encoded, [decoder_state], mask=mask)
         project = self.vt(torch.tanh(updated)).squeeze(2)
@@ -563,7 +563,7 @@ class PointerTransformer(nn.Module):
         self.transform = ContextualTransformerLayer(emb, num_context=1, **kwargs)
         self.vt = nn.Linear(emb, 1, bias=False)
 
-    def forward(self, encoded, decoder_state, mask=None, temperature=1):
+    def forward(self, encoded, decoder_state, mask=None, temperature=1.0):
         # transform encoded representations with decoder_state
         updated = self.transform(encoded, [decoder_state], mask=mask)
         project = self.vt(torch.tanh(updated)).squeeze(2)
