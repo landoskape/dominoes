@@ -242,7 +242,7 @@ def plotResults(results, args):
         ax[0].set_xlabel('Training Epoch')
         ax[0].set_ylabel(f'{data_name} N={numRuns}')
         ax[0].set_title(f'Training - {data_name}')
-        ax[0].set_ylim(ylim)
+        #ax[0].set_ylim(ylim)
         ax[0].legend(loc='best')
         
         xOffset = [-0.2, 0.2]
@@ -258,7 +258,7 @@ def plotResults(results, args):
         ax[1].set_ylabel(f'{data_name} N={numRuns}')
         ax[1].set_title('Testing')
         ax[1].set_xlim(-1, len(POINTER_METHODS))
-        ax[1].set_ylim(ylim)
+        #ax[1].set_ylim(ylim)
     
         if not(args.nosave):
             plt.savefig(str(figsPath/getFileName(data_name)))
