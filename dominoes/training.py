@@ -363,17 +363,15 @@ def measureReward_tsp(dists, choices, start):
     last_location = start
     src = torch.ones((batchSize,1), dtype=torch.bool).to(device)
     visited = torch.zeros((batchSize, numChoices), dtype=torch.bool).to(device)
-    visited.scatter_(1, choices[:,0].view(batchSize, 1), src)
     for nc in range(0, numChoices):
         next_location = choices[:, nc]
         c_dist_possible = torch.gather(dists, 1, last_location.view(batchSize, 1, 1).expand(-1, -1, numCities)).squeeze(1)
-        c_dist = torch.gather(c_dist_possible, 1, next_location.view(batchSize, 1)).squeeze(1)
-        distance[:,nc] = c_dist
-        c_visited = torch.gather(visited, 1, choices[:, nc].view(batchSize, 1)).squeeze(1)
-        visited.scatter(1, next_location.view(batchSize, 1), src)
+        distance[:, nc] = torch.gather(c_dist_possible, 1, next_location.view(batchSize, 1)).squeeze(1)
+        c_visited = torch.gather(visited, 1, next_location.view(batchSize, 1)).squeeze(1)
+        visited.scatter_(1, next_location.view(batchSize, 1), src)
         new_city[c_visited, nc] = -1.0
         new_city[~c_visited, nc] = 1.0
-        last_location = copy(choices[:, nc]) # update last location
+        last_location = copy(next_location) # update last location
     return new_city, distance
         
         
