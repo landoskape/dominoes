@@ -55,10 +55,10 @@ the target. As in the original paper, I measured the optimal path with the
 held-karp algorithm using an existing python implementation (thanks to 
 [Carl Ekerot](https://github.com/CarlEkerot/held-karp/blob/master/held-karp.py)).
 Then, to keep the target consistent, I shifted and reversed the path as 
-required such that the first city visited was always closest to the origin, 
+required such that the initial city was always the one closest to the origin, 
 and such that the path traveled is always clockwise. The networks are required
-to complete a full cycle (returning to the original city) in $N+1$ decoder 
-steps, which is the minimum number of steps for $N$ cities. 
+to complete a full cycle in $N$ decoder steps, by traveling to every city and 
+returning to the initial city.
 
 #### Training with Reinforcement Learning
 To train networks on this problem with reinforcement learning, we first need
@@ -68,13 +68,13 @@ Second, it needs to take the shortest possible path. These two features lead
 to two independent reward functions. 
 
 - I assign a reward of $1$ for every new city that is reached and a reward of
-$-1$ for every revisited city. The last step gets a reward of $1$ if it is 
-the same city as the first city (i.e. it completes a cycle) and $-1$ 
-otherwise. 
+$-1$ for every revisited city. 
 - For every step taken with euclidean distance traveled $d$, I assign a reward
 of $-d$ (because REINFORCE performs gradient ascent, and the goal is to 
-minimize distance traveled). The first step has a reward of $0$ because
-the first city is arbitrary. 
+minimize distance traveled). Like in the supervised learning problem, I assume
+that the initial city is the one closest to the origin, so the the first step 
+taken by the network is evaluated based on the distance between it's chosen 
+city and the initial city.
 
 
 ## Results
@@ -140,10 +140,6 @@ temperature of 5, so although the curves provide some information about the
 learning trajectory, it is much more informative to focus on the testing 
 results. 
 
-NOTE: I trained the SL networks to perform a complete cycle (i.e. go to every
-city and return to the first one) but trained the RL networks to perform the 
-cycle without returning to the initial city - hence the shorter tour lengths.
-
 Here's the fraction of completed tours:
 
 ![tsp rl - fraction completed](media/ptrArchComp_TSP_RL_tourComplete.png)
@@ -152,13 +148,14 @@ And here's the average tour length for completed tours:
 
 ![tsp rl - valid tour length](media/ptrArchComp_TSP_RL_tourValidLength.png)
 
-In terms of both measures, almost all of the networks equipped with new 
-pointer layer architectures perform better on the task! Given the variance in
-performance, it would obviously be nice to train quite a few more networks, 
-but overall it seems like the new architectures consistently learn via 
-reinforcement learning more effectively than the standard pointer layer. 
-This is in agreement with the results from the dominoes 
-[toy problem](pointerArchitectureComparison.md#network-performance). 
+In terms of both the fraction of completed tours and the valid tour length, 
+the networks equipped with the Pointer "Dot" layer perform better on the task!
+Although the "attention" and "transformer" based pointer layer networks appear
+to have potential (some network instances do well, others not as well), this 
+result is in agreement with the results from the dominoes 
+[toy problem](pointerArchitectureComparison.md#network-performance), in which
+the "Dot" based layers appear better poised to learn in the reinforcement
+learning context. 
 
 ### Measuring the "confidence" of the networks
 We can also measure how confident the networks are in the solution. As before,
