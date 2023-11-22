@@ -149,8 +149,8 @@ class SelfAttention(nn.Module):
         assert x.ndim==3, "x should have size: (batch_size, num_tokens, embedding_dimensionality)"
         batch, tokens, emb = x.size() # get size of input
         
-        if mask is not None:
-            assert x.size(0)==mask.size(0) and x.size(1)==mask.size(1), "mask must have same batch_size and num_tokens as x"
+        mask = mask if mask is not None else torch.ones((batch, tokens), dtype=x.dtype).to(get_device(x))
+        assert x.size(0)==mask.size(0) and x.size(1)==mask.size(1), "mask must have same batch_size and num_tokens as x"
             
         # this is the only requirement on the input (other than the number of dimensions)
         assert emb == self.emb, f'Input embedding dim ({emb}) should match layer embedding dim ({self.emb})'
@@ -186,11 +186,10 @@ class SelfAttention(nn.Module):
         # check to make sure this is correct
         assert dot.size() == (batch*self.heads, tokens, tokens), "somehow the query-key dot product is an unexpected size"
 
-        if mask is not None:
-            # mask query key products to -inf that are not used
-            dotMask = torch.bmm(mask.unsqueeze(2), mask.unsqueeze(1))
-            dotMask = dotMask.unsqueeze(1).expand(batch, self.heads, tokens, tokens).reshape(batch*self.heads, tokens, tokens)
-            
+        # mask query key products to -inf that are not used
+        dotMask = torch.bmm(mask.unsqueeze(2), mask.unsqueeze(1))
+        dotMask = dotMask.unsqueeze(1).expand(batch, self.heads, tokens, tokens).reshape(batch*self.heads, tokens, tokens)
+        
         # and take softmax to get self-attention probabilities
         dot = masked_softmax(dot, dotMask, dim=2)
         
@@ -253,14 +252,8 @@ class ContextualAttention(nn.Module):
         x_plus_context = torch.cat((x, context), dim=1) 
 
         # Handle masks
-        useMask = (mask is not None) or (contextMask is not None)
-        if useMask:
-            mask = mask if mask is not None else torch.ones((batch, itokens), dtype=x.dtype).to(get_device(x))
-            contextMask = contextMask if contextMask is not None else torch.ones((batch, ctokens), dtype=context.dtype).to(get_device(x))
-            assert x.size(0)==mask.size(0)==contextMask.size(0), "masks must have same batch_size as x"
-            assert x.size(1)==mask.size(1), "mask must have same num_input_tokens as x"
-            assert context.size(1)==contextMask.size(1), "contextMask must have same num_context_tokens as context"
-            mask_plus_contextMask = torch.cat((mask, contextMask), dim=1)
+        mask = mask if mask is not None else torch.ones((batch, itokens), dtype=x.dtype).to(get_device(x))
+        contextMask = contextMask if contextMask is not None else torch.ones((batch, ctokens), dtype=x.dtype).to(get_device(x))
         
         assert cbatch==batch, "batch size of x and context should be the same"
         assert emb == cemb == self.emb, f'Input embedding dim ({emb}) and context embedding dim ({cemb}) should both match layer embedding dim ({self.emb})'
@@ -296,10 +289,10 @@ class ContextualAttention(nn.Module):
         # check to make sure this is correct
         assert dot.size() == (batch*self.heads, itokens, tokens), "somehow the query-key dot product is an unexpected size"
 
-        if useMask:
-            # mask query key products to -inf that are not used
-            dotMask = torch.bmm(mask.unsqueeze(2), mask_plus_contextMask.unsqueeze(1))
-            dotMask = dotMask.unsqueeze(1).expand(batch, self.heads, itokens, tokens).reshape(batch*self.heads, itokens, tokens)
+        # mask query key products to -inf that are not used
+        mask_plus_contextMask = torch.cat((mask, contextMask), dim=1)
+        dotMask = torch.bmm(mask.unsqueeze(2), mask_plus_contextMask.unsqueeze(1))
+        dotMask = dotMask.unsqueeze(1).expand(batch, self.heads, itokens, tokens).reshape(batch*self.heads, itokens, tokens)
             
         # and take softmax to get self-attention probabilities
         dot = masked_softmax(dot, dotMask, dim=2)
