@@ -54,7 +54,7 @@ def handleArguments():
     parser.add_argument('-ne','--train-epochs',type=int, default=5000, help='the number of training epochs')
     parser.add_argument('-te','--test-epochs',type=int, default=100, help='the number of testing epochs')
     parser.add_argument('--gamma', type=float, default=1.0, help='discounting factor')
-    parser.add_argument('-nr','--num-runs', type=int, default=5, help='how many networks to train of each type')
+    parser.add_argument('-nr','--num-runs', type=int, default=8, help='how many networks to train of each type')
     
     parser.add_argument('--embedding-dim', type=int, default=48, help='the dimensions of the embedding')
     parser.add_argument('--heads', type=int, default=1, help='the number of heads in transformer layers')
