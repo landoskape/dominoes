@@ -309,7 +309,7 @@ def plotResults(results, args, eigvals):
     numPos = results['testScoreByPos'].shape[1]
     n_string = f" (N={numNets})"
     cmap = mpl.colormaps['tab10']
-    trainInspectFrom = [1500, 2000]
+    trainInspectFrom = [800, 900]
     trainInspect = slice(trainInspectFrom[0], trainInspectFrom[1])
     
     fig, ax = plt.subplots(1,2,figsize=(7,3.5), width_ratios=[2, 1], layout='constrained')
@@ -318,6 +318,7 @@ def plotResults(results, args, eigvals):
     ax[0].set_xlabel('Training Epoch')
     ax[0].set_ylabel('Mean Reward'+n_string)
     ax[0].set_title('Training Performance')
+    ax[0].set_xlim(-50, 1000)
     ax[0].set_ylim(None, 8)
     yMin0, yMax0 = ax[0].get_ylim()
 
@@ -336,17 +337,6 @@ def plotResults(results, args, eigvals):
     ax[1].set_ylim(6, 8)
     ax[1].set_yticks([6, 7, 8])
 
-    # create inset to show initial train trajectory
-    inset = ax[0].inset_axes([0.5, 0.1, 0.45, 0.45])
-    for idx, name in enumerate(POINTER_METHODS):
-        inset.plot(range(args.train_epochs), torch.mean(results['trainReward'][:,idx],dim=1), color=cmap(idx), lw=1.2, label=name)
-    inset.set_xlim(-20, 400)
-    inset.set_ylim(yMin0, 8)
-    inset.set_xticks([0, 200, 400])
-    inset.set_xticklabels(inset.get_xticklabels(), fontsize=8)
-    inset.set_yticklabels([])
-    inset.set_title('Initial Epochs', fontsize=10)
-    
     width = trainInspectFrom[1]-trainInspectFrom[0]
     height = yMax0 - yMin0
     rect = mpl.patches.Rectangle([trainInspectFrom[0], yMin0], width, height, facecolor='k', edgecolor='none', alpha=0.2)
@@ -410,8 +400,8 @@ def plotResults(results, args, eigvals):
     ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
     ax[1].set_xlim(-1, len(POINTER_METHODS))
     _, yMax = ax[1].get_ylim()
-    ax[1].set_ylim(0, 2.5)
-    ax[1].set_yticks(np.linspace(0, 2, 3))
+    ax[1].set_ylim(0, 1.3)
+    ax[1].set_yticks(np.linspace(0, 1.2, 3))
     
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName('eigenvalues')))
