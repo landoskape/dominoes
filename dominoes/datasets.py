@@ -197,7 +197,7 @@ def get_path_pool(xy, dists, threads=8):
         path = list(p.map(make_path, zip(xy, dists)))
     return path
 
-def tsp_batch(batch_size, num_cities, return_target=True, return_full=False, threads=12):
+def tsp_batch(batch_size, num_cities, return_target=True, return_full=False, threads=1):
     """parallelized preparation of batch, better to use 1 thread if num_cities~<10 or batch_size<=256"""
     xy = np.random.random((batch_size, num_cities, 2))
     dists = np.stack([sp.spatial.distance.pdist(p) for p in xy])
