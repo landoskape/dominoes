@@ -24,6 +24,89 @@ transformer code:
 def get_device(tensor):
     """simple method to get device of input tensor"""
     return 'cuda' if tensor.is_cuda else 'cpu'
+    
+
+# the following masked softmax methods are from allennlp
+# https://github.com/allenai/allennlp/blob/80fb6061e568cb9d6ab5d45b661e86eb61b92c82/allennlp/nn/util.py#L243
+def masked_softmax(vector: torch.Tensor,
+                   mask: torch.Tensor,
+                   dim: int = -1,
+                   memory_efficient: bool = False,
+                   mask_fill_value: float = -1e32) -> torch.Tensor:
+    """
+    ``torch.nn.functional.softmax(vector)`` does not work if some elements of ``vector`` should be
+    masked.  This performs a softmax on just the non-masked portions of ``vector``.  Passing
+    ``None`` in for the mask is also acceptable; you'll just get a regular softmax.
+
+    ``vector`` can have an arbitrary number of dimensions; the only requirement is that ``mask`` is
+    broadcastable to ``vector's`` shape.  If ``mask`` has fewer dimensions than ``vector``, we will
+    unsqueeze on dimension 1 until they match.  If you need a different unsqueezing of your mask,
+    do it yourself before passing the mask into this function.
+
+    If ``memory_efficient`` is set to true, we will simply use a very large negative number for those
+    masked positions so that the probabilities of those positions would be approximately 0.
+    This is not accurate in math, but works for most cases and consumes less memory.
+
+    In the case that the input vector is completely masked and ``memory_efficient`` is false, this function
+    returns an array of ``0.0``. This behavior may cause ``NaN`` if this is used as the last layer of
+    a model that uses categorical cross-entropy loss. Instead, if ``memory_efficient`` is true, this function
+    will treat every element as equal, and do softmax over equal numbers.
+    """
+    if mask is None:
+        result = torch.nn.functional.softmax(vector, dim=dim)
+    else:
+        mask = mask.float()
+        while mask.dim() < vector.dim():
+            mask = mask.unsqueeze(1)
+        if not memory_efficient:
+            # To limit numerical errors from large vector elements outside the mask, we zero these out.
+            result = torch.nn.functional.softmax(vector * mask, dim=dim)
+            result = result * mask
+            result = result / (result.sum(dim=dim, keepdim=True) + 1e-13)
+        else:
+            masked_vector = vector.masked_fill((1 - mask).bool(), mask_fill_value)
+            result = torch.nn.functional.softmax(masked_vector, dim=dim)
+    return result
+
+
+def masked_log_softmax(vector: torch.Tensor, 
+                       mask: torch.Tensor, 
+                       dim: int = -1) -> torch.Tensor:
+    """
+    ``torch.nn.functional.log_softmax(vector)`` does not work if some elements of ``vector`` should be
+    masked.  This performs a log_softmax on just the non-masked portions of ``vector``.  Passing
+    ``None`` in for the mask is also acceptable; you'll just get a regular log_softmax.
+
+    ``vector`` can have an arbitrary number of dimensions; the only requirement is that ``mask`` is
+    broadcastable to ``vector's`` shape.  If ``mask`` has fewer dimensions than ``vector``, we will
+    unsqueeze on dimension 1 until they match.  If you need a different unsqueezing of your mask,
+    do it yourself before passing the mask into this function.
+
+    In the case that the input vector is completely masked, the return value of this function is
+    arbitrary, but not ``nan``.  You should be masking the result of whatever computation comes out
+    of this in that case, anyway, so the specific values returned shouldn't matter.  Also, the way
+    that we deal with this case relies on having single-precision floats; mixing half-precision
+    floats with fully-masked vectors will likely give you ``nans``.
+
+    If your logits are all extremely negative (i.e., the max value in your logit vector is -50 or
+    lower), the way we handle masking here could mess you up.  But if you've got logit values that
+    extreme, you've got bigger problems than this.
+    """
+    if mask is None:
+        return torch.nn.functional.log_softmax(vector, dim=dim)
+    
+    # Otherwise handle the log softmax and also make sure -infs don't show up
+    mask = mask.float()
+    while mask.dim() < vector.dim():
+        mask = mask.unsqueeze(1)
+    # vector + mask.log() is an easy way to zero out masked elements in logspace, but it
+    # results in nans when the whole vector is masked.  We need a very small value instead of a
+    # zero in the mask for these cases.  log(1 + 1e-45) is still basically 0, so we can safely
+    # just add 1e-45 before calling mask.log().  We use 1e-45 because 1e-46 is so small it
+    # becomes 0 - this is just the smallest value we can actually use.
+    with torch.no_grad(): min_value = vector.min() - 5.0 # make sure it's lower than the lowest value
+    vector = vector.masked_fill(mask==0, min_value)
+    return torch.nn.functional.log_softmax(vector, dim=dim)
 
 
 # ---------------------------------
@@ -34,7 +117,7 @@ class SelfAttention(nn.Module):
     Canonical implementation of multi-head self attention.
     Adopted from pbloem/former
     """
-    def __init__(self, emb, heads=8, kqnorm=False):
+    def __init__(self, emb, heads=8, kqnorm=True):
         super().__init__()
 
         # This is a requirement
@@ -107,12 +190,9 @@ class SelfAttention(nn.Module):
             # mask query key products to -inf that are not used
             dotMask = torch.bmm(mask.unsqueeze(2), mask.unsqueeze(1))
             dotMask = dotMask.unsqueeze(1).expand(batch, self.heads, tokens, tokens).reshape(batch*self.heads, tokens, tokens)
-            dot += (dotMask + 1e-45).log()
-            # this produces nans for any row that is fully masked 
-            #dot.masked_fill_(dotMask==0, float('-inf')) # assign -inf for any value that isn't used
-        
+            
         # and take softmax to get self-attention probabilities
-        dot = F.softmax(dot, dim=2)
+        dot = masked_softmax(dot, dotMask, dim=2)
         
         # return values according how much they are attented
         out = torch.bmm(dot, values).view(batch, self.heads, tokens, self.headsize)
@@ -134,7 +214,7 @@ class ContextualAttention(nn.Module):
     I don't know if this kind of attention layer exists. If you read this and
     have seen this kind of attention layer before, please let me know!
     """
-    def __init__(self, emb, heads=8, kqnorm=False):
+    def __init__(self, emb, heads=8, kqnorm=True):
         super().__init__()
 
         # This is a requirement
@@ -220,12 +300,9 @@ class ContextualAttention(nn.Module):
             # mask query key products to -inf that are not used
             dotMask = torch.bmm(mask.unsqueeze(2), mask_plus_contextMask.unsqueeze(1))
             dotMask = dotMask.unsqueeze(1).expand(batch, self.heads, itokens, tokens).reshape(batch*self.heads, itokens, tokens)
-            dot += (dotMask + 1e-45).log()
-            # produces nans for any rows that are fully masked
-            #dot.masked_fill_(dotMask==0, float('-inf')) # assign -inf for any value that isn't used
-        
+            
         # and take softmax to get self-attention probabilities
-        dot = F.softmax(dot, dim=2)
+        dot = masked_softmax(dot, dotMask, dim=2)
         
         # return values according how much they are attented
         out = torch.bmm(dot, values).view(batch, self.heads, itokens, self.headsize)
@@ -248,7 +325,7 @@ class MultiContextAttention(nn.Module):
     I don't know if this kind of attention layer exists. If you read this and
     have seen this kind of attention layer before, please let me know!
     """
-    def __init__(self, emb, num_context=1, heads=8, kqnorm=False):
+    def __init__(self, emb, num_context=1, heads=8, kqnorm=True):
         super().__init__()
 
         # This is a requirement
@@ -349,11 +426,9 @@ class MultiContextAttention(nn.Module):
         # mask query key products to -inf (very small number) that are not used
         dotMask = torch.bmm(mask.unsqueeze(2), mask_plus_contextMask.unsqueeze(1))
         dotMask = dotMask.unsqueeze(1).expand(batch, self.heads, itokens, tokens).reshape(batch*self.heads, itokens, tokens)
-        with torch.no_grad(): floor_value = dot.min() - 100
-        dot.masked_fill_(dotMask==0, floor_value)
         
         # and take softmax to get self-attention probabilities
-        dot = F.softmax(dot, dim=2)
+        dot = masked_softmax(dot, dotMask, dim=2)
         
         # return values according how much they are attented
         out = torch.bmm(dot, values).view(batch, self.heads, itokens, self.headsize)
@@ -368,76 +443,49 @@ class MultiContextAttention(nn.Module):
 class PointerStandard(nn.Module):
     """
     PointerStandard Module (as specified in the original paper)
-
-    log_softmax is preferable if the probabilities of each token are not 
-    needed. However, if token embeddings are combined via their probabilities,
-    then softmax is required, so log_softmax should be set to `False`.
     """
-    def __init__(self, emb, log_softmax=False):
+    def __init__(self, emb):
         super().__init__()
         self.emb = emb
-        self.log_softmax = log_softmax
         self.W1 = nn.Linear(emb, emb, bias=False)
         self.W2 = nn.Linear(emb, emb, bias=False)
         self.vt = nn.Linear(emb, 1, bias=False)
 
+    def forwardEncoded(self, encoded):
+        self.transformEncoded = self.W1(encoded)
+
     def forward(self, encoded, decoder_state, mask=None, temperature=1.0):
         # first transform encoded representations and decoder states 
-        transformEncoded = self.W1(encoded)
         transformDecoded = self.W2(decoder_state)
 
         # then combine them and project to a new space
-        u = self.vt(torch.tanh(transformEncoded + transformDecoded.unsqueeze(1))).squeeze(2)
-        if mask is not None:
-            # u += (mask + 1e-45).log()
-            # this produces nans for any row that is fully masked 
-            u.masked_fill_(mask==0, -200) # only use valid tokens
-
-        if self.log_softmax:
-            # convert to log scores
-            return torch.nn.functional.log_softmax(u/temperature, dim=1)
-        else:
-            # convert to probabilities
-            return torch.nn.functional.softmax(u/temperature, dim=1)
+        u = self.vt(torch.tanh(self.transformEncoded + transformDecoded.unsqueeze(1))).squeeze(2)
+        return masked_log_softmax(u/temperature, mask, dim=1)
 
 
 class PointerDot(nn.Module):
     """
     PointerDot Module (variant of the paper, using a simple dot product)
-
-    log_softmax is preferable if the probabilities of each token are not 
-    needed. However, if token embeddings are combined via their probabilities,
-    then softmax is required, so log_softmax should be set to `False`.
     """
-    def __init__(self, emb, log_softmax=False):
+    def __init__(self, emb):
         super().__init__()
         self.emb = emb
-        self.log_softmax = log_softmax
         self.W1 = nn.Linear(emb, emb, bias=False)
         self.W2 = nn.Linear(emb, emb, bias=False)
         self.eln = nn.LayerNorm(emb, bias=False)
         self.dln = nn.LayerNorm(emb, bias=False)
 
+    def forwardEncoded(self, encoded):
+        self.transformEncoded = self.eln(self.W1(encoded))
+
     def forward(self, encoded, decoder_state, mask=None, temperature=1.0):
         # first transform encoded representations and decoder states 
-        transformEncoded = self.eln(self.W1(encoded))
         transformDecoded = self.dln(self.W2(decoder_state))
             
         # instead of add, tanh, and project on learnable weights, 
         # just dot product the encoded representations with the decoder "pointer"
-        u = torch.bmm(transformEncoded, transformDecoded.unsqueeze(2)).squeeze(2)
-        
-        if mask is not None:
-            # u += (mask + 1e-45).log()
-            # this produces nans for any row that is fully masked 
-            u.masked_fill_(mask==0, -200) # only use valid tokens
-
-        if self.log_softmax:
-            # convert to log scores
-            return torch.nn.functional.log_softmax(u/temperature, dim=1)
-        else:
-            # convert to probabilities
-            return torch.nn.functional.softmax(u/temperature, dim=1)
+        u = torch.bmm(self.transformEncoded, transformDecoded.unsqueeze(2)).squeeze(2)
+        return masked_log_softmax(u/temperature, mask, dim=1)
 
 
 class PointerDotNoLN(nn.Module):
@@ -448,136 +496,87 @@ class PointerDotNoLN(nn.Module):
     needed. However, if token embeddings are combined via their probabilities,
     then softmax is required, so log_softmax should be set to `False`.
     """
-    def __init__(self, emb, log_softmax=False):
+    def __init__(self, emb):
         super().__init__()
         self.emb = emb
-        self.log_softmax = log_softmax
         self.W1 = nn.Linear(emb, emb, bias=False)
         self.W2 = nn.Linear(emb, emb, bias=False)
 
+    def forwardEncoded(self, encoded):
+        self.transformEncoded = self.W1(encoded)
+
     def forward(self, encoded, decoder_state, mask=None, temperature=1.0):
         # first transform encoded representations and decoder states 
-        transformEncoded = self.W1(encoded)
         transformDecoded = self.W2(decoder_state)
             
         # instead of add, tanh, and project on learnable weights, 
         # just dot product the encoded representations with the decoder "pointer"
-        u = torch.bmm(transformEncoded, transformDecoded.unsqueeze(2)).squeeze(2)
-        
-        if mask is not None:
-            # u += (mask + 1e-45).log()
-            # this produces nans for any row that is fully masked 
-            u.masked_fill_(mask==0, -200) # only use valid tokens
-
-        if self.log_softmax:
-            # convert to log scores
-            return torch.nn.functional.log_softmax(u/temperature, dim=1)
-        else:
-            # convert to probabilities
-            return torch.nn.functional.softmax(u/temperature, dim=1)
+        u = torch.bmm(self.transformEncoded, transformDecoded.unsqueeze(2)).squeeze(2)
+        return masked_log_softmax(u/temperature, mask, dim=1)
 
 
 class PointerDotLean(nn.Module):
     """
     PointerDotLean Module (variant of the paper, using a simple dot product and even less weights)
-
-    log_softmax is preferable if the probabilities of each token are not 
-    needed. However, if token embeddings are combined via their probabilities,
-    then softmax is required, so log_softmax should be set to `False`.
     """
-    def __init__(self, emb, log_softmax=False):
+    def __init__(self, emb):
         super().__init__()
         self.emb = emb
-        self.log_softmax = log_softmax
         self.eln = nn.LayerNorm(emb, bias=False)
         self.dln = nn.LayerNorm(emb, bias=False)
 
+    def forwardEncoded(self, encoded):
+        self.transformEncoded = self.eln(encoded)
+
     def forward(self, encoded, decoder_state, mask=None, temperature=1.0):
         # first transform encoded representations and decoder states 
-        transformEncoded = self.eln(encoded)
         transformDecoded = self.dln(decoder_state)
             
         # instead of add, tanh, and project on learnable weights, 
         # just dot product the encoded representations with the decoder "pointer"
-        u = torch.bmm(transformEncoded, transformDecoded.unsqueeze(2)).squeeze(2)
-        
-        if mask is not None:
-            # u += (mask + 1e-45).log()
-            # this produces nans for any row that is fully masked 
-            u.masked_fill_(mask==0, -200) # only use valid tokens
-
-        if self.log_softmax:
-            # convert to log scores
-            return torch.nn.functional.log_softmax(u/temperature, dim=1)
-        else:
-            # convert to probabilities
-            return torch.nn.functional.softmax(u/temperature, dim=1)
+        u = torch.bmm(self.transformEncoded, transformDecoded.unsqueeze(2)).squeeze(2)
+        return masked_log_softmax(u/temperature, mask, dim=1)
             
 
 class PointerAttention(nn.Module):
     """
     PointerAttention Module (variant of paper, using standard attention layer)
-
-    log_softmax is preferable if the probabilities of each token are not 
-    needed. However, if token embeddings are combined via their probabilities,
-    then softmax is required, so log_softmax should be set to `False`.
     """
-    def __init__(self, emb, log_softmax=False, **kwargs):
+    def __init__(self, emb, **kwargs):
         super().__init__()
         self.emb = emb
-        self.log_softmax = log_softmax
-
         self.attention = MultiContextAttention(emb, num_context=1, **kwargs)
         self.vt = nn.Linear(emb, 1, bias=False)
 
+    def forwardEncoded(self, encoded):
+        pass
+    
     def forward(self, encoded, decoder_state, mask=None, temperature=1.0):
         # attention on encoded representations with decoder_state
         updated = self.attention(encoded, [decoder_state], mask=mask)
         project = self.vt(torch.tanh(updated)).squeeze(2)
-        if mask is not None:
-            project.masked_fill_(mask==0, -200) # pin masked tokens before softmax
-
-        if self.log_softmax:
-            # convert to log scores
-            scores = torch.nn.functional.log_softmax(project/temperature, dim=1)
-        else:
-            # convert to probabilities
-            scores = torch.nn.functional.softmax(project/temperature, dim=1)
-
-        return scores
+        return masked_log_softmax(project/temperature, mask, dim=1)
         
 class PointerTransformer(nn.Module):
     """
     PointerTransformer Module (variant of paper using a transformer)
-
-    log_softmax is preferable if the probabilities of each token are not 
-    needed. However, if token embeddings are combined via their probabilities,
-    then softmax is required, so log_softmax should be set to `False`.
     """
-    def __init__(self, emb, log_softmax=False, **kwargs):
+    def __init__(self, emb, **kwargs):
         super().__init__()
         self.emb = emb
-        self.log_softmax = log_softmax
 
         if 'contextual' in kwargs: kwargs['contextual']=True
         self.transform = ContextualTransformerLayer(emb, num_context=1, **kwargs)
         self.vt = nn.Linear(emb, 1, bias=False)
+    
+    def forwardEncoded(self, encoded):
+        pass
 
     def forward(self, encoded, decoder_state, mask=None, temperature=1.0):
         # transform encoded representations with decoder_state
         updated = self.transform(encoded, [decoder_state], mask=mask)
         project = self.vt(torch.tanh(updated)).squeeze(2)
-        if mask is not None:
-            project.masked_fill_(mask==0, -200) # pin masked tokens before softmax
-
-        if self.log_softmax:
-            # convert to log scores
-            scores = torch.nn.functional.log_softmax(project/temperature, dim=1)
-        else:
-            # convert to probabilities
-            scores = torch.nn.functional.softmax(project/temperature, dim=1)
-
-        return scores
+        return masked_log_softmax(project/temperature, mask, dim=1)
 
 # ---------------------------------
 # ------------ networks -----------
@@ -597,7 +596,7 @@ class TransformerLayer(nn.Module):
     main inputs and the context inputs using the same key & value matrices.
     (See ContextualAttention above).
     """
-    def __init__(self, embedding_dim, heads=8, expansion=1, contextual=False, kqnorm=False, bias=False):
+    def __init__(self, embedding_dim, heads=8, expansion=1, contextual=False, kqnorm=True, bias=True):
         super().__init__()
         
         self.embedding_dim = embedding_dim
@@ -647,7 +646,7 @@ class ContextualTransformerLayer(nn.Module):
     This form of contextual attention uses distinct tokey and tovalue matrices
     to transform each kind of context input (see MultiContextAttention above).
     """
-    def __init__(self, embedding_dim, heads=8, expansion=1, num_context=1, kqnorm=False, bias=False):
+    def __init__(self, embedding_dim, heads=8, expansion=1, num_context=1, kqnorm=True, bias=True):
         super().__init__()
         
         self.embedding_dim = embedding_dim
@@ -681,8 +680,8 @@ class PointerModule(nn.Module):
     """
     Implementation of the decoder part of the pointer network
     """
-    def __init__(self, embedding_dim, heads=8, expansion=1, kqnorm=True, encoding_layers=1, thompson=False,
-                 bias=False, decoder_method='transformer', pointer_method='PointerStandard', greedy=False, temperature=1):
+    def __init__(self, embedding_dim, heads=8, expansion=1, kqnorm=True, thompson=False,  bias=True, 
+                 decoder_method='transformer', pointer_method='PointerStandard', temperature=1.0, permutation=True):
         super().__init__()
         self.embedding_dim = embedding_dim
         self.heads = heads
@@ -691,9 +690,9 @@ class PointerModule(nn.Module):
         self.bias = bias
         self.decoder_method = decoder_method
         self.pointer_method = pointer_method
-        self.greedy = greedy
         self.thompson = thompson
         self.temperature = temperature
+        self.permutation = permutation
 
         # build decoder (updates the context vector)
         if self.decoder_method == 'gru':
@@ -710,25 +709,25 @@ class PointerModule(nn.Module):
         # build pointer (chooses an output)
         if self.pointer_method == 'PointerStandard':
             # output of the network uses a pointer attention layer as described in the original paper
-            self.pointer = PointerStandard(self.embedding_dim, log_softmax=self.greedy)
+            self.pointer = PointerStandard(self.embedding_dim)
 
         elif self.pointer_method == 'PointerDot':
-            self.pointer = PointerDot(self.embedding_dim, log_softmax=self.greedy)
+            self.pointer = PointerDot(self.embedding_dim)
 
         elif self.pointer_method == 'PointerDotNoLN':
-            self.pointer = PointerDotNoLN(self.embedding_dim, log_softmax=self.greedy)
+            self.pointer = PointerDotNoLN(self.embedding_dim)
 
         elif self.pointer_method == 'PointerDotLean':
-            self.pointer = PointerDotLean(self.embedding_dim, log_softmax=self.greedy)
+            self.pointer = PointerDotLean(self.embedding_dim)
             
         elif self.pointer_method == 'PointerAttention':
             kwargs = {'heads':self.heads, 'kqnorm':self.kqnorm}
-            self.pointer = PointerAttention(self.embedding_dim, log_softmax=self.greedy, **kwargs)
+            self.pointer = PointerAttention(self.embedding_dim, **kwargs)
 
         elif self.pointer_method == 'PointerTransformer':
             # output of the network uses a pointer attention layer with a transformer
             kwargs = {'heads':self.heads, 'expansion':1, 'kqnorm':self.kqnorm, 'bias':self.bias}
-            self.pointer = PointerTransformer(self.embedding_dim, log_softmax=self.greedy, **kwargs)
+            self.pointer = PointerTransformer(self.embedding_dim, **kwargs)
             
         else:
             raise ValueError(f"the pointer_method was not set correctly, {self.pointer_method} not recognized")
@@ -791,6 +790,13 @@ class PointerModule(nn.Module):
         if max_output is None:
             max_output = max_num_tokens
             
+        if self.permutation:
+            # prepare source if required
+            src = torch.zeros((batch_size, 1), dtype=mask.dtype).to(get_device(mask))
+
+        # For some pointer layers, the encoded transform happens out of the loop (for others this is a pass)
+        self.pointer.forwardEncoded(encoded)
+
         # Decoding stage
         pointer_log_scores = []
         pointer_choices = []
@@ -800,11 +806,8 @@ class PointerModule(nn.Module):
             
             # use pointer attention to evaluate scores of each possible input given the context
             decoder_state = self.get_decoder_state(decoder_input, decoder_context)
-            score = self.pointer(encoded, decoder_state, mask=mask, temperature=self.temperature)
+            log_score = self.pointer(encoded, decoder_state, mask=mask, temperature=self.temperature)
             
-            # standard loss function (nll_loss) requires log-probabilities
-            log_score = score if self.greedy else torch.log(score)
-
             # choose token for this sample
             if self.thompson:
                 # choose probabilistically
@@ -813,14 +816,15 @@ class PointerModule(nn.Module):
                 # choose based on maximum score
                 choice = torch.argmax(log_score, dim=1, keepdim=True)
 
-            if self.greedy:
-                # next decoder_input is whatever token had the highest probability
-                index_tensor = choice.unsqueeze(-1).expand(batch_size, 1, self.embedding_dim)
-                decoder_input = torch.gather(encoded, dim=1, index=index_tensor).squeeze(1)
-            else:
-                # next decoder_input is the dot product of token encodings and their probabilities
-                decoder_input = torch.bmm(score.unsqueeze(1), encoded).squeeze(1)
+            # next decoder_input is whatever token had the highest probability
+            index_tensor = choice.unsqueeze(-1).expand(batch_size, 1, self.embedding_dim)
+            decoder_input = torch.gather(encoded, dim=1, index=index_tensor).squeeze(1)
                 
+            if self.permutation:
+                # mask previously chosen tokens (don't include this in the computation graph)
+                with torch.no_grad():
+                    mask = mask.scatter(1, choice, src)
+            
             # Save output of each decoding round
             pointer_log_scores.append(log_score)
             pointer_choices.append(choice)
@@ -855,13 +859,11 @@ class PointerNetwork(nn.Module):
     The paper suggests feeding the decoder a dot product between the encoded
     representations and the scores. However, in some cases it may be better to
     use the "greedy" choice and only feed the decoder the token that had the 
-    highest probability. If you want to do it that way, set `greedy=True`. If
-    you want to be conservative, set `greedy=False` and it will combine 
-    representations with probabilities.
+    highest probability. That's how this implementation is decoded.
     """
-    def __init__(self, input_dim, embedding_dim,
-                 heads=8, expansion=1, kqnorm=True, encoding_layers=1, bias=False, pointer_method='PointerStandard',
-                 contextual_encoder=False, decoder_method='transformer', greedy=False, thompson=False, temperature=1):
+    def __init__(self, input_dim, embedding_dim, heads=8, expansion=1, kqnorm=True, encoding_layers=1, 
+                 bias=True, pointer_method='PointerStandard', contextual_encoder=False, decoder_method='transformer', 
+                 thompson=False, temperature=1.0, permutation=True):
         super().__init__()
         self.input_dim = input_dim
         self.embedding_dim = embedding_dim
@@ -872,10 +874,10 @@ class PointerNetwork(nn.Module):
         self.encoding_layers = encoding_layers
         self.contextual_encoder = contextual_encoder
         self.decoder_method = decoder_method
-        self.greedy = greedy
         self.thompson = thompson
         self.pointer_method = pointer_method
         self.temperature = temperature
+        self.permutation = permutation
 
         self.embedding = nn.Linear(in_features=input_dim, out_features=self.embedding_dim, bias=self.bias)
         self.encodingLayers = nn.ModuleList([TransformerLayer(self.embedding_dim, 
@@ -888,9 +890,9 @@ class PointerNetwork(nn.Module):
         self.encoding = self.forwardEncoder # since there are masks, it's easier to write a custom forward than wrangle the transformer layers to work with nn.Sequential
 
         self.pointer = PointerModule(self.embedding_dim, heads=self.heads, expansion=self.expansion, kqnorm=self.kqnorm,
-                                     encoding_layers=self.encoding_layers, bias=self.bias, decoder_method=self.decoder_method,
-                                     pointer_method=self.pointer_method, greedy=self.greedy, temperature=self.temperature,
-                                     thompson=self.thompson)
+                                     bias=self.bias, decoder_method=self.decoder_method,
+                                     pointer_method=self.pointer_method, temperature=self.temperature,
+                                     thompson=self.thompson, permutation=permutation)
 
     def setTemperature(self, temperature):
         self.temperature = temperature
@@ -938,6 +940,13 @@ class PointerNetwork(nn.Module):
         assert x.ndim == 3, "x must have shape (batch, tokens, input_dim)"
         batch, tokens, inp_dim = x.size()
         assert inp_dim == self.input_dim, "input dim of x doesn't match network"
+        
+        if max_output is None: 
+            max_output = tokens
+
+        if self.permutation and max_output > tokens:
+            raise ValueError(f"if using permutation mode, max output ({max_output}) must be less than or equal to the number of tokens ({tokens})")
+        
         if mask is not None: 
             assert mask.ndim == 2, "mask must have shape (batch, tokens)"
             assert mask.size(0)==batch and mask.size(1)==tokens, "mask must have same batch size and max tokens as x"
@@ -950,9 +959,6 @@ class PointerNetwork(nn.Module):
         else:
             decode_mask = torch.ones((batch, tokens), dtype=x.dtype).to(get_device(x))
             decode_mask *= mask
-            
-        if max_output is None: 
-            max_output = tokens
 
         # Encoding stage
         embeddedRepresentation = self.embedding(x) # embed each token to right dimensionality
