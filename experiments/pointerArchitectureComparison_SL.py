@@ -47,11 +47,11 @@ def getFileName(extra=None):
 def handleArguments():
     parser = argparse.ArgumentParser(description='Run pointer demonstration.')
     parser.add_argument('-hd','--highest-dominoe', type=int, default=9, help='the highest dominoe in the board')
-    parser.add_argument('--train-fraction', type=float, default=0.75, help='the fraction of dominoes in the set to train with')
+    parser.add_argument('--train-fraction', type=float, default=0.8, help='the fraction of dominoes in the set to train with')
     parser.add_argument('-mn','--min-seq-length', type=int, default=4, help='the minimum tokens per sequence')
     parser.add_argument('-mx','--max-seq-length', type=int, default=12, help='the maximum tokens per sequence')
     parser.add_argument('-bs','--batch-size',type=int, default=512, help='number of sequences per batch')
-    parser.add_argument('-ne','--train-epochs',type=int, default=8000, help='the number of training epochs')
+    parser.add_argument('-ne','--train-epochs',type=int, default=4000, help='the number of training epochs')
     parser.add_argument('-te','--test-epochs',type=int, default=100, help='the number of testing epochs')
 
     parser.add_argument('--embedding_dim', type=int, default=48, help='the dimensions of the embedding')
