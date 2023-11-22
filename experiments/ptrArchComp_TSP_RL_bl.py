@@ -100,7 +100,6 @@ def trainTestModel():
     heads = args.heads
     encoding_layers = args.encoding_layers
     expansion = args.expansion
-    greedy = True
     temperature = args.temperature
     
     # train parameters
@@ -134,14 +133,14 @@ def trainTestModel():
         # create pointer networks with different pointer methods
         nets = [transformers.PointerNetwork(input_dim, embedding_dim, temperature=temperature, pointer_method=POINTER_METHOD, 
                                             thompson=True, encoding_layers=encoding_layers, heads=heads, kqnorm=True, 
-                                            expansion=expansion, decoder_method='transformer', greedy=greedy)
+                                            expansion=expansion, decoder_method='transformer')
                 for POINTER_METHOD in POINTER_METHODS]
         nets = [net.to(device) for net in nets]
 
         # create pointer networks without baseline comparison
         nets_nobl = [transformers.PointerNetwork(input_dim, embedding_dim, temperature=temperature, pointer_method=POINTER_METHOD, 
                                             thompson=True, encoding_layers=encoding_layers, heads=heads, kqnorm=True, 
-                                            expansion=expansion, decoder_method='transformer', greedy=greedy)
+                                            expansion=expansion, decoder_method='transformer')
                 for POINTER_METHOD in POINTER_METHODS]
         nets_nobl = [net.to(device) for net in nets_nobl]
 

@@ -166,7 +166,7 @@ def trainTestModel():
                 x, context = input[:, :-1].contiguous(), input[:, [-1]] # input [:, [-1]] is context token
                 input = (x, context)
                 
-                log_scores, choices = map(list, zip(*[net(input, max_output=num_output) for net in nets]))
+                log_scores, _ = map(list, zip(*[net(input, max_output=num_output) for net in nets]))
 
                 # measure loss with negative log-likelihood
                 unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]

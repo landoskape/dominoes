@@ -110,8 +110,7 @@ def trainTestModel():
     embedding_dim = args.embedding_dim
     heads = args.heads
     encoding_layers = args.encoding_layers
-    greedy = True 
-
+    
     # policy parameters
     with_thompson = True
     temperature = args.train_temperature
@@ -151,7 +150,7 @@ def trainTestModel():
         # create pointer networks with different pointer methods
         nets = [transformers.PointerNetwork(input_dim, embedding_dim, temperature=temperature, pointer_method=POINTER_METHOD, 
                                              thompson=with_thompson, encoding_layers=encoding_layers, heads=heads, kqnorm=True, 
-                                             decoder_method='transformer', greedy=greedy)
+                                             decoder_method='transformer')
                  for POINTER_METHOD in POINTER_METHODS]
         nets = [net.to(device) for net in nets]
         

@@ -64,8 +64,7 @@ def handleArguments():
     parser.add_argument('--heads', type=int, default=8, help='the number of heads in transformer layers')
     parser.add_argument('--expansion', type=int, default=2, help='the expansion at the MLP part of the transformer')
     parser.add_argument('--encoding-layers', type=int, default=2, help='the number of stacked transformers in the encoder')
-    parser.add_argument('--greedy', default=False, action='store_true', help='if used, will generate greedy predictions of each step rather than probability-weighted predictions')
-    parser.add_argument('--temperature', type=int, default=1, help='temperature of choice during training')
+    parser.add_argument('--temperature', type=float, default=1.0, help='temperature of choice during training')
     parser.add_argument('--use-rl', default=False, action='store_true', help='if used, will learn by reinforcement learning, otherwise supervised')
     parser.add_argument('--gamma', type=gamma_type, default=0.3, help='the gamma value used for discounting in RL')
     parser.add_argument('--justplot', default=False, action='store_true', help='if used, will only plot the saved results (results have to already have been run and saved)')
@@ -97,7 +96,6 @@ def trainTestModel():
     heads = args.heads
     expansion = args.expansion
     encoding_layers = args.encoding_layers
-    greedy = args.greedy
     temperature = args.temperature
     contextual_encoder = True # use available token as a context
 
@@ -118,7 +116,7 @@ def trainTestModel():
     # Create a pointer network
     net = transformers.PointerNetwork(input_dim, embedding_dim, encoding_layers=encoding_layers, heads=heads, expansion=expansion, 
                                       kqnorm=True, contextual_encoder=contextual_encoder, decoder_method='transformer', 
-                                      greedy=greedy, temperature=temperature, pointer_method='PointerStandard', thompson=thompson)
+                                      temperature=temperature, pointer_method='PointerStandard', thompson=thompson)
     net = net.to(device)
     
     # Create an optimizer, Adam with weight decay is pretty good

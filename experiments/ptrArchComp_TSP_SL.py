@@ -57,7 +57,6 @@ def handleArguments():
     parser.add_argument('--embedding_dim', type=int, default=96, help='the dimensions of the embedding')
     parser.add_argument('--heads', type=int, default=4, help='the number of heads in transformer layers')
     parser.add_argument('--encoding-layers', type=int, default=1, help='the number of stacked transformers in the encoder')
-    parser.add_argument('--greedy', default=False, action='store_true', help='if used, will generate greedy predictions of each step rather than probability-weighted predictions')
     parser.add_argument('--justplot', default=False, action='store_true', help='if used, will only plot the saved results (results have to already have been run and saved)')
     parser.add_argument('--nosave', default=False, action='store_true')
     
@@ -92,7 +91,6 @@ def trainTestModel():
     embedding_dim = args.embedding_dim
     heads = args.heads
     encoding_layers = args.encoding_layers
-    greedy = True # args.greedy
     temperature = 1.0
     
     # train parameters
@@ -120,7 +118,7 @@ def trainTestModel():
         # create pointer networks with different pointer methods
         nets = [transformers.PointerNetwork(input_dim, embedding_dim, temperature=temperature, pointer_method=POINTER_METHOD, 
                                             thompson=False, encoding_layers=encoding_layers, heads=heads, kqnorm=True, 
-                                            decoder_method='transformer', greedy=greedy)
+                                            decoder_method='transformer')
                 for POINTER_METHOD in POINTER_METHODS]
         nets = [net.to(device) for net in nets]
 
