@@ -74,9 +74,9 @@ def handleArguments():
 
     return args
 
-def get_gamma_transform(gamma, N, B):
+def get_gamma_transform(gamma, N):
     exponent = torch.arange(N).view(-1,1) - torch.arange(N).view(1,-1)
-    gamma_transform = (gamma ** exponent * (exponent >= 0)).unsqueeze(0).expand(B, -1, -1)
+    gamma_transform = (gamma ** exponent * (exponent >= 0))
     return gamma_transform
     
 def trainTestModel():
@@ -102,10 +102,11 @@ def trainTestModel():
     use_rl = args.use_rl
     return_target = not(use_rl) # if not using RL, then using supervised learning and we need the target
     thompson = copy(use_rl) # only do thompson sampling if in reinforcement learning
+    value_method = '2'
 
     if use_rl:
         gamma = args.gamma
-        gamma_transform = get_gamma_transform(gamma, num_output, batchSize).to(device)
+        gamma_transform = get_gamma_transform(gamma, num_output).to(device)
         
     trainEpochs = args.train_epochs
     testEpochs = args.test_epochs
@@ -151,8 +152,8 @@ def trainTestModel():
         # measure loss and do backward pass
         if use_rl:
             # measure rewards for each sequence
-            rewards = training.measureReward_sequencer(available, listDominoes[selection], out_choices, value_method='3', normalize=False)
-            G = torch.bmm(rewards.unsqueeze(1), gamma_transform).squeeze(1)
+            rewards = training.measureReward_sequencer(available, listDominoes[selection], out_choices, value_method=value_method, normalize=False)
+            G = torch.matmul(rewards, gamma_transform)
             logprob_policy = torch.gather(out_scores, 2, out_choices.unsqueeze(2)).squeeze(2) # log-probability for each chosen dominoe
             
             # do backward pass on J
@@ -203,8 +204,8 @@ def trainTestModel():
             # measure loss and do backward pass
             if use_rl:
                 # measure rewards for each sequence
-                rewards = training.measureReward_sequencer(available, listDominoes[selection], out_choices, value_method='3', normalize=False)
-                G = torch.bmm(rewards.unsqueeze(1), gamma_transform).squeeze(1)
+                rewards = training.measureReward_sequencer(available, listDominoes[selection], out_choices, value_method=value_method, normalize=False)
+                G = torch.matmul(rewards, gamma_transform)
                 c_test_value = torch.mean(torch.sum(G, dim=1))
             else:
                 unrolled = out_scores.view(batchSize * num_output, -1)
