@@ -52,7 +52,6 @@ def handleArguments():
     parser.add_argument('--embedding_dim', type=int, default=48, help='the dimensions of the embedding')
     parser.add_argument('--heads', type=int, default=4, help='the number of heads in transformer layers')
     parser.add_argument('--encoding-layers', type=int, default=1, help='the number of stacked transformers in the encoder')
-    parser.add_argument('--greedy', default=False, action='store_true', help='if used, will generate greedy predictions of each step rather than probability-weighted predictions')
     parser.add_argument('--justplot', default=False, action='store_true', help='if used, will only plot the saved results (results have to already have been run and saved)')
     parser.add_argument('--nosave', default=False, action='store_true')
     
@@ -98,10 +97,10 @@ def trainTestModel():
     embedding_dim = args.embedding_dim
     heads = args.heads
     encoding_layers = args.encoding_layers
-    greedy = args.greedy
     
     # Create a pointer network
-    pnet = transformers.PointerNetwork(input_dim, embedding_dim, encoding_layers=encoding_layers, heads=heads, kqnorm=True, decoder_method='transformer', greedy=greedy)
+    pnet = transformers.PointerNetwork(input_dim, embedding_dim, encoding_layers=encoding_layers, 
+                                       heads=heads, kqnorm=True, decoder_method='transformer')
     pnet = pnet.to(device)
     pnet.train()
 
@@ -183,12 +182,13 @@ def trainTestModel():
 
 def plotResults(results, args):
     # Start by finding loss spikes
+    epochs_before = 7
+    epochs_after = 20
     pks = sp.signal.find_peaks(results['trainLoss'], height=1.5, threshold=0.2, distance=100)[0]
+    pks = [pk for pk in pks if (pk-epochs_before)>0 and (pk+epochs_after)<len(results['trainLoss'])]
     num_pks = len(pks)
     
     # Get spike-triggered loss trajectory and position-dependent error
-    epochs_before = 7
-    epochs_after = 20
     epochs_xval = range(-epochs_before, epochs_after)
     total_epochs = epochs_before + epochs_after
     c_loss = torch.full((num_pks, total_epochs), torch.nan)
