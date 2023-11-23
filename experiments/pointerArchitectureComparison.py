@@ -309,7 +309,7 @@ def plotResults(results, args, eigvals):
     numPos = results['testScoreByPos'].shape[1]
     n_string = f" (N={numNets})"
     cmap = mpl.colormaps['tab10']
-    trainInspectFrom = [800, 900]
+    trainInspectFrom = [200, 300]
     trainInspect = slice(trainInspectFrom[0], trainInspectFrom[1])
     
     fig, ax = plt.subplots(1,2,figsize=(7,3.5), width_ratios=[2, 1], layout='constrained')
@@ -320,22 +320,28 @@ def plotResults(results, args, eigvals):
     ax[0].set_title('Training Performance')
     ax[0].set_xlim(-50, 1000)
     ax[0].set_ylim(None, 8)
+    ax[0].legend(loc='lower right', fontsize=9)
     yMin0, yMax0 = ax[0].get_ylim()
 
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
     for idx, name in enumerate(POINTER_METHODS):
-        mnTestReward = torch.mean(results['testReward'][:,idx], dim=0)
+        mnTestReward = torch.nanmean(results['testReward'][:,idx], dim=0)
         ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
+        for mtr in mnTestReward:
+            ax[1].plot(get_x(idx), [mtr, mtr], color=cmap(idx), lw=1.5)
         ax[1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
     ax[1].set_xticks(range(len(POINTER_METHODS)))
     ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
     ax[1].set_ylabel('Reward'+n_string)
     ax[1].set_title('Testing Performance')
-    ax[1].legend(loc='lower center', fontsize=9)
     ax[1].set_xlim(-1, len(POINTER_METHODS))
-    ax[1].set_ylim(6, 8)
-    ax[1].set_yticks([6, 7, 8])
+    ax[1].set_ylim(7.85, 8)
+    ax[1].set_yticks([7.85, 7.9, 7.95, 8])
+
+    idx = {val: idx for idx, val in enumerate(POINTER_METHODS)}['PointerDotNoLN']
+    mnDotNoLN = torch.min(torch.nanmean(results['testReward'][:,idx], dim=0))
+    ax[1].text(2.75, 7.86, f"1 net @ {mnDotNoLN:.1f}", ha='right', va='center', color=cmap(idx), fontsize=10)
 
     width = trainInspectFrom[1]-trainInspectFrom[0]
     height = yMax0 - yMin0

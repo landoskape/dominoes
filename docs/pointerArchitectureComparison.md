@@ -170,35 +170,34 @@ The left panel shows the average cumulative reward ($\sum_t r_t$) for each
 rollout across training. All networks learn to solve the task close to optimal
 performance (i.e. close to an average cumulative reward of $8$). However, 
 networks that use new variants of the pointer layer tend to learn faster. (The
-standard pointer layer is in blue). The inset highlights the first 400 epochs 
-to show the initial learning curves for each network in more detail. 
+standard pointer layer is in blue). All of the "dot" based pointer layers 
+learn extremely quickly, whereas the "attention" and "transformer" layers are
+comparable to the standard layer. 
 
 The right panel shows the testing performance, after returning held-out 
 dominoes to the input data and averaging across 100 epochs for all 5 networks
-of each architecture. The horizontal bar indicates the average and the 
+of each architecture. The thick horizontal bar indicates the average and the 
 vertical line indicates the minimum and maximum performance for each network
-type. All new architectures except for the "Dot No Layer Norm" (DotNoLN) 
-perform better than the standard pointer layer. Additionally, the variance in
-test performance is lower for the new architectures, especially for the two 
-networks that use multi-context attention (PointerAttention and
-PointerTransformer).
+type. Each individual network's performance is shown with a thin horizontal
+bar. All new architectures are comparable with the standard pointer layer 
+(except for the DotNoLN layer, which appears to have poor generalization). 
+Although it's training trajectory is a bit slower, the transform based pointer
+layer has the best test performance in terms of the average reward and 
+variance across different models.
 
-Note: the DotNoLN networks learn fastest, see the training inset, however, 
-once they reach asymptotic performance, their behavior becomes very noisy. I
-think this is because there is no dampening on the magnitude of values going
-into the dot product, so the gradient might overflow. I haven't tested this 
-yet. 
+This result indicates that the dot based pointer layers may be useful for fast
+and rapid insight into a problem, whereas the attention and transform based
+layers may be ideal for excellent performance when highly trained. 
 
 ### Network Confidence
-What might explain the weaker performance of the standard pointer layer? Since
-the new architectures vary the mechanism by which each token is selected in an
-output sequence, one difference might be the maximum probability assigned to a 
-token in the generative phase. Since the maximum probability represents the 
-choice of the network, I'll refer to this as the network confidence. 
-
-To test this, I measured the average maximum probability in each output 
-position for the networks during a window of the training phase and during
-testing. 
+As an additional measure of network performance, I measured the network
+"confidence" throughout the task. The maximum probability token represents the
+choice of the network for each output step, so I'll refer to this as network
+confidence, which, after accounting for accuracy, is a measure of how well the
+networks have learned the task. I measured the average maximum probability in 
+each output position for the networks during a window of the training phase 
+and during testing. Since the output is forced to be a permutation of the 
+input (by masking), the output confidence of the last token has to be 100%. 
 
 ![pointer confidence](media/pointerArchitectureComparison_confidence.png)
 
@@ -210,20 +209,22 @@ corrected for the effect of temperature for the training data).
 As in the previous toy problem, the confidence is lowest for the middle parts
 of the output sequence. This is partly due to the fact that many more dominoes
 have intermediate values than extreme values (like the sum rolled on a pair of
-dice), so it's a bit harder to sort in the middle. However, the standard 
-pointer layer suffers most from this challenge, dropping in confidence by 
-almost 10%, where the other pointer layers only drop by 3-4%. 
+dice), so it's a bit harder to sort in the middle. The average confidence 
+across positions is in close correspondence to the speed of training (compare 
+with the above plot). 
 
 All networks improve their confidence over the course of training, reaching 
-near 100% confidence by the testing phase. However, the standard pointer layer
-still suffers from reductions in confidence for intermediate output positions 
-during testing, clearly standing out from the rest of the pointer layer 
-architectures. 
+near 100% confidence by the testing phase. However, the attention based 
+pointer layer continues to suffer from reductions in confidence for 
+intermediate output positions during testing. Given the fact that some 
+dominoes can be sorted in either direction, this may indicate a better 
+"understanding" of the task... in the sense that if two dominoes could be 
+sorted in either order, the probability of choosing one of them should never
+be 100%. I haven't tested this yet. 
 
-The standard pointer layer may approach equal levels of confidence if trained
-for longer; however, given the cost of training and the much greater 
-complexity of real-world problems, these new architectures may be beneficial
-for getting the most out of a network with a limited time and money budget. 
+As above, these results suggest a compromise between speed of learning and 
+final test performance, and may motivate using the "dot" based pointer layers
+in contexts where few-shot learning is helpful.
 
 ### Variations in Task: Variable Hand Size
 I also trained the networks on a task where the hand size (number of tokens to
