@@ -208,7 +208,7 @@ def trainTestModel():
             for epoch in tqdm(range(testEpochs)):
                 c_handsize = np.random.randint(minHandSize, maxHandSize+1)
                 testHandSize[epoch] = c_handsize
-                gamma_transform = makeGammaTransform(gamma, c_handsize, batchSize)
+                gamma_transform = makeGammaTransform(gamma, c_handsize)
                 batch = datasets.generateBatch(highestDominoe, fullDominoes, batchSize, c_handsize, **batch_inputs)
         
                 # unpack batch tuple
@@ -258,7 +258,12 @@ def plotResults(results, args):
     cmap = mpl.colormaps['tab10']
     trainInspectFrom = [1500, 2000]
     trainInspect = slice(trainInspectFrom[0], trainInspectFrom[1])
-    smooth_train_trajectory = np.mean(sp.signal.savgol_filter(results['trainReward'].numpy(), 20, 1, axis=0), axis=2)
+    savgol_width = 20 if args.train_epochs > 100 else 2
+    savgol_order = 1
+    smooth_train_trajectory = np.mean(sp.signal.savgol_filter(results['trainReward'].numpy(), 
+                                                              savgol_width, 
+                                                              savgol_order, 
+                                                              axis=0), axis=2)
     
     fig, ax = plt.subplots(1,2,figsize=(7,3.5), width_ratios=[2, 1], layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
