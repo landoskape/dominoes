@@ -106,6 +106,9 @@ Finally, a pointer attention module combines the new context vector with the
 encoded representations to choose one of the inputs as the next output. This 
 is done however many times is requested. 
 
+As is common in the literature, previously chosen inputs are masked so the 
+output is a permutation of the inputs. 
+
 ![pointer decoder](media/schematics/pointerDecoderArchitecture.png)
 
 ### Training

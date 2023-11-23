@@ -40,7 +40,7 @@ for path in (resPath, prmsPath, figsPath, savePath):
         
 # method for returning the name of the saved network parameters (different save for each possible opponent)
 def getFileName(extra=None):
-    baseName = "ptrArchComp_sequencer_SL"
+    baseName = "ptrArchComp_sequencer_RL"
     if extra is not None:
         baseName = baseName + f"_{extra}"
     return baseName
