@@ -298,7 +298,7 @@ def measurePossibleRewards_sequencer(available, hands, choices, value_method='do
         rewards[idx] -= (handsValue * first_invalid_dominoe_play)
         
         # Set rewards for null plays
-        rewards[idx] += (handsValue * valid_null_play)
+        # killing reward for valid nulls --- rewards[idx] += (handsValue * valid_null_play)
         rewards[idx] -= (handsValue * first_invalid_null_play)
 
         # -------- then do accounting for actual choice (which controls game state) -----------
