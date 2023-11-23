@@ -236,20 +236,25 @@ and testing results are here:
 The position dependent confidence results are here:
 ![uneven confidence](media/pointerArchitectureComparison_uneven_confidence.png) 
 
-Networks with new pointer layers still learn the task faster and have higher 
-confidence. However, whereas the multi-context attention networks 
-("PointerAttention" and "PointerTransformer") performed best in the previous
-task, their variance in this task reduces the average test performance. This
-appears to be due to a specific inability to maintain confidence in output 
-for the longest sequences, although 2/5 of the PointerTransformer networks
-have flat position dependent confidence curves (data not shown). 
+The results are largely in agreement with before. The "dot" based pointer 
+layer networks learn the task faster, but have a bit lower test performance, 
+whereas the "attention" and "transformer" based pointer layers learn the task
+at a simpler speed as the standard layer, but have comparable test 
+performance. 
 
 ### Variations in Learning Algorithm: Supervised Learning 
 I also trained these networks on the same task with supervised learning (using
-negative log-likelihood loss). When trained with supervised learning, the 
-network performance is much more similar, with the standard pointer layer 
-doing a bit better than the new networks. Here's the plot of training and 
-testing performance:
+negative log-likelihood loss). The plots are below, but first, a few notes:
+- As described in the [toy problem](pointerDemonstration.md), the target here
+is not well defined since there are some dominoes with the same value that 
+always have to be sorted the same way. That's why the loss is not 0 -- the 
+networks sort the dominoes perfectly in terms of their value, they just 
+haven't learned the specific ordering rule for equal value dominoes yet. 
+- The "PointerDoNoLN" network had an exploding gradient for this task -- (it's
+actually because of the issue with sorting mentioned above!) so I am not 
+showing it's data here. 
+
+Here's the plot of the training and testing performance:
 
 ![sl results](media/sl_pointerArchitectureComparison.png) 
 
@@ -257,10 +262,14 @@ And here's the plot of the position dependent confidence:
 
 ![sl confidence](media/sl_pointerArchitectureComparison_confidence.png). 
 
-These plots indicate that the benefits gleaned from the new pointer layers are
-specific to the reinforcement learning context. However, I'd like to point out
-that the test performance is partly biased by when the loss spikes occur - so
-that needs a bit more analysis and more careful end stopping of the training. 
+As before, the "attention" and "transformer" based pointer layers do well on
+this task, comparable to the standard pointer layer. Although the "dot" based
+pointer layers have a huge and rapid drop in loss at the beginning of 
+training, they start much higher so end up learning the task slower. This 
+suggests that the dot based pointer layers are better when used in 
+reinforcement learning, when the network has to explore to find out how to
+perform. 
+
 
 ### Network Representation of Input
 ~ in progress! ~

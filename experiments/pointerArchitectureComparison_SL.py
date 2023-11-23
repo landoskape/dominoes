@@ -193,7 +193,7 @@ def trainTestModel():
                 # save training data
                 for i, (l, ms) in enumerate(zip(loss, max_score)):
                     testLoss[epoch, i, run] = l.item()
-                    testMaxScore[epoch,:,i, run] = torch.nanmean(ms, dim=0)
+                    testMaxScore[epoch, :, i, run] = torch.nanmean(ms, dim=0)
                     
                     
     results = {
@@ -208,80 +208,90 @@ def trainTestModel():
 
 def plotResults(results, args):
     cmap = mpl.colormaps['tab10']
-    
+
+    numNets = results['trainLoss'].shape[2]
+    numPos = results['testMaxScore'].shape[1]
+    n_string = f" (N={numNets})"
+    trainInspectFrom = [200, 300]
+    trainInspect = slice(trainInspectFrom[0], trainInspectFrom[1])
+
+    # PointerDotNoLN is not well behaved in this training program, haven't figure out why yet    
+    idx_ignore = {val: idx for idx, val in enumerate(POINTER_METHODS)}['PointerDotNoLN']
+
     # make plot of loss trajectory
-    fig, ax = plt.subplots(1,3,figsize=(9,4), width_ratios=[2.6,1,1],layout='constrained')
+    fig, ax = plt.subplots(1,2,figsize=(7,3.5), width_ratios=[2,1],layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
+        if idx == idx_ignore: 
+            # see above
+            continue
         cdata = torch.mean(results['trainLoss'][:, idx], dim=1)
         ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
     ax[0].set_xlabel('Training Epoch')
-    ax[0].set_ylabel('Loss')
+    ax[0].set_ylabel('Mean Loss'+n_string)
     ax[0].set_title('Training Performance')
-    ax[0].set_ylim(0, None)
+    ax[0].set_xlim(-50, 1000)
+    # ax[0].set_ylim(0, None)
     yMin0, yMax0 = ax[0].get_ylim()
-
-    # create inset to show initial train trajectory
-    inset = ax[0].inset_axes([0.05, 0.52, 0.45, 0.4])
-    for idx, name in enumerate(POINTER_METHODS):
-        cdata = torch.mean(results['trainLoss'][:, idx], dim=1)
-        inset.plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
-    inset.set_xlim(-10, 300)
-    inset.set_ylim(0, 3)
-    inset.set_xticks([0, 150, 300])
-    inset.set_xticklabels(inset.get_xticklabels(), fontsize=8)
-    inset.set_yticklabels([])
-    inset.set_title('Initial Epochs', fontsize=10)
     
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
-    minFilt_trainLoss = sp.ndimage.minimum_filter1d(results['trainLoss'].numpy(), size=1500, axis=0)
-    startFrom = 1000
     for idx, name in enumerate(POINTER_METHODS):
-        mnTestReward = np.mean(minFilt_trainLoss[startFrom:,idx])
-        sdTestReward = np.std(minFilt_trainLoss[startFrom:,idx])
-        ax[1].plot(get_x(idx), [mnTestReward, mnTestReward], color=cmap(idx), lw=4, label=name)
-        ax[1].plot([idx,idx], [mnTestReward-sdTestReward, mnTestReward+sdTestReward], color=cmap(idx), lw=1.5)
+        if idx == idx_ignore: 
+            # same as above
+            continue
+        mnTestReward = torch.nanmean(results['testLoss'][:,idx], dim=0)
+        ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
+        for mtr in mnTestReward:
+            ax[1].plot(get_x(idx), [mtr, mtr], color=cmap(idx), lw=1.5)
+        ax[1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
     ax[1].set_xticks(range(len(POINTER_METHODS)))
     ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
-    ax[1].set_ylabel('Loss')
-    ax[1].set_title('Train Perf. (MinimumFilt)')
+    ax[1].set_ylabel('Mean Loss'+n_string)
+    ax[1].set_title('Test Performance')
     ax[1].set_xlim(-1, len(POINTER_METHODS))
-    ax[1].set_ylim(0, 1)
-    ax[1].legend(loc='upper center', fontsize=8)
+    # ax[1].set_ylim(0, None)
 
-    
-    xOffset = [-0.2, 0.2]
-    get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
-    for idx, name in enumerate(POINTER_METHODS):
-        mnTestReward = torch.nanmean(results['testLoss'][:,idx], dim=0)
-        ax[2].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
-        for mtr in mnTestReward:
-            ax[2].plot(get_x(idx), [mtr, mtr], color=cmap(idx), lw=1.5)
-        ax[2].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
-    ax[2].set_xticks(range(len(POINTER_METHODS)))
-    ax[2].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
-    ax[2].set_ylabel('Loss')
-    ax[2].set_title('Test Performance')
-    ax[2].set_xlim(-1, len(POINTER_METHODS))
-    ax[2].set_ylim(0, 1)
+    width = trainInspectFrom[1]-trainInspectFrom[0]
+    height = yMax0 - yMin0
+    rect = mpl.patches.Rectangle([trainInspectFrom[0], yMin0], width, height, facecolor='k', edgecolor='none', alpha=0.2)
+    ax[0].add_patch(rect)
 
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName()))
     
     plt.show()
 
-    # now plot confidence across positions
-    numPos = results['testMaxScore'].size(1)
-    fig, ax = plt.subplots(1, 1, figsize=(4,4), layout='constrained')
+    # now show confidence by position figure
+    fig, ax = plt.subplots(1, 2, figsize=(7, 3.5), layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
-        cdata = torch.mean(torch.exp(results['testMaxScore'][:,:,idx]), dim=(0, 2))
-        ax.plot(range(numPos), cdata, color=cmap(idx), lw=1, marker='o', label=name)
-    ax.set_xlabel('Output Position')
-    ax.set_ylabel('Mean Score')
-    ax.set_title('Confidence')
-    ax.set_ylim(0, None)
-    ax.legend(loc='lower left', fontsize=8)
-
+        if idx == idx_ignore: 
+            # same as above
+            continue
+        mnTrainScore = torch.exp(torch.nanmean(results['trainMaxScore'][trainInspect, :, idx], dim=(0,2)))
+        ax[0].plot(range(numPos), mnTrainScore, color=cmap(idx), lw=1.2, label=name)
+    for idx, name in enumerate(POINTER_METHODS):
+        if idx == idx_ignore: 
+            # same as above
+            continue
+        mnTrainScore = torch.exp(torch.nanmean(results['trainMaxScore'][trainInspect, :, idx], dim=(0,2)))
+        ax[0].scatter(range(numPos), mnTrainScore, color=cmap(idx), marker='o', s=24, edgecolor='none')
+    ax[0].set_ylim(0, 1)
+    ax[0].set_xlabel('Output Position')
+    ax[0].set_ylabel('Mean Score'+n_string)
+    ax[0].set_title(f"Train Confidence (in grey patch)")
+    
+    for idx, name in enumerate(POINTER_METHODS):
+        if idx == idx_ignore: 
+            # same as above
+            continue
+        mnTestScore = torch.exp(torch.nanmean(results['testMaxScore'][:, :, idx], dim=(0,2)))
+        ax[1].plot(range(numPos), mnTestScore, color=cmap(idx), lw=1.2, marker='o', markersize=np.sqrt(24), label=name)
+    ax[1].set_xlabel('Output Position')
+    ax[1].set_ylabel('Mean Score'+n_string)
+    ax[1].set_title('Test Confidence')
+    ax[1].legend(loc='lower right', fontsize=9)
+    ax[1].set_ylim(0, 1)
+    
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName(extra='confidence')))
         
