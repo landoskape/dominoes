@@ -101,7 +101,7 @@ representation of whatever token was chosen.
 
 Let $e = \text{encoded}$, $c = \text{context}$, and $o = \text{output}$.
 
-### Standard Pointer Layer -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L368)
+### Standard Pointer Layer -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L436)
 The standard pointer layer projects the `encoded` and `context` tensors to a
 new space, adds them together (with broadcasting), then projects them onto an
 "attention" vector after passing them through a hyperbolic tangent 
@@ -109,7 +109,7 @@ nonlinearity.
 
 $$\large u_i = v^T \tanh (W_1 e_i + W_2 c)$$
 
-### Pointer "Dot" Layer -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L404)
+### Pointer "Dot" Layer -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L459)
 The pointer dot layer also projects the `encoded` and `context` tensors to a 
 new space, but then takes the dot product between each projected `encoded` 
 vector and the projected `context` vector. This skips the tanh and projection
@@ -118,7 +118,7 @@ onto $v^T$. Because the nonlinearity is dropped, a `LayerNorm` is used on the
 
 $$\large u_i = LN(W_1 e_i) \cdot LN(W_2 c) $$
 
-### Pointer "Dot" Variant 1: Pointer Dot Lean -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L480)
+### Pointer "Dot" Variant 1: Pointer Dot Lean -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L511)
 One variant of the pointer dot layer is called pointer dot lean. It is 
 identical to the above pointer dot layer except it drops the $W_1$ and $W_2$
 matrices. This essentially requires the encoder phase of the pointer network
@@ -127,17 +127,17 @@ can be effectively "pointed" to by the `context` vector.
 
 $$\large u_i = LN(e_i) \cdot LN(c) $$
 
-### Pointer "Dot" Variant 2: Pointer Do No Layer Norm -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L443)
+### Pointer "Dot" Variant 2: Pointer Do No Layer Norm -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L484)
 The other variant is identical to the main pointer dot layer, but doesn't use
 a layer norm. This is a bit noisy, but learns very fast, as you'll see in the
 results. 
 
 $$\large u_i = (W_1 e_i) \cdot (W_2 c) $$
 
-### Pointer "Attention" Layer -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L517)
+### Pointer "Attention" Layer -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L534)
 The pointer attention layer uses a variant of self-attention that I call
 "multi context attention" 
-([code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L240)). 
+([code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L310)). 
 This projects "main" inputs to queries, keys, and values using one set of 
 matrices. It also projects "context" inputs to keys and values using a 
 different set of matrices. Then, the main inputs are "attended to" using all
@@ -149,7 +149,7 @@ representation. This leads to a new attended representation of the `encoded`
 tokens, which is passed through a hyperbolic tangent and projected onto an 
 "attention" vector $v^T$ just like in the standard pointer layer. 
 
-### Pointer "Transformer" Layer -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L549)
+### Pointer "Transformer" Layer -- [code](https://github.com/landoskape/dominoes/blob/main/dominoes/transformers.py#L553)
 The pointer transformer layer is almost identical to the pointer attention
 layer, except it uses multi context attention followed by the standard double
 feedforward layer used in transformers. 
