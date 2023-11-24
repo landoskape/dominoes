@@ -58,7 +58,6 @@ def handleArguments():
     parser.add_argument('--heads', type=int, default=8, help='the number of heads in transformer layers')
     parser.add_argument('--expansion', type=int, default=2, help='the expansion at the MLP part of the transformer')
     parser.add_argument('--encoding-layers', type=int, default=2, help='the number of stacked transformers in the encoder')
-    parser.add_argument('--greedy', default=False, action='store_true', help='if used, will generate greedy predictions of each step rather than probability-weighted predictions')
     parser.add_argument('--justplot', default=False, action='store_true', help='if used, will only plot the saved results (results have to already have been run and saved)')
     parser.add_argument('--nosave', default=False, action='store_true')
     
@@ -88,7 +87,6 @@ def trainTestModel():
     heads = args.heads
     encoding_layers = args.encoding_layers
     contextual_encoder = True # don't transform the available token
-    greedy = args.greedy
     
     # train parameters
     trainEpochs = args.train_epochs
@@ -107,7 +105,7 @@ def trainTestModel():
         nets = [transformers.PointerNetwork(input_dim, embedding_dim, pointer_method=POINTER_METHOD, 
                                             contextual_encoder=contextual_encoder, thompson=False, 
                                             encoding_layers=encoding_layers, heads=heads, kqnorm=True, 
-                                            decoder_method='transformer', greedy=greedy)
+                                            decoder_method='transformer')
                 for POINTER_METHOD in POINTER_METHODS]
         nets = [net.to(device) for net in nets]
 
@@ -117,10 +115,10 @@ def trainTestModel():
         for epoch in tqdm(range(trainEpochs)):
             # generate input batch
             batch = datasets.generateBatch(highestDominoe, listDominoes, batchSize, handSize, return_target=True, null_token=null_token,
-                                        available_token=available_token, ignore_index=ignore_index, return_full=True)
+                                           available_token=available_token, ignore_index=ignore_index, return_full=True)
 
             # unpack batch tuple
-            input, target, _, _, _, selection, available = batch
+            input, target, _, _, _, _, _ = batch
 
             # move to correct device
             input, target = input.to(device), target.to(device)
@@ -131,7 +129,7 @@ def trainTestModel():
             
             # zero gradients, get output of network
             for opt in optimizers: opt.zero_grad()
-            log_scores, choices = map(list, zip(*[net(input, max_output=num_output) for net in nets]))
+            log_scores, _ = map(list, zip(*[net(input, max_output=num_output) for net in nets]))
 
             # measure loss with negative log-likelihood
             unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]
@@ -157,7 +155,7 @@ def trainTestModel():
                                             available_token=available_token, ignore_index=ignore_index, return_full=True)
 
                 # unpack batch tuple
-                input, target, _, _, _, selection, available = batch
+                input, target, _, _, _, _, _ = batch
 
                 # move to correct device
                 input, target = input.to(device), target.to(device)
@@ -177,7 +175,6 @@ def trainTestModel():
                 for i, l in enumerate(loss):
                     testLoss[epoch, i, run] = l.item()
                 
-                    
     results = {
         'trainLoss': trainLoss,
         'testLoss': testLoss,

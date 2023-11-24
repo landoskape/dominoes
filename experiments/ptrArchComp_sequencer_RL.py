@@ -84,6 +84,7 @@ def trainTestModel():
     handSize = args.hand_size
     batchSize = args.batch_size
     null_token = True # using a null token to indicate end of line
+    null_index = copy(handSize) # index of null token
     available_token = True # using available token to indicate which value to start on 
     ignore_index = -1
     value_method = '1' # method for generating rewards in reward function
@@ -114,8 +115,11 @@ def trainTestModel():
     numNets = len(POINTER_METHODS)
     
     print(f"Doing training...")
+    trainNumOutput = torch.zeros((trainEpochs,))
     trainReward = torch.zeros((trainEpochs, numNets, numRuns))
     testReward = torch.zeros((testEpochs, numNets, numRuns))
+    testFullReward = torch.zeros((testEpochs, numNets, numRuns, batchSize, max(num_output)))
+    testFirstNull = -torch.ones((testEpochs, numNets, numRuns, batchSize), dtype=torch.long)
     for run in range(numRuns):
         print(f"Training round of networks {run+1}/{numRuns}...")
         
@@ -168,7 +172,10 @@ def trainTestModel():
             # save training data
             for i, reward in enumerate(rewards):
                 trainReward[epoch, i, run] = torch.mean(torch.sum(reward, dim=1))
-                    
+            
+            # Document how long the maximum output sequence was
+            if run==0:
+                trainNumOutput[epoch] = c_output
         
         with torch.no_grad():
             print('Testing network...')
@@ -198,12 +205,21 @@ def trainTestModel():
                         for choice in choices]
                 
                 # save testing data
-                for i, reward in enumerate(rewards):
+                for i, (reward, choice) in enumerate(zip(rewards, choices)):
                     testReward[epoch, i, run] = torch.mean(torch.sum(reward, dim=1))
+                    testFullReward[epoch, i, run] = reward
+
+                    null_choice = choice==null_index
+                    has_null = torch.any(null_choice, dim=1)
+                    idx_null_choice = torch.arange(choice.size(1), 0, -1).to(device).view(1,-1) * null_choice
+                    idx_first_null = torch.argmax(idx_null_choice, 1, keepdim=False)
+                    testFirstNull[epoch, i, run][has_null] = idx_first_null[has_null].cpu()
            
     results = {
         'trainReward': trainReward,
         'testReward': testReward,
+        'testFullReward': testFullReward,
+        'testFirstNull': testFirstNull,
     }
     
     return results, nets
