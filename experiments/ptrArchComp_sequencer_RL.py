@@ -50,9 +50,9 @@ def handleArguments():
     parser.add_argument('-hd','--highest-dominoe', type=int, default=9, help='the highest dominoe in the board')
     parser.add_argument('-hs','--hand-size', type=int, default=12, help='the maximum tokens per sequence')
     parser.add_argument('-bs','--batch-size',type=int, default=128, help='number of sequences per batch')
-    parser.add_argument('-ne','--train-epochs',type=int, default=12000, help='the number of training epochs')
-    parser.add_argument('-te','--test-epochs',type=int, default=1000, help='the number of testing epochs')
-    parser.add_argument('-nr','--num-runs',type=int, default=8, help='how many runs for each network to train')
+    parser.add_argument('-ne','--train-epochs',type=int, default=10000, help='the number of training epochs')
+    parser.add_argument('-te','--test-epochs',type=int, default=100, help='the number of testing epochs')
+    parser.add_argument('-nr','--num-runs',type=int, default=5, help='how many runs for each network to train')
     parser.add_argument('--gamma', type=float, default=0.9, help='discounting factor')
     parser.add_argument('--temperature',type=float, default=5.0, help='temperature for training')
     
@@ -103,7 +103,7 @@ def trainTestModel():
     embedding_dim = args.embedding_dim
     heads = args.heads
     encoding_layers = args.encoding_layers
-    contextual_encoder = True # don't transform the available token
+    contextual_encoder = True # don't transform the "available" token
     gamma = args.gamma
     
     # train parameters
@@ -174,7 +174,7 @@ def trainTestModel():
             print('Testing network...')
             for net in nets:
                 net.setTemperature(1.0)
-                net.setThompson(1.0)
+                net.setThompson(False)
 
             for epoch in tqdm(range(testEpochs)):
                 # generate input batch
@@ -199,9 +199,8 @@ def trainTestModel():
                 
                 # save testing data
                 for i, reward in enumerate(rewards):
-                    trainReward[epoch, i, run] = torch.mean(torch.sum(reward, dim=1))
-                
-                    
+                    testReward[epoch, i, run] = torch.mean(torch.sum(reward, dim=1))
+           
     results = {
         'trainReward': trainReward,
         'testReward': testReward,
@@ -217,12 +216,14 @@ def plotResults(results, args):
     fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
         cdata = sp.ndimage.median_filter(torch.mean(results['trainReward'][:,idx], dim=1), size=(100,))
+        #adata = sp.ndimage.median_filter(results['trainReward'][:,idx], size=(100,1))
         ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
+        #ax[0].plot(range(args.train_epochs), adata, color=cmap(idx), lw=0.4, label=name)
     ax[0].set_xlabel('Training Epoch')
     ax[0].set_ylabel(f'Reward N={numRuns}')
     ax[0].set_title('Training Performance')
     # ax[0].set_ylim(0, None)
-    ax[0].legend(loc='best')
+    # ax[0].legend(loc='best')
     yMin0, yMax0 = ax[0].get_ylim()
     
     xOffset = [-0.2, 0.2]
