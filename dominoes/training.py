@@ -346,7 +346,7 @@ def measurePossibleRewards_sequencer(available, hands, choices, value_method='do
 
 
 @torch.no_grad()
-def measureReward_tsp(dists, choices, start):
+def measureReward_tsp(dists, choices, start, use_new_city=False):
     """reward function for measuring tsp performance from starting city"""
     assert start.ndim==1, "start should be a 1-d tensor of the starting index"
     assert choices.ndim==2, "choices should be a 2-d tensor of the sequence of choices for each batch element"
@@ -358,7 +358,8 @@ def measureReward_tsp(dists, choices, start):
     assert torch.all((0<=start) & (start<numCities)), "start index should be in [0, numcities)"
     device = transformers.get_device(choices)
     distance = torch.zeros((batchSize, numChoices)).to(device)
-    new_city = torch.ones((batchSize, numChoices)).to(device)
+    if use_new_city:
+        new_city = torch.ones((batchSize, numChoices)).to(device)
 
     last_location = start
     src = torch.ones((batchSize,1), dtype=torch.bool).to(device)
@@ -367,12 +368,17 @@ def measureReward_tsp(dists, choices, start):
         next_location = choices[:, nc]
         c_dist_possible = torch.gather(dists, 1, last_location.view(batchSize, 1, 1).expand(-1, -1, numCities)).squeeze(1)
         distance[:, nc] = torch.gather(c_dist_possible, 1, next_location.view(batchSize, 1)).squeeze(1)
-        c_visited = torch.gather(visited, 1, next_location.view(batchSize, 1)).squeeze(1)
-        visited.scatter_(1, next_location.view(batchSize, 1), src)
-        new_city[c_visited, nc] = -1.0
-        new_city[~c_visited, nc] = 1.0
+        if use_new_city:
+            c_visited = torch.gather(visited, 1, next_location.view(batchSize, 1)).squeeze(1)
+            visited.scatter_(1, next_location.view(batchSize, 1), src)
+            new_city[c_visited, nc] = -1.0
+            new_city[~c_visited, nc] = 1.0
         last_location = copy(next_location) # update last location
-    return new_city, distance
+        
+    if use_new_city:
+        return distance, new_city
+    else:
+        return distance
         
         
 
