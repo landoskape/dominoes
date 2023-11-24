@@ -51,12 +51,13 @@ def handleArguments():
     parser.add_argument('-nc','--num-cities', type=int, default=10, help='the number of cities')
     parser.add_argument('-bs','--batch-size',type=int, default=128, help='number of sequences per batch')
     parser.add_argument('-ne','--train-epochs',type=int, default=12000, help='the number of training epochs')
-    parser.add_argument('-te','--test-epochs',type=int, default=200, help='the number of testing epochs')
+    parser.add_argument('-te','--test-epochs',type=int, default=100, help='the number of testing epochs')
     parser.add_argument('-nr','--num-runs',type=int, default=8, help='how many runs for each network to train')
 
-    parser.add_argument('--embedding_dim', type=int, default=96, help='the dimensions of the embedding')
-    parser.add_argument('--heads', type=int, default=4, help='the number of heads in transformer layers')
-    parser.add_argument('--encoding-layers', type=int, default=1, help='the number of stacked transformers in the encoder')
+    parser.add_argument('--embedding_dim', type=int, default=128, help='the dimensions of the embedding')
+    parser.add_argument('--heads', type=int, default=8, help='the number of heads in transformer layers')
+    parser.add_argument('--expansion', type=int, default=4, help='expansion to use in the ff layer of transformers')
+    parser.add_argument('--encoding-layers', type=int, default=2, help='the number of stacked transformers in the encoder')
     parser.add_argument('--justplot', default=False, action='store_true', help='if used, will only plot the saved results (results have to already have been run and saved)')
     parser.add_argument('--nosave', default=False, action='store_true')
     
@@ -84,13 +85,14 @@ def trainTestModel():
     
     # Make decision and tell user about it
     threads = 12 if time_parallel < time_noparallel else 1
-    print(f"Time checks: parallel={time_parallel:.3f}, noParallel={time_noparallel:.3f}, using threads={threads}")
+    print(f"Time checks for batched held-karp: parallel={time_parallel:.3f}, noParallel={time_noparallel:.3f}, using threads={threads}")
     
     # network parameters
     input_dim = 2
     embedding_dim = args.embedding_dim
     heads = args.heads
     encoding_layers = args.encoding_layers
+    expansion = args.expansion
     temperature = 1.0
     
     # train parameters
@@ -118,7 +120,7 @@ def trainTestModel():
         # create pointer networks with different pointer methods
         nets = [transformers.PointerNetwork(input_dim, embedding_dim, temperature=temperature, pointer_method=POINTER_METHOD, 
                                             thompson=False, encoding_layers=encoding_layers, heads=heads, kqnorm=True, 
-                                            decoder_method='transformer')
+                                            expansion=expansion, decoder_method='transformer')
                 for POINTER_METHOD in POINTER_METHODS]
         nets = [net.to(device) for net in nets]
 
@@ -152,8 +154,7 @@ def trainTestModel():
             with torch.no_grad():
                 # get distance traveled
                 start = target[:, -1] # get "start" city, closest to origin (set this way by tsp_batch)
-                tour_complete, tour_distance = map(list, zip(*[training.measureReward_tsp(dists, choice, start) for choice in choices]))
-                tour_complete = [torch.all(tc==1, dim=1) for tc in tour_complete]
+                tour_distance = [training.measureReward_tsp(dists, choice, start) for choice in choices]
                 tour_distance = [torch.sum(td, dim=1) for td in tour_distance]
                 
                 # start by getting score for target at each position 
@@ -164,12 +165,8 @@ def trainTestModel():
                 pos_error = [ms - ts for ms, ts in zip(max_score, target_score)] # high if the chosen score is much bigger than the target score
                     
                 # add to accounting
-                for i, (td, tc, pe, ms) in enumerate(zip(tour_distance, tour_complete, pos_error, max_score)):
-                    trainTourLength[epoch, i, run] = torch.mean(td)
-                    trainTourComplete[epoch, i, run] = torch.mean(1.0*tc)
-                    t_check = torch.cat((td[tc], torch.tensor(torch.nan).view(1).to(device)))
-                    trainTourValidLength[epoch, i, run] = torch.nanmean(t_check)
-                
+                for i, (td, pe, ms) in enumerate(zip(tour_distance, pos_error, max_score)):
+                    trainTourLength[epoch, i, run] = torch.mean(td)                
                     trainPositionError[epoch, :, i, run] = torch.nansum(pe, dim=0)
                     trainMaxScore[epoch, :, i, run] = torch.nanmean(ms, dim=0)
                     
@@ -191,20 +188,16 @@ def trainTestModel():
 
                 # get distance traveled
                 start = target[:, -1] # get start city (the one closest to origin)
-                tour_complete, tour_distance = map(list, zip(*[training.measureReward_tsp(dists, choice, start) for choice in choices]))
-                tour_complete = [torch.all(tc==1, dim=1) for tc in tour_complete]
+                tour_distance = [training.measureReward_tsp(dists, choice, start) for choice in choices]
                 tour_distance = [torch.sum(td, dim=1) for td in tour_distance]
                 
                 # get max score 
                 max_score = [torch.max(unroll, dim=1)[0].view(batchSize, num_in_cycle) for unroll in unrolled]
 
                 # save training data
-                for i, (l, td, tc, ms) in enumerate(zip(loss, tour_distance, tour_complete, max_score)):
+                for i, (l, td, ms) in enumerate(zip(loss, tour_distance, max_score)):
                     testLoss[epoch, i, run] = l.item()
                     testTourLength[epoch, i, run] = torch.mean(td)
-                    testTourComplete[epoch, i, run] = torch.mean(1.0*tc)
-                    t_check = torch.cat((td[tc], torch.tensor(torch.nan).view(1).to(device)))
-                    testTourValidLength[epoch, i, run] = torch.nanmean(t_check)
                     testMaxScore[epoch, :, i, run] = torch.nanmean(ms, dim=0)
                 
                     
@@ -213,10 +206,6 @@ def trainTestModel():
         'testLoss': testLoss,
         'trainTourLength': trainTourLength,
         'testTourLength': testTourLength,
-        'trainTourComplete': trainTourComplete,
-        'testTourComplete': testTourComplete,
-        'trainTourValidLength': trainTourValidLength,
-        'testTourValidLength': testTourValidLength,
         'trainPositionError': trainPositionError,
         'trainMaxScore': trainMaxScore,
         'testMaxScore': testMaxScore,
@@ -259,45 +248,14 @@ def plotResults(results, args):
     
     plt.show()
 
-    # make plot of fraction complete tours
-    fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
-    for idx, name in enumerate(POINTER_METHODS):
-        cdata = sp.ndimage.median_filter(torch.mean(results['trainTourComplete'][:,idx], dim=1), size=(100,))
-        ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
-    ax[0].set_xlabel('Training Epoch')
-    ax[0].set_ylabel(f'fraction N={numRuns}')
-    ax[0].set_title('Complete Tours - Training')
-    ax[0].set_ylim(0, 1)
-    ax[0].legend(loc='best')
-    yMin0, yMax0 = ax[0].get_ylim()
-    
-    xOffset = [-0.2, 0.2]
-    get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
-    for idx, name in enumerate(POINTER_METHODS):
-        mnTestComplete = torch.mean(results['testTourComplete'][:,idx], dim=0)
-        ax[1].plot(get_x(idx), [mnTestComplete.mean(), mnTestComplete.mean()], color=cmap(idx), lw=4, label=name)
-        for mtc in mnTestComplete:
-            ax[1].plot(get_x(idx), [mtc, mtc], color=cmap(idx), lw=1.5)
-        ax[1].plot([idx,idx], [mnTestComplete.min(), mnTestComplete.max()], color=cmap(idx), lw=1.5)
-    ax[1].set_xticks(range(len(POINTER_METHODS)))
-    ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
-    ax[1].set_ylabel(f'fraction N={numRuns}')
-    ax[1].set_title('Testing')
-    ax[1].set_xlim(-1, len(POINTER_METHODS))
-    ax[1].set_ylim(0, 1)
-
-    if not(args.nosave):
-        plt.savefig(str(figsPath/getFileName('completedTours')))
-    
-    plt.show()
 
     # make plot of tour length for valid tours
     fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
-        cdata = torch.nanmean(results['trainTourValidLength'][:,idx], dim=1)
+        cdata = torch.nanmean(results['trainTourLength'][:,idx], dim=1)
         idx_nan = torch.isnan(cdata)
         cdata.masked_fill_(idx_nan, 0)
-        cdata = sp.signal.savgol_filter(cdata, 50, 1)
+        cdata = sp.signal.savgol_filter(cdata, 2, 1)
         cdata[idx_nan] = torch.nan
         ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
     ax[0].set_xlabel('Training Epoch')
@@ -309,7 +267,7 @@ def plotResults(results, args):
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
     for idx, name in enumerate(POINTER_METHODS):
-        mnTestReward = torch.nanmean(results['testTourValidLength'][:,idx], dim=0)
+        mnTestReward = torch.nanmean(results['testTourLength'][:,idx], dim=0)
         ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
         for mtr in mnTestReward:
             ax[1].plot(get_x(idx), [mtr, mtr], color=cmap(idx), lw=1.5)
@@ -321,7 +279,7 @@ def plotResults(results, args):
     ax[1].set_xlim(-1, len(POINTER_METHODS))
 
     if not(args.nosave):
-        plt.savefig(str(figsPath/getFileName('tourValidLength')))
+        plt.savefig(str(figsPath/getFileName('tourLength')))
     
     plt.show()
 
