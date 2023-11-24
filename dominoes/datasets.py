@@ -25,7 +25,11 @@ def randomDominoeHand(numInHand, listDominoes, highestDominoe, batch_size=1, nul
                          for sel,ava in zip(selection, available)])
     return input, selection, available
     
-def getBestLine(dominoes, selection, highestDominoe):
+def getBestLine(dominoes, selection, highestDominoe, value_method="dominoe"):
+    # check value method
+    if not (value_method=='dominoe' or value_method=='length'):
+        raise ValueError("did not recognize value_method, it has to be either 'dominoe' or 'length'")
+    
     bestSequence = []
     bestDirection = []
     for sel in selection:
@@ -34,7 +38,10 @@ def getBestLine(dominoes, selection, highestDominoe):
         cBestVal = []
         for available in range(highestDominoe+1):
             cseq, cdir = df.constructLineRecursive(dominoes, sel, available)
-            cval = [np.sum(dominoes[cs]) for cs in cseq]
+            if value_method == 'dominoe':
+                cval = [np.sum(dominoes[cs]) for cs in cseq]
+            else:
+                cval = [len(cs) for cs in cseq]
             cidx = max(enumerate(cval), key=lambda x: x[1])[0]
             cBestSeq.append(cseq[cidx])
             cBestDir.append(cdir[cidx])
@@ -46,12 +53,19 @@ def getBestLine(dominoes, selection, highestDominoe):
 
     return bestSequence, bestDirection
 
-def getBestLineFromAvailable(dominoes, selection, highestDominoe, available):
+def getBestLineFromAvailable(dominoes, selection, available, value_method="dominoe"):
+    # check value method
+    if not (value_method=='dominoe' or value_method=='length'):
+        raise ValueError("did not recognize value_method, it has to be either 'dominoe' or 'length'")
+    
     bestSequence = []
     bestDirection = []
     for sel, ava in zip(selection, available):
         cseq, cdir = df.constructLineRecursive(dominoes, sel, ava)
-        cval = [np.sum(dominoes[cs]) for cs in cseq]
+        if value_method == 'dominoe':
+            cval = [np.sum(dominoes[cs]) for cs in cseq]
+        else:
+            cval = [len(cs) for cs in cseq]
         cidx = max(enumerate(cval), key=lambda x: x[1])[0]
         bestSequence.append(cseq[cidx])
         bestDirection.append(cdir[cidx])
@@ -74,8 +88,9 @@ def padBestLine(bestSequence, max_output, null_index, ignore_index=-1):
         # bs += [ignore_index]*(max_output-len(bs))
     return bestSequence
 
-def generateBatch(highestDominoe, dominoes, batch_size, numInHand, return_target=True,
+def generateBatch(highestDominoe, dominoes, batch_size, numInHand, return_target=True, value_method="dominoe",
                   available_token=False, null_token=False, ignore_index=-1, return_full=False):
+    
     input, selection, available = randomDominoeHand(numInHand, dominoes, highestDominoe, batch_size=batch_size, null_token=null_token, available_token=available_token)
 
     mask_tokens = numInHand + (1 if null_token else 0) + (1 if available_token else 0)
@@ -84,9 +99,9 @@ def generateBatch(highestDominoe, dominoes, batch_size, numInHand, return_target
     if return_target:
         # then measure best line and convert it to a "target" array
         if available_token:
-            bestSequence, bestDirection = getBestLineFromAvailable(dominoes, selection, highestDominoe, available)
+            bestSequence, bestDirection = getBestLineFromAvailable(dominoes, selection, available, value_method=value_method)
         else:
-            bestSequence, bestDirection = getBestLine(dominoes, selection, highestDominoe)
+            bestSequence, bestDirection = getBestLine(dominoes, selection, highestDominoe, value_method=value_method)
 
         # convert sequence to hand index
         iseq = convertToHandIndex(selection, bestSequence)

@@ -118,8 +118,8 @@ def trainTestModel():
     trainNumOutput = torch.zeros((trainEpochs,))
     trainReward = torch.zeros((trainEpochs, numNets, numRuns))
     testReward = torch.zeros((testEpochs, numNets, numRuns))
-    testFullReward = torch.zeros((testEpochs, numNets, numRuns, batchSize, max(num_output)))
-    testFirstNull = -torch.ones((testEpochs, numNets, numRuns, batchSize), dtype=torch.long)
+    testEachReward = torch.zeros((testEpochs, numNets, numRuns, batchSize))
+    testMaxReward = torch.zeros((testEpochs, numRuns, batchSize))
     for run in range(numRuns):
         print(f"Training round of networks {run+1}/{numRuns}...")
         
@@ -183,16 +183,22 @@ def trainTestModel():
                 net.setTemperature(1.0)
                 net.setThompson(False)
 
+            c_output = num_output[-1]
+            gamma_transform = get_gamma_transform(gamma, c_output).to(device)
+
             for epoch in tqdm(range(testEpochs)):
                 # generate input batch
-                batch = datasets.generateBatch(highestDominoe, listDominoes, batchSize, handSize, return_target=False, null_token=null_token,
-                                            available_token=available_token, ignore_index=ignore_index, return_full=True)
+                batch = datasets.generateBatch(highestDominoe, listDominoes, batchSize, handSize, return_target=True, null_token=null_token,
+                                            available_token=available_token, ignore_index=ignore_index, return_full=True, value_method='length')
 
                 # unpack batch tuple
-                input, _, _, _, _, selection, available = batch
+                input, target, _, _, _, selection, available = batch
+                assert torch.all(torch.sum(target==null_index, dim=1)==1), "null index is present more or less than once in at least one target"
 
                 # move to correct device
-                input = input.to(device)
+                input, target = input.to(device), target.to(device)
+                target = target[:, :c_output].contiguous()
+                target[target==ignore_index]=null_index # need to convert this to a valid index for measuring reward of target
 
                 # divide input into main input and context
                 x, context = input[:, :-1].contiguous(), input[:, [-1]] # input [:, [-1]] is context token
@@ -205,61 +211,116 @@ def trainTestModel():
                         for choice in choices]
                 
                 # save testing data
-                for i, (reward, choice) in enumerate(zip(rewards, choices)):
+                for i, reward in enumerate(rewards):
                     testReward[epoch, i, run] = torch.mean(torch.sum(reward, dim=1))
-                    testFullReward[epoch, i, run] = reward
+                    testEachReward[epoch, i, run] = torch.sum(reward, dim=1)
 
-                    null_choice = choice==null_index
-                    has_null = torch.any(null_choice, dim=1)
-                    idx_null_choice = torch.arange(choice.size(1), 0, -1).to(device).view(1,-1) * null_choice
-                    idx_first_null = torch.argmax(idx_null_choice, 1, keepdim=False)
-                    testFirstNull[epoch, i, run][has_null] = idx_first_null[has_null].cpu()
+                # measure rewards for target (defined as longest possible sequence of the dominoes in the batch
+                target_reward = training.measureReward_sequencer(available, listDominoes[selection], target, value_method=value_method, normalize=False)
+                testMaxReward[epoch, run] = torch.sum(target_reward, dim=1)
+                    
            
     results = {
         'trainReward': trainReward,
         'testReward': testReward,
-        'testFullReward': testFullReward,
-        'testFirstNull': testFirstNull,
+        'testEachReward': testEachReward,
+        'testMaxReward': testMaxReward,
     }
     
     return results, nets
 
 def plotResults(results, args):
+    from matplotlib.gridspec import GridSpec
+
     numRuns = args.num_runs
     cmap = mpl.colormaps['tab10']
     
+    if 'trainNumOutput' not in results:
+        num_output = np.linspace(2, copy(args.hand_size), 4).astype(int)
+        get_output = lambda epoch: num_output[int(len(num_output) * epoch // args.train_epochs)] # this is an inline method for retrieving the number of outputs
+        results['trainNumOutput'] = np.array([get_output(epoch) for epoch in range(args.train_epochs)])
+
+    # Process test results in comparison to maximum possible
+    minMaxReward = torch.min(results['testMaxReward'])
+    maxMaxReward = torch.max(results['testMaxReward'])
+    uniqueRewards = torch.arange(minMaxReward, maxMaxReward+1)
+    numUnique = len(uniqueRewards)
+    rewPerMax = torch.zeros((len(POINTER_METHODS), numUnique, numRuns))
+    for iur, ur in enumerate(uniqueRewards):
+        idx_ur = results['testMaxReward']==ur
+        for ii, name in enumerate(POINTER_METHODS):
+            for ir in range(numRuns):
+                rewPerMax[ii, iur, ir] = torch.mean(results['testEachReward'][:, ii, ir][idx_ur[:,ir,:]])
+                
+
+    fig = plt.figure(figsize=(8, 5), layout="constrained")
+
+    gs = GridSpec(3, 3, figure=fig)
+    axTrain = fig.add_subplot(gs[:-1, :-1])
+    axNumOut = fig.add_subplot(gs[-1, :-1])
+    axTest = fig.add_subplot(gs[:, -1])
+
     # make plot of loss trajectory
-    fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
+    #fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6, 1],layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
-        cdata = sp.ndimage.median_filter(torch.mean(results['trainReward'][:,idx], dim=1), size=(100,))
-        #adata = sp.ndimage.median_filter(results['trainReward'][:,idx], size=(100,1))
-        ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
-        #ax[0].plot(range(args.train_epochs), adata, color=cmap(idx), lw=0.4, label=name)
-    ax[0].set_xlabel('Training Epoch')
-    ax[0].set_ylabel(f'Reward N={numRuns}')
-    ax[0].set_title('Training Performance')
-    # ax[0].set_ylim(0, None)
-    # ax[0].legend(loc='best')
-    yMin0, yMax0 = ax[0].get_ylim()
-    
+        adata = sp.ndimage.median_filter(results['trainReward'][:,idx], size=(10,1))
+        cdata = np.mean(adata, axis=1)
+        sdata = np.std(adata, axis=1)
+        axTrain.plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
+        axTrain.fill_between(range(args.train_epochs), cdata+sdata/2, cdata-sdata/2, edgecolor='none', facecolor=(cmap(idx), 0.3))
+    axTrain.set_ylabel(f'Total Reward (N={numRuns})')
+    axTrain.set_title('Training Performance')
+    axTrain.legend(loc='upper left', fontsize=8)
+    axTrain.set_xticks([0, 2500, 5000, 7500, 10000])
+
+    axNumOut.plot(range(args.train_epochs), results['trainNumOutput'], color='k', linewidth=1.2) 
+    axNumOut.set_xlabel('Training Epoch')
+    axNumOut.set_ylabel('Outputs')
+    axNumOut.set_title('Num Outputs in Sequence')
+    axNumOut.set_ylim(0, np.max(results['trainNumOutput'])+np.min(results['trainNumOutput']))
+    axNumOut.set_xticks([0, 2500, 5000, 7500, 10000])
+
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
     for idx, name in enumerate(POINTER_METHODS):
         mnTestReward = torch.mean(results['testReward'][:,idx], dim=0)
-        ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
+        axTest.plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
         for mtr in mnTestReward:
-            ax[1].plot(get_x(idx), [mtr, mtr], color=cmap(idx), lw=1.5)
-        ax[1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
-    ax[1].set_xticks(range(len(POINTER_METHODS)))
-    ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
-    ax[1].set_ylabel(f'Reward N={numRuns}')
-    ax[1].set_title('Testing')
-    ax[1].set_xlim(-1, len(POINTER_METHODS))
-
+            axTest.plot(get_x(idx), [mtr, mtr], color=cmap(idx), lw=1.5)
+        axTest.plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
+    axTest.set_xticks(range(len(POINTER_METHODS)))
+    axTest.set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
+    axTest.set_ylabel(f'Reward (N={numRuns})')
+    axTest.set_title('Testing')
+    axTest.set_xlim(-1, len(POINTER_METHODS))
+    axTest.set_ylim(0, 7)
+    
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName()))
     
     plt.show()
+
+    # Plot rewards in comparison to maximum possible for each network type
+    fig, ax = plt.subplots(1, 1, figsize=(6, 4), layout='constrained')
+    for idx, name in enumerate(POINTER_METHODS):
+        adata = rewPerMax[idx]
+        cdata = torch.mean(adata, dim=1)
+        sdata = torch.std(adata, dim=1)
+        ax.plot(uniqueRewards, cdata, color=cmap(idx), lw=1.2, marker='o', markersize=4, label=name)
+        ax.fill_between(uniqueRewards, cdata+sdata/2, cdata-sdata/2,  edgecolor='none', facecolor=(cmap(idx), 0.3))
+    ax.plot(uniqueRewards, uniqueRewards, color='k', lw=1.2, linestyle='--', label='max possible')
+    ax.set_ylim(0, max(uniqueRewards)+1)
+    ax.set_xticks(uniqueRewards)
+    ax.set_xlabel('Maximum Possible Reward')
+    ax.set_ylabel('Actual Reward Acquired')
+    ax.legend(loc='upper left', fontsize=10)
+    
+
+    if not(args.nosave):
+        plt.savefig(str(figsPath/getFileName('maxRewardDifferential')))
+    
+    plt.show()
+
 
     
 if __name__=='__main__':
