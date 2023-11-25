@@ -110,12 +110,21 @@ def trainTestModel():
     # Train network
     print("Training network...")
     trainLoss = torch.zeros(trainEpochs)
+    trainDescending = torch.zeros(trainEpochs)
     trainPositionError = torch.full((trainEpochs, maxSeqLength), torch.nan) # keep track of where there was error
     trainMaxScore = torch.full((trainEpochs, maxSeqLength), torch.nan) # keep track of confidence of model
     for epoch in tqdm(range(trainEpochs)):
         # generate batch
-        input, target, mask = df.dominoeUnevenBatch(batchSize, minSeqLength, maxSeqLength, keepDominoes, keepValue, highestDominoe, ignoreIndex=ignoreIndex)
+        batch = df.dominoeUnevenBatch(batchSize, minSeqLength, maxSeqLength, keepDominoes, keepValue, 
+                                        highestDominoe, ignoreIndex=ignoreIndex, return_full=True)
+        input, target, mask, selection = batch
         input, target, mask = input.to(device), target.to(device), mask.to(device)
+        
+        selection = [keepDominoes[np.array(sel)] for sel in selection]
+        selection = [np.concatenate((sel, np.zeros((maxSeqLength-len(sel),2))), axis=0)
+                        for sel in selection]
+        selection = torch.stack([torch.tensor(sel) for sel in selection]).to(device)
+        value_dominoes = torch.sum(selection, dim=2)
 
         # zero gradients, get output of network
         optimizer.zero_grad()
@@ -132,6 +141,10 @@ def trainTestModel():
 
         # save training data
         trainLoss[epoch] = loss.item()
+
+        # measure whether choices sorted dominoes in descending order
+        value_choices = torch.gather(value_dominoes, 1, choices)
+        trainDescending[epoch] = torch.mean(1.0*torch.all(torch.diff(value_choices, dim=1)<=0, dim=1))
 
         # measure position dependent error 
         with torch.no_grad():
@@ -155,11 +168,20 @@ def trainTestModel():
         pnet.eval()
         
         testLoss = torch.zeros(testEpochs)
+        testDescending = torch.zeros(testEpochs)
         for epoch in tqdm(range(testEpochs)):
             # generate batch
-            input, target, mask = df.dominoeUnevenBatch(batchSize, minSeqLength, maxSeqLength, listDominoes, dominoeValue, highestDominoe, ignoreIndex=ignoreIndex)
+            batch = df.dominoeUnevenBatch(batchSize, minSeqLength, maxSeqLength, listDominoes, dominoeValue, 
+                                            highestDominoe, ignoreIndex=ignoreIndex, return_full=True)
+            input, target, mask, selection = batch
             input, target, mask = input.to(device), target.to(device), mask.to(device)
 
+            selection = [listDominoes[np.array(sel)] for sel in selection]
+            selection = [np.concatenate((sel, np.zeros((maxSeqLength-len(sel),2))), axis=0)
+                         for sel in selection]
+            selection = torch.stack([torch.tensor(sel) for sel in selection]).to(device)
+            value_dominoes = torch.sum(selection, dim=2)
+            
             # get network output
             log_scores, choices = pnet(input)
 
@@ -169,12 +191,18 @@ def trainTestModel():
 
             # save testing loss
             testLoss[epoch] = loss.item()
+
+            # measure whether choices sorted dominoes in descending order
+            value_choices = torch.gather(value_dominoes, 1, choices)
+            testDescending[epoch] = torch.mean(1.0*torch.all(torch.diff(value_choices, dim=1)<=0, dim=1))
             
     results = {
         'trainLoss': trainLoss,
         'testLoss': testLoss,
         'trainPositionError': trainPositionError,
         'trainMaxScore': trainMaxScore,
+        'trainDescending': trainDescending,
+        'testDescending': testDescending,
     }
 
     return results
@@ -199,7 +227,6 @@ def plotResults(results, args):
         c_pos_error[ii] = results['trainPositionError'][pp-epochs_before:pp+epochs_after,:]
         c_max_score[ii] = results['trainMaxScore'][pp-epochs_before:pp+epochs_after,:]
     
-        
     fig, ax = plt.subplots(1,2,figsize=(8,4), layout='constrained')
     ax[0].plot(range(args.train_epochs), results['trainLoss'], color='k', lw=1)
     ax[0].set_xlabel('Epoch')
@@ -219,48 +246,26 @@ def plotResults(results, args):
     
     plt.show()
 
-    # Then show loss-spike highlight figure
-    fig, ax = plt.subplots(2,1,figsize=(7,6), layout='constrained', sharex=True)
-    ax[0].plot(epochs_xval, c_loss.numpy().T, color='k', lw=2)
-    ax[0].set_xlabel('Epoch Re: Loss Spike')
-    ax[0].set_ylabel('Loss')
-    ax[0].set_ylim(0)
-    ax[0].set_title('Loss Spikes')
     
-    cmap = mpl.colormaps['brg'].resampled(results['trainPositionError'].shape[1])
-    for ii in range(c_pos_error.shape[2]):
-        ax[1].plot(epochs_xval, torch.mean(c_pos_error[:,:,ii], dim=0).numpy(), lw=2, color=cmap(ii), label=f"P{ii}")
-    ax[1].set_xlabel('Epoch Re: Loss Spike')
-    ax[1].set_ylabel('Target Error')
-    ax[1].set_title('Output Position Dependent Error')
-    ax[1].legend(fontsize=8)
-
-    if not(args.nosave):
-        plt.savefig(str(figsPath/getFileName('lossSpike')))
-    
-    plt.show()
-
-    # Then show confidence around loss-spike
-    fig, ax = plt.subplots(1,2,figsize=(10,3), layout='constrained', sharey=True)
-    for ii in range(c_pos_error.shape[2]):
-        ax[0].plot(epochs_xval, torch.exp(torch.mean(c_max_score[:,:,ii], dim=0)).numpy(), lw=2, color=cmap(ii), label=f"P{ii}")
-    ax[0].set_xlabel('Epoch Re: Loss Spike')
-    ax[0].set_ylabel('P(choice)')
+    fig, ax = plt.subplots(1,2,figsize=(8,4), layout='constrained')
+    ax[0].plot(range(args.train_epochs), results['trainDescending'], color='k', lw=1)
+    ax[0].set_xlabel('Epoch')
+    ax[0].set_ylabel('Fraction')
     ax[0].set_ylim(0, 1)
-    ax[0].set_title('Position Dependent Confidence Post Spike')
+    ax[0].set_title('Training Fraction Sorted')
 
-    avg_until = epochs_before//2
-    ax[1].plot(range(c_pos_error.shape[2]), torch.exp(torch.mean(c_max_score[:,:avg_until], dim=(0,1))).numpy(), lw=2, color='k')
-    for ii in range(c_pos_error.shape[2]):
-        ax[1].plot(ii, torch.exp(torch.mean(c_max_score[:,:avg_until,ii])).numpy(), marker='o', color=cmap(ii))
-        
-    ax[1].set_xlabel('Sequence Position')
-    ax[1].set_ylabel('P(choice)')
-    ax[1].set_title('Output Confidence')
+    ax[1].plot(range(args.test_epochs), results['testDescending'], color='b', lw=1)
+    ax[1].set_xlabel('Epoch')
+    ax[1].set_ylabel('Fraction')
+    # ax[1].set_ylim(0, 1)
+    ax[1].set_title('Testing Fraction Sorted')
+
     if not(args.nosave):
-        plt.savefig(str(figsPath/getFileName('lossSpike_confidence')))
+        plt.savefig(str(figsPath/getFileName('fractionDescending')))
     
     plt.show()
+
+    
     
 if __name__=='__main__':
     args = handleArguments()
