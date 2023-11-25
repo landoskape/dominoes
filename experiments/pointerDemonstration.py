@@ -46,8 +46,8 @@ def handleArguments():
     parser.add_argument('-mn','--min-seq-length', type=int, default=4, help='the minimum tokens per sequence')
     parser.add_argument('-mx','--max-seq-length', type=int, default=12, help='the maximum tokens per sequence')
     parser.add_argument('-bs','--batch-size',type=int, default=512, help='number of sequences per batch')
-    parser.add_argument('-ne','--train-epochs',type=int, default=10000, help='the number of training epochs')
-    parser.add_argument('-te','--test-epochs',type=int, default=1000, help='the number of testing epochs')
+    parser.add_argument('-ne','--train-epochs',type=int, default=2000, help='the number of training epochs')
+    parser.add_argument('-te','--test-epochs',type=int, default=100, help='the number of testing epochs')
 
     parser.add_argument('--embedding_dim', type=int, default=48, help='the dimensions of the embedding')
     parser.add_argument('--heads', type=int, default=4, help='the number of heads in transformer layers')
@@ -105,7 +105,7 @@ def trainTestModel():
     pnet.train()
 
     # Create an optimizer, Adam with weight decay is pretty good
-    optimizer = torch.optim.Adam(pnet.parameters(), lr=1e-3, weight_decay=1e-5)
+    optimizer = torch.optim.Adam(pnet.parameters(), lr=1e-4, weight_decay=1e-6)
     
     # Train network
     print("Training network...")
