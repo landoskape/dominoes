@@ -109,8 +109,6 @@ def trainTestModel():
     testTourLength = torch.zeros((testEpochs, numNets, numRuns))
     trainTourComplete = torch.zeros((trainEpochs, numNets, numRuns))
     testTourComplete = torch.zeros((testEpochs, numNets, numRuns))
-    trainTourValidLength = torch.zeros((trainEpochs, numNets, numRuns))
-    testTourValidLength = torch.zeros((testEpochs, numNets, numRuns))
     trainPositionError = torch.full((trainEpochs, num_in_cycle, numNets, numRuns), torch.nan) # keep track of where there was error
     trainMaxScore = torch.full((trainEpochs, num_in_cycle, numNets, numRuns), torch.nan) # keep track of confidence of model
     testMaxScore = torch.full((testEpochs, num_in_cycle, numNets, numRuns), torch.nan) 
@@ -125,7 +123,7 @@ def trainTestModel():
         nets = [net.to(device) for net in nets]
 
         # Create an optimizer, Adam with weight decay is pretty good
-        optimizers = [torch.optim.Adam(net.parameters(), lr=1e-3, weight_decay=1e-5) for net in nets]
+        optimizers = [torch.optim.Adam(net.parameters(), lr=1e-4, weight_decay=1e-6) for net in nets]
 
         for epoch in tqdm(range(trainEpochs)):
             # generate batch
@@ -153,8 +151,7 @@ def trainTestModel():
             # measure position dependent error 
             with torch.no_grad():
                 # get distance traveled
-                start = target[:, -1] # get "start" city, closest to origin (set this way by tsp_batch)
-                tour_distance, tour_complete = map(list, zip(*[training.measureReward_tsp_fromStart(dists, choice, start) for choice in choices]))
+                tour_distance, tour_complete = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in choices]))
                 tour_distance = [torch.sum(td, dim=1) for td in tour_distance]
                 
                 # start by getting score for target at each position 
@@ -165,8 +162,9 @@ def trainTestModel():
                 pos_error = [ms - ts for ms, ts in zip(max_score, target_score)] # high if the chosen score is much bigger than the target score
                     
                 # add to accounting
-                for i, (td, pe, ms) in enumerate(zip(tour_distance, pos_error, max_score)):
-                    trainTourLength[epoch, i, run] = torch.mean(td)                
+                for i, (td, tc, pe, ms) in enumerate(zip(tour_distance,tour_complete, pos_error, max_score)):
+                    trainTourLength[epoch, i, run] = torch.mean(td)  
+                    trainTourComplete[epoch, i, run] = torch.mean(torch.all(tc==1, dim=1)*1.0)
                     trainPositionError[epoch, :, i, run] = torch.nansum(pe, dim=0)
                     trainMaxScore[epoch, :, i, run] = torch.nanmean(ms, dim=0)
                     
@@ -187,7 +185,6 @@ def trainTestModel():
                     assert not np.isnan(l.item()), f"model type {POINTER_METHODS[i]} diverged :("
 
                 # get distance traveled
-                start = target[:, -1] # get start city (the one closest to origin)
                 tour_distance, tour_complete = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in choices]))
                 tour_distance = [torch.sum(td, dim=1) for td in tour_distance]
                 
@@ -195,8 +192,9 @@ def trainTestModel():
                 max_score = [torch.max(unroll, dim=1)[0].view(batchSize, num_in_cycle) for unroll in unrolled]
 
                 # save training data
-                for i, (l, td, ms) in enumerate(zip(loss, tour_distance, max_score)):
+                for i, (l, td, tc, ms) in enumerate(zip(loss, tour_distance, tour_complete, max_score)):
                     testLoss[epoch, i, run] = l.item()
+                    testTourComplete[epoch, i, run] = torch.mean(torch.all(tc==1, dim=1)*1.0)
                     testTourLength[epoch, i, run] = torch.mean(td)
                     testMaxScore[epoch, :, i, run] = torch.nanmean(ms, dim=0)
                 
@@ -206,6 +204,8 @@ def trainTestModel():
         'testLoss': testLoss,
         'trainTourLength': trainTourLength,
         'testTourLength': testTourLength,
+        'trainTourComplete': trainTourComplete,
+        'testTourComplete': testTourComplete,
         'trainPositionError': trainPositionError,
         'trainMaxScore': trainMaxScore,
         'testMaxScore': testMaxScore,
