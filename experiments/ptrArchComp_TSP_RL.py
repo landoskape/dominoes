@@ -98,10 +98,11 @@ def trainTestModel():
     print(f"Doing training...")
     trainTourLength = torch.zeros((trainEpochs, numNets, numRuns))
     testTourLength = torch.zeros((testEpochs, numNets, numRuns))
+    trainValidCycles = torch.zeros((trainEpochs, numNets, numRuns))
+    testValidCycles = torch.zeros((testEpochs, numNets, numRuns))
     trainScoreByPosition = torch.full((trainEpochs, num_in_cycle, numNets, numRuns), torch.nan) # keep track of confidence of model
     testScoreByPosition = torch.full((testEpochs, num_in_cycle, numNets, numRuns), torch.nan) 
     for run in range(numRuns):
-        
         print(f"Training networks {run+1}/{numRuns}...")
         
         # create pointer networks with different pointer methods
@@ -118,8 +119,7 @@ def trainTestModel():
             # generate batch
             input, _, xy, dists = datasets.tsp_batch(batchSize, num_cities, return_target=False, return_full=True)
             input, xy, dists = input.to(device), xy.to(device), dists.to(device)
-            start = torch.argmin(torch.sum(xy**2, dim=2), dim=1) # use this as default starting city
-
+            
             # zero gradients, get output of network
             for opt in optimizers: opt.zero_grad()
             log_scores, choices = map(list, zip(*[net(input, max_output=num_in_cycle) for net in nets]))
@@ -128,10 +128,13 @@ def trainTestModel():
             logprob_policy = [torch.gather(score, 2, choice.unsqueeze(2)).squeeze(2) for score, choice in zip(log_scores, choices)]
             
             # measure rewards
-            rewards = [-training.measureReward_tsp(dists, choice, start) for choice in choices] # distance penalized negatively (hence the -)
+            rewards, new_city = map(list, zip(*[training.measureReward_tsp(dists, choice)
+                                                for choice in choices])) # distance penalized negatively (hence the -)
+            rewards = [-reward for reward in rewards]
             G = [torch.matmul(reward, gamma_transform) for reward in rewards]
-            for i, l in enumerate(rewards):
+            for i, (l, nc) in enumerate(zip(rewards, new_city)):
                 assert not torch.any(torch.isnan(l)), f"model type {POINTER_METHODS[i]} diverged :("
+                assert torch.all(nc==1), f"model type {POINTER_METHODS[i]} didn't do a permutation"
 
             # measure J
             J = [-torch.sum(logpol * g) for logpol, g in zip(logprob_policy, G)] # flip sign for gradient ascent
@@ -139,11 +142,12 @@ def trainTestModel():
 
             # update networks
             for opt in optimizers: opt.step()
-                
+            
             # measure position dependent error 
             with torch.no_grad():
                 for i in range(numNets):
                     trainTourLength[epoch, i, run] = torch.mean(torch.sum(rewards[i], dim=1))
+                    trainValidCycles[epoch, i, run] = torch.mean(1.0*torch.all(new_city[0]==1, dim=1))
                     
                     # Measure the models confidence -- ignoring the effect of temperature
                     pretemp_score = torch.softmax(log_scores[i] * nets[i].temperature, dim=2)
@@ -160,8 +164,7 @@ def trainTestModel():
                 # generate batch
                 input, _, xy, dists = datasets.tsp_batch(batchSize, num_cities, return_target=False, return_full=True)
                 input, xy, dists = input.to(device), xy.to(device), dists.to(device)
-                start = torch.argmin(torch.sum(xy**2, dim=2), dim=1) # use this as default starting city
-
+                
                 # zero gradients, get output of network
                 for opt in optimizers: opt.zero_grad()
                 log_scores, choices = map(list, zip(*[net(input, max_output=num_in_cycle) for net in nets]))
@@ -170,13 +173,19 @@ def trainTestModel():
                 logprob_policy = [torch.gather(score, 2, choice.unsqueeze(2)).squeeze(2) for score, choice in zip(log_scores, choices)]
                 
                 # measure rewards
-                rewards = [-training.measureReward_tsp(dists, choice, start) for choice in choices]
+                rewards, new_city = map(list, zip(*[training.measureReward_tsp(dists, choice)
+                                                         for choice in choices])) # distance penalized negatively (hence the -)
+                rewards = [-reward for reward in rewards]
+                for i, (l, nc) in enumerate(zip(rewards, new_city)):
+                    assert not torch.any(torch.isnan(l)), f"model type {POINTER_METHODS[i]} diverged :("
+                    assert torch.all(nc==1), f"model type {POINTER_METHODS[i]} didn't do a permutation"
                 
                 # measure position dependent error 
                 with torch.no_grad():
                     for i in range(numNets):
                         testTourLength[epoch, i, run] = torch.mean(torch.sum(rewards[i], dim=1))
-                        
+                        testValidCycles[epoch, i, run] = torch.mean(1.0*torch.all(new_city[0]==1, dim=1))
+
                         # Measure the models confidence -- ignoring the effect of temperature
                         pretemp_score = torch.softmax(log_scores[i] * nets[i].temperature, dim=2)
                         pretemp_policy = torch.gather(pretemp_score, 2, choices[i].unsqueeze(2)).squeeze(2)
@@ -186,6 +195,8 @@ def trainTestModel():
     results = {
         'trainTourLength': trainTourLength,
         'testTourLength': trainTourLength,
+        'trainValidCycles': trainValidCycles,
+        'testValidCycles': testValidCycles, 
         'trainScoreByPosition': trainScoreByPosition,
         'testScoreByPosition': testScoreByPosition
     }
@@ -196,19 +207,13 @@ def plotResults(results, args):
     numRuns = args.num_runs
     cmap = mpl.colormaps['tab10']
 
-    data_to_plot = (
-        (results['trainTourLength'], results['testTourLength'], 'tourLength', [1.5, 4]),
-        (results['trainTourComplete'], results['testTourComplete'], 'tourComplete', [0, 1]),
-        (results['trainTourValidLength'], results['testTourValidLength'], 'tourValidLength', [2, None])
-    )
-
     # make plot of loss trajectory
     fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
-        cdata = torch.nanmean(results['trainTourLength'][:,idx], dim=1)
+        cdata = torch.nanmean(-results['trainTourLength'][:,idx], dim=1)
         idx_nan = torch.isnan(cdata)
         cdata.masked_fill_(idx_nan, 0)
-        cdata = sp.signal.savgol_filter(cdata, 50, 1)
+        cdata = sp.signal.savgol_filter(cdata, 10, 1)
         cdata[idx_nan] = torch.nan
         ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
     ax[0].set_xlabel('Training Epoch')
@@ -219,7 +224,7 @@ def plotResults(results, args):
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
     for idx, name in enumerate(POINTER_METHODS):
-        mnTestReward = torch.nanmean(results['testTourLength'][:,idx], dim=0)
+        mnTestReward = torch.nanmean(-results['testTourLength'][:,idx], dim=0)
         ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
         for mtr in mnTestReward:
             ax[1].plot(get_x(idx), [mtr, mtr], color=cmap(idx), lw=1.5)

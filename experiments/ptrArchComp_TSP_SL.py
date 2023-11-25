@@ -154,7 +154,7 @@ def trainTestModel():
             with torch.no_grad():
                 # get distance traveled
                 start = target[:, -1] # get "start" city, closest to origin (set this way by tsp_batch)
-                tour_distance = [training.measureReward_tsp(dists, choice, start) for choice in choices]
+                tour_distance, tour_complete = map(list, zip(*[training.measureReward_tsp_fromStart(dists, choice, start) for choice in choices]))
                 tour_distance = [torch.sum(td, dim=1) for td in tour_distance]
                 
                 # start by getting score for target at each position 
@@ -188,7 +188,7 @@ def trainTestModel():
 
                 # get distance traveled
                 start = target[:, -1] # get start city (the one closest to origin)
-                tour_distance = [training.measureReward_tsp(dists, choice, start) for choice in choices]
+                tour_distance, tour_complete = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in choices]))
                 tour_distance = [torch.sum(td, dim=1) for td in tour_distance]
                 
                 # get max score 
@@ -253,10 +253,10 @@ def plotResults(results, args):
     fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
         cdata = torch.nanmean(results['trainTourLength'][:,idx], dim=1)
-        idx_nan = torch.isnan(cdata)
-        cdata.masked_fill_(idx_nan, 0)
-        cdata = sp.signal.savgol_filter(cdata, 2, 1)
-        cdata[idx_nan] = torch.nan
+        #idx_nan = torch.isnan(cdata)
+        #cdata.masked_fill_(idx_nan, 0)
+        #cdata = sp.signal.savgol_filter(cdata, , 1)
+        #cdata[idx_nan] = torch.nan
         ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
     ax[0].set_xlabel('Training Epoch')
     ax[0].set_ylabel(f'Tour Length N={numRuns}')
