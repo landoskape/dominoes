@@ -82,30 +82,19 @@ def masked_log_softmax(vector: torch.Tensor,
     unsqueeze on dimension 1 until they match.  If you need a different unsqueezing of your mask,
     do it yourself before passing the mask into this function.
 
-    In the case that the input vector is completely masked, the return value of this function is
-    arbitrary, but not ``nan``.  You should be masking the result of whatever computation comes out
-    of this in that case, anyway, so the specific values returned shouldn't matter.  Also, the way
-    that we deal with this case relies on having single-precision floats; mixing half-precision
-    floats with fully-masked vectors will likely give you ``nans``.
-
-    If your logits are all extremely negative (i.e., the max value in your logit vector is -50 or
-    lower), the way we handle masking here could mess you up.  But if you've got logit values that
-    extreme, you've got bigger problems than this.
+    If the input is completely masked anywere (across the requested dimension), then this will make it
+    uniform instead of keeping it masked, which would lead to nans. 
     """
     if mask is None:
         return torch.nn.functional.log_softmax(vector, dim=dim)
-    
-    # Otherwise handle the log softmax and also make sure -infs don't show up
     mask = mask.float()
     while mask.dim() < vector.dim():
         mask = mask.unsqueeze(1)
-    # vector + mask.log() is an easy way to zero out masked elements in logspace, but it
-    # results in nans when the whole vector is masked.  We need a very small value instead of a
-    # zero in the mask for these cases.  log(1 + 1e-45) is still basically 0, so we can safely
-    # just add 1e-45 before calling mask.log().  We use 1e-45 because 1e-46 is so small it
-    # becomes 0 - this is just the smallest value we can actually use.
-    with torch.no_grad(): min_value = vector.min() - 5.0 # make sure it's lower than the lowest value
+    with torch.no_grad(): min_value = vector.min() - 50.0 # make sure it's lower than the lowest value
     vector = vector.masked_fill(mask==0, min_value)
+    #vector = vector + (mask + 1e-45).log()
+    #vector = vector.masked_fill(mask==0, float('-inf'))
+    #vector[torch.all(mask==0, dim=dim)]=1.0 # if the whole thing is masked, this is needed to prevent nans
     return torch.nn.functional.log_softmax(vector, dim=dim)
 
 
@@ -784,7 +773,7 @@ class PointerModule(nn.Module):
             max_output = max_num_tokens
             
         if self.permutation:
-            # prepare source if required
+            # prepare source for scattering if required
             src = torch.zeros((batch_size, 1), dtype=mask.dtype).to(get_device(mask))
 
         # For some pointer layers, the encoded transform happens out of the loop (for others this is a pass)
@@ -804,7 +793,7 @@ class PointerModule(nn.Module):
             # choose token for this sample
             if self.thompson:
                 # choose probabilistically
-                choice = torch.multinomial(torch.exp(log_score), 1)
+                choice = torch.multinomial(torch.exp(log_score)*mask, 1)
             else:
                 # choose based on maximum score
                 choice = torch.argmax(log_score, dim=1, keepdim=True)
@@ -817,7 +806,7 @@ class PointerModule(nn.Module):
                 # mask previously chosen tokens (don't include this in the computation graph)
                 with torch.no_grad():
                     mask = mask.scatter(1, choice, src)
-            
+
             # Save output of each decoding round
             pointer_log_scores.append(log_score)
             pointer_choices.append(choice)
