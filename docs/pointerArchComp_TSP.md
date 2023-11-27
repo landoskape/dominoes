@@ -84,13 +84,9 @@ learning formulation of the problem.
 1. We can measure the loss (defined as the negative log-likelihood loss 
 between the output and target). This is lowest when the network produces the 
 optimal cycle of cities and is 100% confident in its choice.
-2. The fraction of completed tours. This measures how frequently the network
-visits each city and returns to the first city in $N+1$ steps.
-3. The average tour length of completed tours. This measures the path length
+2. The average tour length of completed tours. This measures the path length
 through the $N$ cities (and back to the first) for the sets of cities that it 
-performed a full tour. It's important to only show the tour length of 
-completed tours, because the path length can be $0$ if the same city is 
-selected at each step in the cycle. 
+performed a full tour. 
 
 For the summary plots of the testing performance in the right panel, I show 
 the average with a thick horizontal bar, the result for each network with a
@@ -101,34 +97,20 @@ Here's the loss:
 
 ![tsp sl - loss](media/ptrArchComp_TSP_SL.png)
 
-The loss of the networks with standard pointer layers does well compared to
-the dot-product based pointer layers. However, the pointer "attention" and 
-pointer "transformer" layers do even better than the standard network. That
-improvement in performance is primarily reflected in the fraction of completed
-tours and the average tour length for completed tours.
+The loss of the networks with "attention" and "transformer" pointer layers are
+comparable to the standard pointer layer, and the "dot" pointer layers are a
+bit worse. In this context, it seems like the standard pointer layer is ideal
+given the fact that it is commonly used and well understood. The performance
+as measured by the loss is reflected in the average tour length of completed
+tours:
 
+![tsp sl - valid tour length](media/ptrArchComp_TSP_SL_tourLength.png)
 
-Here's the fraction of completed tours:
-
-![tsp sl - fraction completed](media/ptrArchComp_TSP_SL_completedTours.png)
-
-And here's the average tour length for completed tours:
-
-![tsp sl - valid tour length](media/ptrArchComp_TSP_SL_tourValidLength.png)
-
-As you can see, the attention and transformer based pointer layers 
-consistently complete more tours (and do so in the optimal distance, which is
-$2.87$). While the attention- and transformer- based pointer layers have 
-comparable performance to the standard pointer layer in terms of tour length,
-the fact that they perform more completed tours may motivate their use for 
-complex problems in which a high hit-rate is important (e.g. in language-based
-tasks when pointer networks are the backend of a human-serving interface like 
-ChatGPT).
-
-Overall, however, this result is in agreement with the supervised learning 
-results on the [toy problem](pointerArchitectureComparison.md#variations-in-learning-algorithm-supervised-learning).
-Generally, all the pointer layers have similar performance when trained with
-supervised learning.
+The standard, attention, and transformer based pointer layers perform the task
+optimally (ground-truth optimal performance is ~$2.87$). Overall, this result 
+is in agreement with the supervised learning results on the [toy problem](pointerArchitectureComparison.md#variations-in-learning-algorithm-supervised-learning).
+Generally, the standard pointer layer has favorable performance in comparison
+to the new pointer layers when trained with reinforcement learning. 
 
 ### Reinforcement Learning Results
 For the reinforcement learning problem, we can measure the performance the 
@@ -140,11 +122,7 @@ temperature of 5, so although the curves provide some information about the
 learning trajectory, it is much more informative to focus on the testing 
 results. 
 
-Here's the fraction of completed tours:
-
-![tsp rl - fraction completed](media/ptrArchComp_TSP_RL_tourComplete.png)
-
-And here's the average tour length for completed tours:
+Here's the average tour length for completed tours:
 
 ![tsp rl - valid tour length](media/ptrArchComp_TSP_RL_tourValidLength.png)
 
