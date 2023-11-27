@@ -854,20 +854,45 @@ class PointerNetwork(nn.Module):
         self.kqnorm = kqnorm
         self.bias = bias
         self.encoding_layers = encoding_layers
-        self.contextual_encoder = contextual_encoder
         self.decoder_method = decoder_method
         self.thompson = thompson
         self.pointer_method = pointer_method
         self.temperature = temperature
         self.permutation = permutation
 
+        # this can either be True, False, or 'multicontext'
+        if contextual_encoder == True:
+            self.contextual_encoder = True
+            self.multicontext_encoder = False
+        elif contextual_encoder == 'multicontext':
+            self.contextual_encoder = True
+            self.multicontext_encoder = True
+            self.num_context = 1
+        elif isinstance(contextual_encoder, tuple) and contextual_encoder[0] == 'multicontext':
+            assert isinstance(contextual_encoder[1], int) and contextual_encoder[1]>0, "second element of tuple must be int"
+            self.contextual_encoder = True
+            self.multicontext_encoder = True
+            self.num_context = contextual_encoder[1]
+        else:
+            self.contextual_encoder = False
+            self.multicontext_encoder = False
+
         self.embedding = nn.Linear(in_features=input_dim, out_features=self.embedding_dim, bias=self.bias)
-        self.encodingLayers = nn.ModuleList([TransformerLayer(self.embedding_dim, 
-                                                              heads=self.heads, 
-                                                              expansion=self.expansion,  
-                                                              kqnorm=self.kqnorm,
-                                                              contextual=self.contextual_encoder) 
-                                             for _ in range(self.encoding_layers)])
+
+        if self.multicontext_encoder:    
+            self.encodingLayers = nn.ModuleList([ContextualTransformerLayer(self.embedding_dim, 
+                                                                heads=self.heads, 
+                                                                expansion=self.expansion,  
+                                                                kqnorm=self.kqnorm,
+                                                                num_context=self.num_context) 
+                                                for _ in range(self.encoding_layers)])
+        else:
+            self.encodingLayers = nn.ModuleList([TransformerLayer(self.embedding_dim, 
+                                                                heads=self.heads, 
+                                                                expansion=self.expansion,  
+                                                                kqnorm=self.kqnorm,
+                                                                contextual=self.contextual_encoder) 
+                                                for _ in range(self.encoding_layers)])
         
         self.encoding = self.forwardEncoder # since there are masks, it's easier to write a custom forward than wrangle the transformer layers to work with nn.Sequential
 
@@ -891,20 +916,24 @@ class PointerNetwork(nn.Module):
         (it would have to be passed as an output by the transformer layer and I'd rather keep the transformer layer code clean)
         """
         if self.contextual_encoder:
-            context = x[1]
+            context = x[1:] # get either single context or all context inputs (if multicontext)
+            x = x[0]
+            if self.multicontext_encoder:
+                assert len(context)==self.num_context, "number of context inputs doesn't match expected"
+            else:
+                context = context[0] # pull context out of tuple
             
         for elayer in self.encodingLayers:
-            x = elayer(x, mask=mask)
-            if self.contextual_encoder:
-                x = (x, context) # re-add context for next pass
-
-        if self.contextual_encoder:
-            # only return main inputs, not context inputs
-            x = x[0]
+            if self.multicontext_encoder:
+                x = elayer(x, context, mask=mask)
+            elif self.contextual_encoder and not self.multicontext_encoder:
+                x = elayer((x, context), mask=mask)
+            else:
+                x = elayer(x, mask=mask)
                 
         return x
         
-    def forward(self, x, mask=None, decode_mask=None, max_output=None): 
+    def forward(self, x, mask=None, decode_mask=None, max_output=None, init=None): 
         """
         forward method for pointer network with possible masked input
         
@@ -913,8 +942,16 @@ class PointerNetwork(nn.Module):
         checks on the mask only care about the shape, so make sure your mask is as described!!!
 
         max_output should be an integer determining when to cut off decoder output
+
+        init_position is the initial choice (if provided, masks that choice and sets the initial "decoder_input")
         """
-        if self.contextual_encoder:
+        if self.multicontext_encoder:
+            assert isinstance(x, tuple), "if using contextual encoding, input 'x' must be tuple of (mainInputs, contextInputs)"
+            assert len(x)==self.num_context+1, "number of context inputs doesn't match expected"
+            context = x[1:]
+            x = x[0]
+
+        if self.contextual_encoder and not self.multicontext_encoder:
             assert isinstance(x, tuple), "if using contextual encoding, input 'x' must be tuple of (mainInputs, contextInputs)"
             x, context = x
             assert context.ndim == 3, "context (x[1]) must have shape (batch, tokens, input_dim)"
@@ -944,7 +981,11 @@ class PointerNetwork(nn.Module):
 
         # Encoding stage
         embeddedRepresentation = self.embedding(x) # embed each token to right dimensionality
-        if self.contextual_encoder:
+        if self.multicontext_encoder:
+            embeddedContext = [self.embedding(ctx) for ctx in context]
+            embeddedRepresentation = (embeddedRepresentation, *embeddedContext)
+        
+        if self.contextual_encoder and not self.multicontext_encoder:
             embeddedContext = self.embedding(context) # embed the context to the right dimensionality
             embeddedRepresentation = (embeddedRepresentation, embeddedContext) # add context to transformer input
             
@@ -954,7 +995,13 @@ class PointerNetwork(nn.Module):
         numerator = torch.sum(encodedRepresentation*mask.unsqueeze(2), dim=1)
         denominator = torch.sum(mask, dim=1, keepdim=True)
         decoder_context = numerator / denominator
-        decoder_input = torch.zeros((batch, self.embedding_dim)).to(get_device(x)) # initialize decoder_input as zeros
+
+        if init is not None:
+            rinit = init.view(batch, 1, 1).expand(-1, -1, self.embedding_dim)
+            decoder_input = torch.gather(encodedRepresentation, 1, rinit).squeeze(1)
+            mask = mask.scatter(1, init.view(batch, 1), torch.zeros((batch,1), dtype=mask.dtype).to(get_device(mask)))
+        else:
+            decoder_input = torch.zeros((batch, self.embedding_dim)).to(get_device(x)) # initialize decoder_input as zeros
 
         # Then do pointer network (sequential decode-choice for max_output's)
         log_scores, choices = self.pointer(encodedRepresentation, decoder_input, decoder_context, mask=mask, max_output=max_output)
