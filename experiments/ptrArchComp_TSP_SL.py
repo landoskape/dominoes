@@ -216,10 +216,13 @@ def trainTestModel():
 def plotResults(results, args):
     numRuns = args.num_runs
     cmap = mpl.colormaps['tab10']
+
+    idx_ignore = {val: idx for idx, val in enumerate(POINTER_METHODS)}['PointerDotNoLN']
     
     # make plot of loss trajectory
     fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
+        if idx == idx_ignore: continue # dot noLN has a loss blow up
         cdata = sp.ndimage.median_filter(torch.mean(results['trainLoss'][:,idx], dim=1), size=(100,))
         ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
     ax[0].set_xlabel('Training Epoch')
@@ -232,6 +235,7 @@ def plotResults(results, args):
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
     for idx, name in enumerate(POINTER_METHODS):
+        if idx == idx_ignore: continue # dot noLN has a loss blow up
         mnTestReward = torch.mean(results['testLoss'][:,idx], dim=0)
         ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
         for mtr in mnTestReward:
@@ -252,21 +256,23 @@ def plotResults(results, args):
     # make plot of tour length for valid tours
     fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
+        if idx == idx_ignore: continue # dot noLN has a loss blow up
         cdata = torch.nanmean(results['trainTourLength'][:,idx], dim=1)
-        #idx_nan = torch.isnan(cdata)
-        #cdata.masked_fill_(idx_nan, 0)
-        #cdata = sp.signal.savgol_filter(cdata, , 1)
-        #cdata[idx_nan] = torch.nan
+        idx_nan = torch.isnan(cdata)
+        cdata.masked_fill_(idx_nan, 0)
+        cdata = sp.signal.savgol_filter(cdata, 50, 1)
+        cdata[idx_nan] = torch.nan
         ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
     ax[0].set_xlabel('Training Epoch')
     ax[0].set_ylabel(f'Tour Length N={numRuns}')
     ax[0].set_title('Training - TourLength (Valid)')
     ax[0].legend(loc='best')
-    ax[0].set_ylim(2.85, 2.975)
+    # ax[0].set_ylim(2.85, 2.975)
     
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
     for idx, name in enumerate(POINTER_METHODS):
+        if idx == idx_ignore: continue # dot noLN has a loss blow up
         mnTestReward = torch.nanmean(results['testTourLength'][:,idx], dim=0)
         ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
         for mtr in mnTestReward:
@@ -288,16 +294,18 @@ def plotResults(results, args):
     numPos = results['testMaxScore'].size(1)
     fig, ax = plt.subplots(1, 2, figsize=(6,4), width_ratios=[2.6,1], layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
+        if idx == idx_ignore: continue # dot noLN has a loss blow up
         ax[0].plot(range(numPos), torch.mean(torch.exp(results['testMaxScore'][:,:,idx]), dim=(0,2)), color=cmap(idx), lw=1, marker='o', label=name)
     ax[0].set_xlabel('Output Position')
     ax[0].set_ylabel('Mean Score')
     ax[0].set_title('Position-Dependent Confidence')
     ax[0].legend(loc='best', fontsize=8)
-    ax[0].set_ylim(0.65, 1)
+    ax[0].set_ylim(0.2, 1)
     
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
     for idx, name in enumerate(POINTER_METHODS):
+        if idx == idx_ignore: continue # dot noLN has a loss blow up
         mnScoreByPosition = torch.mean(torch.exp(results['testMaxScore'][:,:,idx]), dim=(0,1))
         ax[1].plot(get_x(idx), [mnScoreByPosition.mean(), mnScoreByPosition.mean()], color=cmap(idx), lw=4, label=name)
         for msbp in mnScoreByPosition:
@@ -307,7 +315,7 @@ def plotResults(results, args):
     ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
     ax[1].set_title('Average')
     ax[1].set_xlim(-1, len(POINTER_METHODS))
-    ax[1].set_ylim(0.65, 1)
+    ax[1].set_ylim(0.2, 1)
 
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName(extra='confidence')))
