@@ -257,7 +257,7 @@ def plotResults(results, args):
     ax[1].plot(range(args.test_epochs), results['testDescending'], color='b', lw=1)
     ax[1].set_xlabel('Epoch')
     ax[1].set_ylabel('Fraction')
-    # ax[1].set_ylim(0, 1)
+    ax[1].set_ylim(0, 1)
     ax[1].set_title('Testing Fraction Sorted')
 
     if not(args.nosave):

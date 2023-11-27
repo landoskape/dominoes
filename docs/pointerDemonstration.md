@@ -125,9 +125,24 @@ The main result of the problem is shown here:
 ![pointer toy figure](media/pointerDemonstration.png)
 
 As you can see, the network quickly learns to sort dominoes by their value 
-effectively. Pretty cool! The fact that the loss asymptotes to around 1 
+effectively. Pretty cool! The fact that the loss asymptotes to around 5 
 is due to the fact that some dominoes have the same value, but the target
-expects them to be sorted a consistent way. In general, the network produces
-the exact output as the target except for switching equal value dominoes. I'll
-add some figures showing this phenomenon at some point.
+expects them to be sorted a consistent way. This loss is just the average loss
+expected from the few choices that should be swapped in each batch, and the 
+value used to mask the choice in log-softmax (the log-score of a masked option
+is close to -100 and the chosen option is usually closer to 0). 
+
+To show that the network performs the task correctly (albeit not knowing how 
+to sort equal value dominoes) I also made a plot showing the fraction of 
+properly sorted hands throughout training and during testing. 
+
+![pointer properly sorted](media/pointerDemonstration_fractionDescending.png)
+
+As you can see, the network quickly learns to sort the dominoes and does it 
+almost perfectly in just a few epochs. Since this is just a toy problem for 
+illustrating the pointer networks, I'm not invested in fixing the equal-value
+sorting issue, so happy to leave it as it is. (I'm also more interested in the
+reinforcement learning formulation of the problem, which is more flexible and
+doesn't have this preference of sort order). 
+
 
