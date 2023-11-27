@@ -70,6 +70,7 @@ def trainTestModel():
     # get values from the argument parser
     num_cities = args.num_cities
     num_in_cycle = num_cities
+    num_choices = num_cities - 1
 
     # other batch parameters
     batchSize = args.batch_size
@@ -109,16 +110,16 @@ def trainTestModel():
     testTourLength = torch.zeros((testEpochs, numNets, numRuns))
     trainTourComplete = torch.zeros((trainEpochs, numNets, numRuns))
     testTourComplete = torch.zeros((testEpochs, numNets, numRuns))
-    trainPositionError = torch.full((trainEpochs, num_in_cycle, numNets, numRuns), torch.nan) # keep track of where there was error
-    trainMaxScore = torch.full((trainEpochs, num_in_cycle, numNets, numRuns), torch.nan) # keep track of confidence of model
-    testMaxScore = torch.full((testEpochs, num_in_cycle, numNets, numRuns), torch.nan) 
+    trainPositionError = torch.full((trainEpochs, num_choices, numNets, numRuns), torch.nan) # keep track of where there was error
+    trainMaxScore = torch.full((trainEpochs, num_choices, numNets, numRuns), torch.nan) # keep track of confidence of model
+    testMaxScore = torch.full((testEpochs, num_choices, numNets, numRuns), torch.nan) 
     for run in range(numRuns):
         print(f"Training round of networks {run+1}/{numRuns}...")
         
         # create pointer networks with different pointer methods
         nets = [transformers.PointerNetwork(input_dim, embedding_dim, temperature=temperature, pointer_method=POINTER_METHOD, 
                                             thompson=False, encoding_layers=encoding_layers, heads=heads, kqnorm=True, 
-                                            expansion=expansion, decoder_method='transformer')
+                                            expansion=expansion, decoder_method='transformer', contextual_encoder='multicontext')
                 for POINTER_METHOD in POINTER_METHODS]
         nets = [net.to(device) for net in nets]
 
@@ -130,9 +131,15 @@ def trainTestModel():
             input, target, _, dists = datasets.tsp_batch(batchSize, num_cities, return_full=True, threads=threads)
             input, target, dists = input.to(device), target.to(device), dists.to(device)
 
+            # target always starts closest to origin, so we'll make the first column of target the "start"
+            # and the rest of target the actual target of the network
+            start = target[:, 0]
+            target = target[:, 1:].contiguous()
+            init_input = torch.gather(input, 1, start.view(-1, 1, 1).expand(-1, -1, 2)) # prepare initial input for the decoder representing the start location
+
             # zero gradients, get output of network
             for opt in optimizers: opt.zero_grad()
-            log_scores, choices = map(list, zip(*[net(input, max_output=num_in_cycle) for net in nets]))
+            log_scores, choices = map(list, zip(*[net((input, init_input), max_output=num_choices, init=start) for net in nets]))
 
             # measure loss with negative log-likelihood
             unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]
@@ -151,13 +158,14 @@ def trainTestModel():
             # measure position dependent error 
             with torch.no_grad():
                 # get distance traveled
-                tour_distance, tour_complete = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in choices]))
+                full_choices = [torch.cat((start.view(-1, 1), choice), dim=1) for choice in choices]
+                tour_distance, tour_complete = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in full_choices]))
                 tour_distance = [torch.sum(td, dim=1) for td in tour_distance]
                 
                 # start by getting score for target at each position 
-                target_score = [torch.gather(unroll, dim=1, index=target.view(-1,1)).view(batchSize, num_in_cycle) for unroll in unrolled]
+                target_score = [torch.gather(unroll, dim=1, index=target.view(-1,1)).view(batchSize, num_choices) for unroll in unrolled]
                 # then get max score for each position (which would correspond to the score of the actual choice)
-                max_score = [torch.max(unroll, dim=1)[0].view(batchSize, num_in_cycle) for unroll in unrolled]
+                max_score = [torch.max(unroll, dim=1)[0].view(batchSize, num_choices) for unroll in unrolled]
                 # then calculate position error
                 pos_error = [ms - ts for ms, ts in zip(max_score, target_score)] # high if the chosen score is much bigger than the target score
                     
@@ -176,8 +184,15 @@ def trainTestModel():
                 input, target, _, dists = datasets.tsp_batch(batchSize, num_cities, return_full=True, threads=threads)
                 input, target, dists = input.to(device), target.to(device), dists.to(device)
 
-                log_scores, choices = map(list, zip(*[net(input, max_output=num_in_cycle) for net in nets]))
-        
+                # target always starts closest to origin, so we'll make the first column of target the "start"
+                # and the rest of target the actual target of the network
+                start = target[:, 0]
+                target = target[:, 1:].contiguous()
+                init_input = torch.gather(input, 1, start.view(-1, 1, 1).expand(-1, -1, 2)) # prepare initial input for the decoder representing the start location
+
+                log_scores, choices = map(list, zip(*[net((input, init_input), max_output=num_choices, init=start) for net in nets]))
+                full_choices = [torch.cat((start.view(-1, 1), choice), dim=1) for choice in choices]
+
                 # measure loss with negative log-likelihood
                 unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]
                 loss = [torch.nn.functional.nll_loss(unroll, target.view(-1)) for unroll in unrolled]
@@ -185,11 +200,11 @@ def trainTestModel():
                     assert not np.isnan(l.item()), f"model type {POINTER_METHODS[i]} diverged :("
 
                 # get distance traveled
-                tour_distance, tour_complete = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in choices]))
+                tour_distance, tour_complete = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in full_choices]))
                 tour_distance = [torch.sum(td, dim=1) for td in tour_distance]
                 
                 # get max score 
-                max_score = [torch.max(unroll, dim=1)[0].view(batchSize, num_in_cycle) for unroll in unrolled]
+                max_score = [torch.max(unroll, dim=1)[0].view(batchSize, num_choices) for unroll in unrolled]
 
                 # save training data
                 for i, (l, td, tc, ms) in enumerate(zip(loss, tour_distance, tour_complete, max_score)):
