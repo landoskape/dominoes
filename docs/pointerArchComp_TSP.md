@@ -107,7 +107,7 @@ tours:
 ![tsp sl - valid tour length](media/ptrArchComp_TSP_SL_tourLength.png)
 
 The standard, attention, and transformer based pointer layers perform the task
-optimally (ground-truth optimal performance is ~ $2.87$). Overall, this result 
+optimally (ground-truth optimal performance is ~ $2.87$ ). Overall, this result 
 is in agreement with the supervised learning results on the [toy problem](pointerArchitectureComparison.md#variations-in-learning-algorithm-supervised-learning).
 Generally, the standard pointer layer has favorable performance in comparison
 to the new pointer layers when trained with reinforcement learning. 
@@ -124,7 +124,7 @@ results.
 
 Here's the average tour length for completed tours:
 
-![tsp rl - valid tour length](media/ptrArchComp_TSP_RL_tourValidLength.png)
+![tsp rl - valid tour length](media/ptrArchComp_TSP_RL_tourLength.png)
 
 In terms of both the fraction of completed tours and the valid tour length, 
 the networks equipped with the Pointer "Dot" layer perform better on the task!
