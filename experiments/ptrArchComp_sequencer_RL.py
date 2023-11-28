@@ -89,13 +89,10 @@ def trainTestModel():
     ignore_index = -1
     value_method = '1' # method for generating rewards in reward function
 
-    # if trained on the full task immediately, the networks don't learn because they get
-    # confused by all their failures. This progressively increase in output sequence length
-    # is a curriculum learning program that allows the networks to learn the easy part first
-    # and the hard parts later.
-    num_output = np.linspace(2, copy(handSize), 4).astype(int)
-    get_output = lambda epoch: num_output[int(len(num_output) * epoch // trainEpochs)] # this is an inline method for retrieving the number of outputs
-    
+    num_output = copy(handSize)
+    gamma = args.gamma
+    gamma_transform = get_gamma_transform(gamma, num_output).to(device)
+
     # other batch parameters
     batchSize = args.batch_size
     
@@ -105,7 +102,6 @@ def trainTestModel():
     heads = args.heads
     encoding_layers = args.encoding_layers
     contextual_encoder = True # don't transform the "available" token
-    gamma = args.gamma
     
     # train parameters
     trainEpochs = args.train_epochs
@@ -115,7 +111,6 @@ def trainTestModel():
     numNets = len(POINTER_METHODS)
     
     print(f"Doing training...")
-    trainNumOutput = torch.zeros((trainEpochs,))
     trainReward = torch.zeros((trainEpochs, numNets, numRuns))
     testReward = torch.zeros((testEpochs, numNets, numRuns))
     testEachReward = torch.zeros((testEpochs, numNets, numRuns, batchSize))
@@ -135,9 +130,6 @@ def trainTestModel():
         optimizers = [torch.optim.Adam(net.parameters(), lr=1e-4, weight_decay=1e-6) for net in nets]
 
         for epoch in tqdm(range(trainEpochs)):
-            c_output = get_output(epoch)
-            gamma_transform = get_gamma_transform(gamma, c_output).to(device)
-
             # generate input batch
             batch = datasets.generateBatch(highestDominoe, listDominoes, batchSize, handSize, return_target=False, null_token=null_token,
                                         available_token=available_token, ignore_index=ignore_index, return_full=True)
@@ -154,7 +146,7 @@ def trainTestModel():
             
             # zero gradients, get output of network
             for opt in optimizers: opt.zero_grad()
-            log_scores, choices = map(list, zip(*[net(input, max_output=c_output) for net in nets]))
+            log_scores, choices = map(list, zip(*[net(input, max_output=num_output) for net in nets]))
 
             # measure rewards for each sequence
             rewards = [training.measureReward_sequencer(available, listDominoes[selection], choice, value_method=value_method, normalize=False)
@@ -172,19 +164,12 @@ def trainTestModel():
             # save training data
             for i, reward in enumerate(rewards):
                 trainReward[epoch, i, run] = torch.mean(torch.sum(reward, dim=1))
-            
-            # Document how long the maximum output sequence was
-            if run==0:
-                trainNumOutput[epoch] = c_output
         
         with torch.no_grad():
             print('Testing network...')
             for net in nets:
                 net.setTemperature(1.0)
                 net.setThompson(False)
-
-            c_output = num_output[-1]
-            gamma_transform = get_gamma_transform(gamma, c_output).to(device)
 
             for epoch in tqdm(range(testEpochs)):
                 # generate input batch
@@ -197,14 +182,14 @@ def trainTestModel():
 
                 # move to correct device
                 input, target = input.to(device), target.to(device)
-                target = target[:, :c_output].contiguous()
+                target = target[:, :num_output].contiguous()
                 target[target==ignore_index]=null_index # need to convert this to a valid index for measuring reward of target
 
                 # divide input into main input and context
                 x, context = input[:, :-1].contiguous(), input[:, [-1]] # input [:, [-1]] is context token
                 input = (x, context)
                 
-                log_scores, choices = map(list, zip(*[net(input, max_output=c_output) for net in nets]))
+                log_scores, choices = map(list, zip(*[net(input, max_output=num_output) for net in nets]))
 
                 # measure rewards for each sequence
                 rewards = [training.measureReward_sequencer(available, listDominoes[selection], choice, value_method=value_method, normalize=False)
@@ -234,11 +219,6 @@ def plotResults(results, args):
 
     numRuns = args.num_runs
     cmap = mpl.colormaps['tab10']
-    
-    if 'trainNumOutput' not in results:
-        num_output = np.linspace(2, copy(args.hand_size), 4).astype(int)
-        get_output = lambda epoch: num_output[int(len(num_output) * epoch // args.train_epochs)] # this is an inline method for retrieving the number of outputs
-        results['trainNumOutput'] = np.array([get_output(epoch) for epoch in range(args.train_epochs)])
 
     # Process test results in comparison to maximum possible
     minMaxReward = torch.min(results['testMaxReward'])
@@ -252,48 +232,34 @@ def plotResults(results, args):
             for ir in range(numRuns):
                 rewPerMax[ii, iur, ir] = torch.mean(results['testEachReward'][:, ii, ir][idx_ur[:,ir,:]])
                 
-
-    fig = plt.figure(figsize=(8, 5), layout="constrained")
-
-    gs = GridSpec(3, 3, figure=fig)
-    axTrain = fig.add_subplot(gs[:-1, :-1])
-    axNumOut = fig.add_subplot(gs[-1, :-1])
-    axTest = fig.add_subplot(gs[:, -1])
-
-    # make plot of loss trajectory
-    #fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6, 1],layout='constrained')
+    
+    # make plot of performance trajectory
+    fig, ax = plt.subplots(1, 2, figsize=(6, 4), width_ratios=[2.6, 1], layout="constrained")
     for idx, name in enumerate(POINTER_METHODS):
         adata = sp.ndimage.median_filter(results['trainReward'][:,idx], size=(10,1))
         cdata = np.mean(adata, axis=1)
         sdata = np.std(adata, axis=1)
-        axTrain.plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
-        axTrain.fill_between(range(args.train_epochs), cdata+sdata/2, cdata-sdata/2, edgecolor='none', facecolor=(cmap(idx), 0.3))
-    axTrain.set_ylabel(f'Total Reward (N={numRuns})')
-    axTrain.set_title('Training Performance')
-    axTrain.legend(loc='upper left', fontsize=8)
-    axTrain.set_xticks([0, 2500, 5000, 7500, 10000])
-
-    axNumOut.plot(range(args.train_epochs), results['trainNumOutput'], color='k', linewidth=1.2) 
-    axNumOut.set_xlabel('Training Epoch')
-    axNumOut.set_ylabel('Outputs')
-    axNumOut.set_title('Num Outputs in Sequence')
-    axNumOut.set_ylim(0, np.max(results['trainNumOutput'])+np.min(results['trainNumOutput']))
-    axNumOut.set_xticks([0, 2500, 5000, 7500, 10000])
+        ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
+        ax[0].fill_between(range(args.train_epochs), cdata+sdata/2, cdata-sdata/2, edgecolor='none', facecolor=(cmap(idx), 0.3))
+    ax[0].set_ylabel(f'Total Reward (N={numRuns})')
+    ax[0].set_title('Training Performance')
+    ax[0].legend(loc='upper left', fontsize=8)
+    ax[0].set_xticks([0, 2500, 5000, 7500, 10000])
 
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
     for idx, name in enumerate(POINTER_METHODS):
         mnTestReward = torch.mean(results['testReward'][:,idx], dim=0)
-        axTest.plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
+        ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
         for mtr in mnTestReward:
-            axTest.plot(get_x(idx), [mtr, mtr], color=cmap(idx), lw=1.5)
-        axTest.plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
-    axTest.set_xticks(range(len(POINTER_METHODS)))
-    axTest.set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
-    axTest.set_ylabel(f'Reward (N={numRuns})')
-    axTest.set_title('Testing')
-    axTest.set_xlim(-1, len(POINTER_METHODS))
-    axTest.set_ylim(0, 7)
+            ax[1].plot(get_x(idx), [mtr, mtr], color=cmap(idx), lw=1.5)
+        ax[1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
+    ax[1].set_xticks(range(len(POINTER_METHODS)))
+    ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
+    ax[1].set_ylabel(f'Reward (N={numRuns})')
+    ax[1].set_title('Testing')
+    ax[1].set_xlim(-1, len(POINTER_METHODS))
+    ax[1].set_ylim(0, 7)
     
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName()))
