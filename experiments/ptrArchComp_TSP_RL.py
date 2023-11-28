@@ -295,7 +295,7 @@ def plotResults(results, args):
     ax[0].set_ylabel('Mean Score')
     ax[0].set_title('Confidence')
     ax[0].legend(loc='best', fontsize=8)
-    ax[0].set_ylim(0, 1)
+    ax[0].set_ylim(0.93, 1)
     
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
@@ -309,7 +309,7 @@ def plotResults(results, args):
     ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
     ax[1].set_title('Average')
     ax[1].set_xlim(-1, len(POINTER_METHODS))
-    ax[1].set_ylim(0, 1)
+    ax[1].set_ylim(0.93, 1)
 
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName(extra='confidence')))
