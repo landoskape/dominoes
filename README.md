@@ -74,6 +74,7 @@ the agents I have developed. This is a list of them with links to the file.
 1. [Toy Problem (& intro to pointer networks)](docs/pointerDemonstration.md)
 2. [Novel Architecture Comparison on Toy Problem](docs/pointerArchitectureComparison.md)
 3. [Tests on the Traveling Salesman Problem](docs/pointerArchComp_TSP.md)
+4. [A Novel Complex Sequencing Problem](docs/pointerSequencer.md)
 
 ## Contributing
 Feel free to contribute to this project by opening issues or submitting pull 
