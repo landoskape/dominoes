@@ -76,7 +76,9 @@ def trainTestModel():
     null_token = True # using a null token to indicate end of line
     available_token = True # using available token to indicate which value to start on 
     num_output = copy(handSize)+1 # always require end on null token
+    null_index = copy(handSize) # index of null token
     ignore_index = -1
+    value_method = '1'
 
     # other batch parameters
     batchSize = args.batch_size
@@ -98,6 +100,10 @@ def trainTestModel():
     print(f"Doing training...")
     trainLoss = torch.zeros((trainEpochs, numNets, numRuns))
     testLoss = torch.zeros((testEpochs, numNets, numRuns))
+    trainReward = torch.zeros((trainEpochs, numNets, numRuns))
+    testReward = torch.zeros((testEpochs, numNets, numRuns))
+    testEachReward = torch.zeros((testEpochs, numNets, numRuns, batchSize))
+    testMaxReward = torch.zeros((testEpochs, numRuns, batchSize))
     for run in range(numRuns):
         print(f"Training round of networks {run+1}/{numRuns}...")
         
@@ -118,7 +124,7 @@ def trainTestModel():
                                            available_token=available_token, ignore_index=ignore_index, return_full=True)
 
             # unpack batch tuple
-            input, target, _, _, _, _, _ = batch
+            input, target, _, _, _, selection, available = batch
 
             # move to correct device
             input, target = input.to(device), target.to(device)
@@ -129,7 +135,7 @@ def trainTestModel():
             
             # zero gradients, get output of network
             for opt in optimizers: opt.zero_grad()
-            log_scores, _ = map(list, zip(*[net(input, max_output=num_output) for net in nets]))
+            log_scores, choices = map(list, zip(*[net(input, max_output=num_output) for net in nets]))
 
             # measure loss with negative log-likelihood
             unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]
@@ -141,10 +147,15 @@ def trainTestModel():
             # update networks
             for l in loss: l.backward()
             for opt in optimizers: opt.step()
-                
+            
+            # Also document would-be rewards
+            rewards = [training.measureReward_sequencer(available, listDominoes[selection], choice, value_method=value_method, normalize=False)
+                       for choice in choices]
+            
             # save training data
-            for i, l in enumerate(loss):
+            for i, (l, reward) in enumerate(zip(loss, rewards)):
                 trainLoss[epoch, i, run] = l.item()
+                trainReward[epoch, i, run] = torch.mean(torch.sum(reward, dim=1))
                     
         
         with torch.no_grad():
@@ -155,7 +166,7 @@ def trainTestModel():
                                             available_token=available_token, ignore_index=ignore_index, return_full=True)
 
                 # unpack batch tuple
-                input, target, _, _, _, _, _ = batch
+                input, target, _, _, _, selection, available = batch
 
                 # move to correct device
                 input, target = input.to(device), target.to(device)
@@ -164,20 +175,36 @@ def trainTestModel():
                 x, context = input[:, :-1].contiguous(), input[:, [-1]] # input [:, [-1]] is context token
                 input = (x, context)
                 
-                log_scores, _ = map(list, zip(*[net(input, max_output=num_output) for net in nets]))
+                log_scores, choices = map(list, zip(*[net(input, max_output=num_output) for net in nets]))
 
                 # measure loss with negative log-likelihood
                 unrolled = [log_score.view(-1, log_score.size(-1)) for log_score in log_scores]
                 loss = [torch.nn.functional.nll_loss(unroll, target.view(-1), ignore_index=ignore_index)
                         for unroll in unrolled]
+                
+                # Also document would-be rewards
+                rewards = [training.measureReward_sequencer(available, listDominoes[selection], choice, value_method=value_method, normalize=False)
+                        for choice in choices]
                     
                 # save testing data
-                for i, l in enumerate(loss):
+                for i, (l, reward) in enumerate(zip(loss, rewards)):
                     testLoss[epoch, i, run] = l.item()
+                    testReward[epoch, i, run] = torch.mean(torch.sum(reward, dim=1))
+                    testEachReward[epoch, i, run] = torch.sum(reward, dim=1)
+
+                # measure rewards for target (defined as longest possible sequence of the dominoes in the batch
+                target[target==ignore_index]=null_index # need to convert this to a valid index for measuring reward of target
+                target_reward = training.measureReward_sequencer(available, listDominoes[selection], target, value_method=value_method, normalize=False)
+                testMaxReward[epoch, run] = torch.sum(target_reward, dim=1)
+
                 
     results = {
         'trainLoss': trainLoss,
         'testLoss': testLoss,
+        'trainReward': trainReward,
+        'testReward': testReward,
+        'testEachReward': testEachReward,
+        'testMaxReward': testMaxReward,
     }
     
     return results, nets
