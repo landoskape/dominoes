@@ -6,6 +6,33 @@ from torch import nn
 import torch.nn.functional as F
 from . import functions as df
 from multiprocessing import Pool
+from functools import partial
+
+
+
+
+
+def makeLines(input, dominoes, value_method="dominoe"):
+    selection, available = input # unpack
+    cseq, cdir = df.constructLineRecursive(dominoes, selection, available)
+    if value_method == 'dominoe':
+        cval = [np.sum(dominoes[cs]) for cs in cseq]
+    else:
+        cval = [len(cs) for cs in cseq]
+    cidx = max(enumerate(cval), key=lambda x: x[1])[0]
+    return cseq[cidx], cdir[cidx]
+
+def getBestLineFromAvailablePool(dominoes, selection, available, value_method="dominoe", threads=18):
+    # check value method
+    if not (value_method=='dominoe' or value_method=='length'):
+        raise ValueError("did not recognize value_method, it has to be either 'dominoe' or 'length'")
+    p_makeLines = partial(makeLines, dominoes=dominoes, value_method=value_method)
+    
+    with Pool(threads) as p:
+        lines = p.map(p_makeLines, zip(selection, available))
+    bestSequence, bestDirection = map(list, zip(*lines))
+    return bestSequence, bestDirection
+
 
 # code for generating a hand
 def randomDominoeHand(numInHand, listDominoes, highestDominoe, batch_size=1, null_token=True, available_token=True):
