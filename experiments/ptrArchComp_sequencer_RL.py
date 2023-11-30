@@ -215,8 +215,6 @@ def trainTestModel():
     return results, nets
 
 def plotResults(results, args):
-    from matplotlib.gridspec import GridSpec
-
     numRuns = args.num_runs
     cmap = mpl.colormaps['tab10']
 
@@ -232,7 +230,6 @@ def plotResults(results, args):
             for ir in range(numRuns):
                 rewPerMax[ii, iur, ir] = torch.mean(results['testEachReward'][:, ii, ir][idx_ur[:,ir,:]])
                 
-    
     # make plot of performance trajectory
     fig, ax = plt.subplots(1, 2, figsize=(6, 4), width_ratios=[2.6, 1], layout="constrained")
     for idx, name in enumerate(POINTER_METHODS):
