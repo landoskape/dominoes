@@ -121,7 +121,7 @@ def trainTestModel():
         for epoch in tqdm(range(trainEpochs)):
             # generate input batch
             batch = datasets.generateBatch(highestDominoe, listDominoes, batchSize, handSize, return_target=True, null_token=null_token,
-                                           available_token=available_token, ignore_index=ignore_index, return_full=True)
+                                           available_token=available_token, ignore_index=ignore_index, return_full=True, value_method='dominoe')
 
             # unpack batch tuple
             input, target, _, _, _, selection, available = batch
@@ -163,7 +163,7 @@ def trainTestModel():
             for epoch in tqdm(range(testEpochs)):
                 # generate input batch
                 batch = datasets.generateBatch(highestDominoe, listDominoes, batchSize, handSize, return_target=True, null_token=null_token,
-                                            available_token=available_token, ignore_index=ignore_index, return_full=True)
+                                            available_token=available_token, ignore_index=ignore_index, return_full=True, value_method='dominoe')
 
                 # unpack batch tuple
                 input, target, _, _, _, selection, available = batch
@@ -212,10 +212,25 @@ def trainTestModel():
 def plotResults(results, args):
     numRuns = args.num_runs
     cmap = mpl.colormaps['tab10']
+
+    idx_ignore = -100 #{val: idx for idx, val in enumerate(POINTER_METHODS)}['PointerDotNoLN']
     
+    # Process test results in comparison to maximum possible
+    minMaxReward = torch.min(results['testMaxReward'])
+    maxMaxReward = torch.max(results['testMaxReward'])
+    uniqueRewards = torch.arange(minMaxReward, maxMaxReward+1)
+    numUnique = len(uniqueRewards)
+    rewPerMax = torch.zeros((len(POINTER_METHODS), numUnique, numRuns))
+    for iur, ur in enumerate(uniqueRewards):
+        idx_ur = results['testMaxReward']==ur
+        for ii, name in enumerate(POINTER_METHODS):
+            for ir in range(numRuns):
+                rewPerMax[ii, iur, ir] = torch.mean(results['testEachReward'][:, ii, ir][idx_ur[:,ir,:]])
+                
     # make plot of loss trajectory
     fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
+        if idx==idx_ignore: continue
         cdata = sp.ndimage.median_filter(torch.mean(results['trainLoss'][:,idx], dim=1), size=(100,))
         ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
     ax[0].set_xlabel('Training Epoch')
@@ -228,6 +243,7 @@ def plotResults(results, args):
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
     for idx, name in enumerate(POINTER_METHODS):
+        if idx==idx_ignore: continue
         mnTestReward = torch.mean(results['testLoss'][:,idx], dim=0)
         ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
         for mtr in mnTestReward:
@@ -244,6 +260,64 @@ def plotResults(results, args):
     
     plt.show()
 
+
+    # make plot of performance trajectory (in terms of rewards!!!)
+    fig, ax = plt.subplots(1, 2, figsize=(6, 4), width_ratios=[2.6, 1], layout="constrained")
+    for idx, name in enumerate(POINTER_METHODS):
+        if idx==idx_ignore: continue
+        adata = sp.ndimage.median_filter(results['trainReward'][:,idx], size=(10,1))
+        cdata = np.mean(adata, axis=1)
+        sdata = np.std(adata, axis=1)
+        ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
+        ax[0].fill_between(range(args.train_epochs), cdata+sdata/2, cdata-sdata/2, edgecolor='none', facecolor=(cmap(idx), 0.3))
+    ax[0].set_ylabel(f'Total Reward (N={numRuns})')
+    ax[0].set_title('Training Performance')
+    ax[0].legend(loc='upper left', fontsize=8)
+    ax[0].set_xticks([0, 2500, 5000, 7500, 10000])
+
+    xOffset = [-0.2, 0.2]
+    get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
+    for idx, name in enumerate(POINTER_METHODS):
+        if idx==idx_ignore: continue
+        mnTestReward = torch.mean(results['testReward'][:,idx], dim=0)
+        ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
+        for mtr in mnTestReward:
+            ax[1].plot(get_x(idx), [mtr, mtr], color=cmap(idx), lw=1.5)
+        ax[1].plot([idx,idx], [mnTestReward.min(), mnTestReward.max()], color=cmap(idx), lw=1.5)
+    ax[1].set_xticks(range(len(POINTER_METHODS)))
+    ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
+    ax[1].set_ylabel(f'Reward (N={numRuns})')
+    ax[1].set_title('Testing')
+    ax[1].set_xlim(-1, len(POINTER_METHODS))
+    ax[1].set_ylim(0, 7)
+    
+    if not(args.nosave):
+        plt.savefig(str(figsPath/getFileName('rewards')))
+    
+    plt.show()
+
+
+    # Plot rewards in comparison to maximum possible for each network type
+    fig, ax = plt.subplots(1, 1, figsize=(6, 4), layout='constrained')
+    for idx, name in enumerate(POINTER_METHODS):
+        if idx==idx_ignore: continue
+        adata = rewPerMax[idx]
+        cdata = torch.mean(adata, dim=1)
+        sdata = torch.std(adata, dim=1)
+        ax.plot(uniqueRewards, cdata, color=cmap(idx), lw=1.2, marker='o', markersize=4, label=name)
+        ax.fill_between(uniqueRewards, cdata+sdata/2, cdata-sdata/2,  edgecolor='none', facecolor=(cmap(idx), 0.3))
+    ax.plot(uniqueRewards, uniqueRewards, color='k', lw=1.2, linestyle='--', label='max possible')
+    ax.set_ylim(0, max(uniqueRewards)+1)
+    ax.set_xticks(uniqueRewards)
+    ax.set_xlabel('Maximum Possible Reward')
+    ax.set_ylabel('Actual Reward Acquired')
+    ax.legend(loc='upper left', fontsize=10)
+    
+
+    if not(args.nosave):
+        plt.savefig(str(figsPath/getFileName('maxRewardDifferential')))
+    
+    plt.show()
     
 if __name__=='__main__':
     args = handleArguments()
