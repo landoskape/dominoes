@@ -484,12 +484,16 @@ class PointerDotNoLN(nn.Module):
         self.W1 = nn.Linear(emb, emb, bias=False)
         self.W2 = nn.Linear(emb, emb, bias=False)
 
+        # still need to normalize to prevent gradient blowups -- but without additional affine!
+        self.eln = nn.LayerNorm(emb, bias=False, elementwise_affine=False)
+        self.dln = nn.LayerNorm(emb, bias=False, elementwise_affine=False)
+
     def forwardEncoded(self, encoded):
-        self.transformEncoded = self.W1(encoded)
+        self.transformEncoded = self.eln(self.W1(encoded))
 
     def forward(self, encoded, decoder_state, mask=None, temperature=1.0):
-        # first transform encoded representations and decoder states 
-        transformDecoded = self.W2(decoder_state)
+        # first transform encoded representations and decoder states
+        transformDecoded = self.dln(self.W2(decoder_state))
             
         # instead of add, tanh, and project on learnable weights, 
         # just dot product the encoded representations with the decoder "pointer"
