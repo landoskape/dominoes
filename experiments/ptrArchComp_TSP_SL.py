@@ -60,6 +60,7 @@ def handleArguments():
     parser.add_argument('--encoding-layers', type=int, default=2, help='the number of stacked transformers in the encoder')
     parser.add_argument('--justplot', default=False, action='store_true', help='if used, will only plot the saved results (results have to already have been run and saved)')
     parser.add_argument('--nosave', default=False, action='store_true')
+    parser.add_argument('--printargs', default=False, action='store_true')
     
     args = parser.parse_args()
 
@@ -231,13 +232,10 @@ def trainTestModel():
 def plotResults(results, args):
     numRuns = args.num_runs
     cmap = mpl.colormaps['tab10']
-
-    idx_ignore = {val: idx for idx, val in enumerate(POINTER_METHODS)}['PointerDotNoLN']
     
     # make plot of loss trajectory
     fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
-        if idx == idx_ignore: continue # dot noLN has a loss blow up
         cdata = sp.ndimage.median_filter(torch.mean(results['trainLoss'][:,idx], dim=1), size=(100,))
         ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
     ax[0].set_xlabel('Training Epoch')
@@ -250,7 +248,6 @@ def plotResults(results, args):
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
     for idx, name in enumerate(POINTER_METHODS):
-        if idx == idx_ignore: continue # dot noLN has a loss blow up
         mnTestReward = torch.mean(results['testLoss'][:,idx], dim=0)
         ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
         for mtr in mnTestReward:
@@ -271,7 +268,6 @@ def plotResults(results, args):
     # make plot of tour length for valid tours
     fig, ax = plt.subplots(1,2,figsize=(6,4), width_ratios=[2.6,1],layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
-        if idx == idx_ignore: continue # dot noLN has a loss blow up
         cdata = torch.nanmean(results['trainTourLength'][:,idx], dim=1)
         idx_nan = torch.isnan(cdata)
         cdata.masked_fill_(idx_nan, 0)
@@ -287,7 +283,6 @@ def plotResults(results, args):
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
     for idx, name in enumerate(POINTER_METHODS):
-        if idx == idx_ignore: continue # dot noLN has a loss blow up
         mnTestReward = torch.nanmean(results['testTourLength'][:,idx], dim=0)
         ax[1].plot(get_x(idx), [mnTestReward.mean(), mnTestReward.mean()], color=cmap(idx), lw=4, label=name)
         for mtr in mnTestReward:
@@ -309,7 +304,6 @@ def plotResults(results, args):
     numPos = results['testMaxScore'].size(1)
     fig, ax = plt.subplots(1, 2, figsize=(6,4), width_ratios=[2.6,1], layout='constrained')
     for idx, name in enumerate(POINTER_METHODS):
-        if idx == idx_ignore: continue # dot noLN has a loss blow up
         ax[0].plot(range(numPos), torch.mean(torch.exp(results['testMaxScore'][:,:,idx]), dim=(0,2)), color=cmap(idx), lw=1, marker='o', label=name)
     ax[0].set_xlabel('Output Position')
     ax[0].set_ylabel('Mean Score')
@@ -320,7 +314,6 @@ def plotResults(results, args):
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
     for idx, name in enumerate(POINTER_METHODS):
-        if idx == idx_ignore: continue # dot noLN has a loss blow up
         mnScoreByPosition = torch.mean(torch.exp(results['testMaxScore'][:,:,idx]), dim=(0,1))
         ax[1].plot(get_x(idx), [mnScoreByPosition.mean(), mnScoreByPosition.mean()], color=cmap(idx), lw=4, label=name)
         for msbp in mnScoreByPosition:
@@ -338,11 +331,32 @@ def plotResults(results, args):
     plt.show()
     
 
+def loadSaved():
+    prms = np.load(prmsPath / (getFileName()+'.npy'), allow_pickle=True).item()
+    assert prms.keys() <= vars(args).keys(), f"Saved parameters contain keys not found in ArgumentParser:  {set(prms.keys()).difference(vars(args).keys())}"
+    for (pk,pi), (ak,ai) in zip(prms.items(), vars(args).items()):
+        if pk=='justplot': continue
+        if pk=='nosave': continue
+        if prms[pk] != vars(args)[ak]:
+            print(f"Requested argument {ak}={ai} differs from saved, which is: {pk}={pi}. Using saved...")
+            setattr(args,pk,pi)
+    
+    results = np.load(resPath / (getFileName()+'.npy'), allow_pickle=True).item()
+
+    return results, args
+
     
 if __name__=='__main__':
     args = handleArguments()
-    
-    if not(args.justplot):
+    show_results = True
+
+    if args.printargs:
+        _, args = loadSaved()
+        for key, val in vars(args).items():
+            print(f"{key}={val}")
+        show_results = False
+
+    elif not(args.justplot):
         # train and test pointerNetwork 
         results, nets = trainTestModel()
         
@@ -357,18 +371,10 @@ if __name__=='__main__':
             np.save(resPath / getFileName(), results)
         
     else:
-        prms = np.load(prmsPath / (getFileName()+'.npy'), allow_pickle=True).item()
-        assert prms.keys() <= vars(args).keys(), f"Saved parameters contain keys not found in ArgumentParser:  {set(prms.keys()).difference(vars(args).keys())}"
-        for (pk,pi), (ak,ai) in zip(prms.items(), vars(args).items()):
-            if pk=='justplot': continue
-            if pk=='nosave': continue
-            if prms[pk] != vars(args)[ak]:
-                print(f"Requested argument {ak}={ai} differs from saved, which is: {pk}={pi}. Using saved...")
-                setattr(args,pk,pi)
-        
-        results = np.load(resPath / (getFileName()+'.npy'), allow_pickle=True).item()
-        
-    plotResults(results, args)
+        results, args = loadSaved()
+
+    if show_results:
+        plotResults(results, args)
 
 
 
