@@ -30,7 +30,9 @@ class valueAgent(dominoeAgent):
         self.replayRepetitions = 1 # how many repetitions to learn from each replay batch every hand
         self.finalScoreOutputDimension = 1 if ('finalScoreOutputDimension' not in kwargs) else kwargs['finalScoreOutputDimension']
         self.predict_score = True if ('predict_score' not in kwargs) else kwargs['predict_score']
-        
+        if not(self.predict_score):
+            assert self.finalScoreOutputDimension == self.numPlayers-1, "must predict win probability against all other players if not predicting score"
+
         # create binary arrays for presenting gamestate information to the RL networks
         self.binaryPlayed = np.zeros(self.numDominoes)
         self.binaryLineAvailable = np.zeros((self.numPlayers,self.highestDominoe+1))
@@ -160,12 +162,12 @@ class valueAgent(dominoeAgent):
                 tdError = finalScore - self.finalScoreOutput
                 self.updateReplayTarget(finalScore)
             else:
-                raise ValueError("win prediction hasn't been coded yet!")
-                # finalScore = self.egocentric(finalScore)
-                # win = 1.0*(finalScore[0]<finalScore[1:]) # 1 if score is better than other agents
-                # win = torch.tensor(win).float().to(self.device)
-                # tdError = finalScore - self.finalScoreOutput
-                # self.updateReplayTarget(win)
+                finalScore = self.egocentric(finalScore)
+                win = 1.0*(finalScore[0] < finalScore[1:])
+                win = torch.tensor(win).float().to(self.device)
+                tdError = win - self.finalScoreOutput
+                self.updateReplayTarget(win)
+                
         for idx,td in enumerate(tdError):
             for prmIdx,prms in enumerate(self.finalScoreNetwork.parameters()):
                 assert self.finalScoreEligibility[idx][prmIdx].shape == prms.shape, "oops!"
@@ -516,7 +518,10 @@ class lineValueAgent(valueAgent):
         return lineValueInput, gameStateInput
     
     def makeChoice(self, optionValue):
-        return np.argmin(optionValue)
+        if self.predict_score:
+            return np.argmin(optionValue)
+        else:
+            return np.argmax(optionValue)
     
     def optionValue(self, dominoe, location, gameEngine):
         # enter dominoe and location into gameEngine, return new gamestate
@@ -532,7 +537,7 @@ class lineValueAgent(valueAgent):
         simulatedValueInput = self.sampleFutureGamestate(nextState, newHand, lineSequence=lineSequence)
         with torch.no_grad(): finalScoreOutput = self.finalScoreNetwork(simulatedValueInput)
         # return optionValue
-        return finalScoreOutput.detach().cpu().numpy()
+        return np.mean(finalScoreOutput.detach().cpu().numpy())
     
     def selectPlay(self, gameEngine):
         # first, identify valid play options
