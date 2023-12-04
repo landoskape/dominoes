@@ -6,19 +6,19 @@ mainPath = os.path.dirname(os.path.abspath(__file__)) + "/.."
 sys.path.append(mainPath)
 
 # standard imports
-from copy import copy
+from copy import deepcopy
 import argparse
 from pathlib import Path
 from tqdm import tqdm
 import numpy as np
-import scipy as sp
+from scipy.signal import savgol_filter
+from scipy.stats import ttest_rel
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import torch
 import torch.cuda as torchCuda
 
 # dominoes package
-from dominoes import functions as df
 from dominoes import datasets
 from dominoes import training
 from dominoes import transformers
@@ -41,6 +41,8 @@ for path in (resPath, prmsPath, figsPath, savePath):
 # method for returning the name of the saved network parameters (different save for each possible opponent)
 def getFileName(extra=None):
     baseName = "ptrArchComp_TSP_RL"
+    if hasattr(args, 'nobaseline') and not(args.nobaseline):
+        baseName += "_withBaseline"
     if extra is not None:
         baseName = baseName + f"_{extra}"
     return baseName
@@ -52,22 +54,47 @@ def handleArguments():
     parser.add_argument('-ne','--train-epochs',type=int, default=12000, help='the number of training epochs')
     parser.add_argument('-te','--test-epochs',type=int, default=200, help='the number of testing epochs')
     parser.add_argument('-nr','--num-runs',type=int, default=8, help='how many runs for each network to train')
+    
+    parser.add_argument('--nobaseline', default=False, action='store_true')
+    parser.add_argument('--significance', default=0.05, type=float, help='significance of reward improvement for baseline updating')
+    parser.add_argument('--baseline-batch-size', default=1024, type=int, help='the size of the baseline batch to use')
+
     parser.add_argument('--gamma', type=float, default=1.0, help='discounting factor')
     parser.add_argument('--temperature',type=float, default=5.0, help='temperature for training')
     
-    parser.add_argument('--embedding_dim', type=int, default=96, help='the dimensions of the embedding')
-    parser.add_argument('--heads', type=int, default=4, help='the number of heads in transformer layers')
-    parser.add_argument('--encoding-layers', type=int, default=1, help='the number of stacked transformers in the encoder')
+    parser.add_argument('--embedding_dim', type=int, default=128, help='the dimensions of the embedding')
+    parser.add_argument('--heads', type=int, default=8, help='the number of heads in transformer layers')
+    parser.add_argument('--encoding-layers', type=int, default=2, help='the number of stacked transformers in the encoder')
+    parser.add_argument('--expansion', type=int, default=4, help='the expansion in the ff layer of the transformer')
     parser.add_argument('--justplot', default=False, action='store_true', help='if used, will only plot the saved results (results have to already have been run and saved)')
     parser.add_argument('--nosave', default=False, action='store_true')
+    parser.add_argument('--printargs', default=False, action='store_true')
     
     args = parser.parse_args()
     
     assert args.gamma > 0 and args.gamma <= 1, "gamma must be greater than 0 or less than or equal to 1"
+    assert args.significance > 0 and args.significance < 1, "significance must be greater than 0 or less than 1"
     
     return args
     
-    
+
+
+def resetBaselines(blnets, batchSize, num_cities, num_choices):
+    # initialize baseline input (to prevent overfitting with training data)
+    baselineinput, _, xy, baseline_dists = datasets.tsp_batch(batchSize, num_cities, return_target=False, return_full=True)
+    baselineinput, xy, baseline_dists = baselineinput.to(device), xy.to(device), baseline_dists.to(device)
+    baseline_start = torch.argmin(torch.sum(xy**2, dim=2), dim=1)
+    baseline_init_input = torch.gather(baselineinput, 1, baseline_start.view(-1, 1, 1).expand(-1, -1, 2))
+
+    # measure output of blnets for this data
+    _, baseline_choices = map(list, zip(*[net((baselineinput, baseline_init_input), max_output=num_choices, init=baseline_start) for net in blnets]))
+    baseline_full_choices = [torch.cat((baseline_start.view(-1, 1), choice), dim=1) for choice in baseline_choices]
+    baseline_rewards, _ = map(list, zip(*[training.measureReward_tsp(baseline_dists, choice) for choice in baseline_full_choices]))
+    baseline_rewards = [-reward for reward in baseline_rewards]
+
+    return baselineinput, baseline_init_input, baseline_start, baseline_rewards, baseline_dists
+
+
 def trainTestModel():
     # get values from the argument parser
     num_cities = args.num_cities
@@ -76,14 +103,18 @@ def trainTestModel():
 
     # other batch parameters
     batchSize = args.batch_size
+    baselineBatchSize = args.baseline_batch_size
+    significance = args.significance
+    do_baseline = not(args.nobaseline)
     
     # network parameters
     input_dim = 2
     embedding_dim = args.embedding_dim
     heads = args.heads
     encoding_layers = args.encoding_layers
+    expansion = args.expansion
     temperature = args.temperature
-    
+
     # train parameters
     trainEpochs = args.train_epochs
     testEpochs = args.test_epochs
@@ -109,10 +140,20 @@ def trainTestModel():
         # create pointer networks with different pointer methods
         nets = [transformers.PointerNetwork(input_dim, embedding_dim, temperature=temperature, pointer_method=POINTER_METHOD, 
                                             thompson=True, encoding_layers=encoding_layers, heads=heads, kqnorm=True, 
-                                            decoder_method='transformer', contextual_encoder='multicontext')
+                                            expansion=expansion, decoder_method='transformer', contextual_encoder='multicontext')
                 for POINTER_METHOD in POINTER_METHODS]
         nets = [net.to(device) for net in nets]
 
+        if do_baseline:
+            # create baseline nets, initialized as copy of learning nets
+            blnets = [deepcopy(net) for net in nets]
+            for blnet in blnets:
+                blnet.setTemperature(1.0)
+                blnet.setThompson(True)
+
+            baseline_data = resetBaselines(blnets, baselineBatchSize, num_cities, num_choices)
+            baselineinput, baseline_init_input, baseline_start, baseline_rewards, baseline_dists = baseline_data
+        
         # Create an optimizer, Adam with weight decay is pretty good
         optimizers = [torch.optim.Adam(net.parameters(), lr=1e-4, weight_decay=1e-6) for net in nets]
 
@@ -142,9 +183,25 @@ def trainTestModel():
             for i, (l, nc) in enumerate(zip(rewards, new_city)):
                 assert not torch.any(torch.isnan(l)), f"model type {POINTER_METHODS[i]} diverged :("
                 assert torch.all(nc==1), f"model type {POINTER_METHODS[i]} didn't do a permutation"
+            
+            if do_baseline:
+                # - do "baseline rollout" with baseline networks - 
+                with torch.no_grad():
+                    _, bl_choices = map(list, zip(*[net((input, init_input), max_output=num_choices, init=start) for net in blnets]))
+                    bl_full_choices = [torch.cat((start.view(-1, 1), choice), dim=1) for choice in bl_choices] 
 
-            # measure J
-            J = [-torch.sum(logpol * g) for logpol, g in zip(logprob_policy, G)] # flip sign for gradient ascent
+                    bl_rewards, _ = map(list, zip(*[training.measureReward_tsp(dists, choice) for choice in bl_full_choices]))
+                    bl_rewards = [-reward for reward in bl_rewards]
+                    bl_chosen_rewards = [reward[:, 1:].contiguous() for reward in bl_rewards]
+                    bl_G = [torch.matmul(reward, gamma_transform) for reward in bl_chosen_rewards]
+
+                    adjusted_G = [g-blg for g, blg in zip(G, bl_G)] # baseline corrected G
+            else:
+                # for a consistent namespace
+                adjusted_G = [g for g in G]
+
+            # measure J using adjusted G ()
+            J = [-torch.sum(logpol * g) for logpol, g in zip(logprob_policy, adjusted_G)] # flip sign for gradient ascent
             for j in J: j.backward()
 
             # update networks
@@ -160,7 +217,43 @@ def trainTestModel():
                     pretemp_score = torch.softmax(log_scores[i] * nets[i].temperature, dim=2)
                     pretemp_policy = torch.gather(pretemp_score, 2, choices[i].unsqueeze(2)).squeeze(2)
                     trainScoreByPosition[epoch, :, i, run] = torch.mean(pretemp_policy, dim=0).detach()
-        
+
+
+            # check if we should update baseline networks
+            if do_baseline:
+                with torch.no_grad():
+                    # first measure policy on baseline data (in evaluation mode)
+                    for net in nets: 
+                        net.setTemperature(1.0)
+                        net.setThompson(False)
+
+                    _, choices = map(list, zip(*[net((baselineinput, baseline_init_input), max_output=num_choices, init=baseline_start) for net in nets]))
+                    full_choices = [torch.cat((baseline_start.view(-1, 1), choice), dim=1) for choice in choices]
+                    
+                    rewards, _ = map(list, zip(*[training.measureReward_tsp(baseline_dists, choice) for choice in full_choices])) 
+                    rewards = [-reward for reward in rewards]
+                    _, p = map(list, zip(*[ttest_rel(r.view(-1).cpu().numpy(), blr.view(-1).cpu().numpy(), alternative='greater')
+                                            for r, blr in zip(rewards, baseline_rewards)]))
+                    do_update = [pv<significance for pv in p]
+
+                    # for any networks with significantly different values, update them
+                    for ii, update in enumerate(do_update):
+                        if update:
+                            blnets[ii] = deepcopy(nets[ii])
+                            blnets[ii].setTemperature(1.0)
+                            blnets[ii].setThompson(False)
+
+                    # regenerate baseline data and get baseline network policy
+                    if any(do_update):
+                        baseline_data = resetBaselines(blnets, baselineBatchSize, num_cities, num_choices)
+                        baselineinput, baseline_init_input, baseline_start, baseline_rewards, baseline_dists = baseline_data
+                        
+                    # return nets to training state
+                    for net in nets: 
+                        net.setTemperature(temperature) 
+                        net.setThompson(True)
+
+
         with torch.no_grad():
             for net in nets: 
                 net.setTemperature(1.0)
@@ -224,7 +317,7 @@ def plotResults(results, args):
         cdata = torch.nanmean(-results['trainTourLength'][:,idx], dim=1)
         idx_nan = torch.isnan(cdata)
         cdata.masked_fill_(idx_nan, 0)
-        cdata = sp.signal.savgol_filter(cdata, 10, 1)
+        cdata = savgol_filter(cdata, 10, 1)
         cdata[idx_nan] = torch.nan
         ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
     ax[0].set_xlabel('Training Epoch')
@@ -258,7 +351,7 @@ def plotResults(results, args):
         cdata = torch.nanmean(results['trainValidCycles'][:,idx], dim=1)
         idx_nan = torch.isnan(cdata)
         cdata.masked_fill_(idx_nan, 0)
-        cdata = sp.signal.savgol_filter(cdata, 10, 1)
+        cdata = savgol_filter(cdata, 10, 1)
         cdata[idx_nan] = torch.nan
         ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
     ax[0].set_xlabel('Training Epoch')
@@ -317,11 +410,31 @@ def plotResults(results, args):
     plt.show()
     
 
+def loadSaved():
+    prms = np.load(prmsPath / (getFileName()+'.npy'), allow_pickle=True).item()
+    assert prms.keys() <= vars(args).keys(), f"Saved parameters contain keys not found in ArgumentParser:  {set(prms.keys()).difference(vars(args).keys())}"
+    for ak in vars(args):
+        if ak=='justplot': continue
+        if ak=='nosave': continue
+        if ak in prms and prms[ak] != vars(args)[ak]:
+            print(f"Requested argument {ak}={vars(args)[ak]} differs from saved, which is: {ak}={prms[ak]}. Using saved...")
+            setattr(args,ak,prms[ak])    
+    results = np.load(resPath / (getFileName()+'.npy'), allow_pickle=True).item()
+
+    return results, args
+
     
 if __name__=='__main__':
     args = handleArguments()
-    
-    if not(args.justplot):
+    show_results = True
+
+    if args.printargs:
+        _, args = loadSaved()
+        for key, val in vars(args).items():
+            print(f"{key}={val}")
+        show_results = False
+
+    elif not(args.justplot):
         # train and test pointerNetwork 
         results, nets = trainTestModel()
         
@@ -336,18 +449,10 @@ if __name__=='__main__':
             np.save(resPath / getFileName(), results)
         
     else:
-        prms = np.load(prmsPath / (getFileName()+'.npy'), allow_pickle=True).item()
-        assert prms.keys() <= vars(args).keys(), f"Saved parameters contain keys not found in ArgumentParser:  {set(prms.keys()).difference(vars(args).keys())}"
-        for (pk,pi), (ak,ai) in zip(prms.items(), vars(args).items()):
-            if pk=='justplot': continue
-            if pk=='nosave': continue
-            if prms[pk] != vars(args)[ak]:
-                print(f"Requested argument {ak}={ai} differs from saved, which is: {pk}={pi}. Using saved...")
-                setattr(args,pk,pi)
-        
-        results = np.load(resPath / (getFileName()+'.npy'), allow_pickle=True).item()
-        
-    plotResults(results, args)
+        results, args = loadSaved()
+
+    if show_results:
+        plotResults(results, args)
 
 
 
