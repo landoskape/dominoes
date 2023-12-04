@@ -157,10 +157,11 @@ class lineRepresentationNetwork(nn.Module):
         cnnOutput = self.cnnForward(x[0], withBatch=withBatch)
         ffInput = torch.cat((cnnOutput, x[1]), dim=1 if withBatch else 0)
         netOutput = self.ffLayer(ffInput)
-        if not self.predict_score:
+        if self.predict_score:
+            # then just use network output
             return netOutput
         else:
-            # Convert to win probability
+            # if not predicting score, convert to win probability
             return torch.sigmoid(netOutput)
         
     
