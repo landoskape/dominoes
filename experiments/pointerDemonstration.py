@@ -47,7 +47,7 @@ def handleArguments():
     parser.add_argument('-mn','--min-seq-length', type=int, default=4, help='the minimum tokens per sequence')
     parser.add_argument('-mx','--max-seq-length', type=int, default=12, help='the maximum tokens per sequence')
     parser.add_argument('-bs','--batch-size',type=int, default=512, help='number of sequences per batch')
-    parser.add_argument('-ne','--train-epochs',type=int, default=2000, help='the number of training epochs')
+    parser.add_argument('-ne','--train-epochs',type=int, default=1000, help='the number of training epochs')
     parser.add_argument('-te','--test-epochs',type=int, default=100, help='the number of testing epochs')
 
     parser.add_argument('--embedding_dim', type=int, default=48, help='the dimensions of the embedding')
@@ -109,7 +109,7 @@ def trainTestModel():
     net.train()
 
     # Create an optimizer, Adam with weight decay is pretty good
-    optimizer = torch.optim.Adam(net.parameters(), lr=1e-4, weight_decay=1e-6)
+    optimizer = torch.optim.Adam(net.parameters(), lr=1e-3, weight_decay=1e-5)
     
     # Train network
     print("Training network...")
@@ -213,24 +213,6 @@ def trainTestModel():
 
 
 def plotResults(results, args):
-    # Start by finding loss spikes
-    epochs_before = 7
-    epochs_after = 20
-    pks = sp.signal.find_peaks(results['trainLoss'], height=1.5, threshold=0.2, distance=100)[0]
-    pks = [pk for pk in pks if (pk-epochs_before)>0 and (pk+epochs_after)<len(results['trainLoss'])]
-    num_pks = len(pks)
-    
-    # Get spike-triggered loss trajectory and position-dependent error
-    epochs_xval = range(-epochs_before, epochs_after)
-    total_epochs = epochs_before + epochs_after
-    c_loss = torch.full((num_pks, total_epochs), torch.nan)
-    c_pos_error = torch.full((num_pks, total_epochs, results['trainPositionError'].shape[1]), torch.nan) 
-    c_max_score = torch.full((num_pks, total_epochs, results['trainMaxScore'].shape[1]), torch.nan) 
-    for ii, pp in enumerate(pks):
-        c_loss[ii] = results['trainLoss'][pp-epochs_before:pp+epochs_after]
-        c_pos_error[ii] = results['trainPositionError'][pp-epochs_before:pp+epochs_after,:]
-        c_max_score[ii] = results['trainMaxScore'][pp-epochs_before:pp+epochs_after,:]
-    
     fig, ax = plt.subplots(1,2,figsize=(8,4), layout='constrained')
     ax[0].plot(range(args.train_epochs), results['trainLoss'], color='k', lw=1)
     ax[0].set_xlabel('Epoch')
@@ -255,13 +237,13 @@ def plotResults(results, args):
     ax[0].plot(range(args.train_epochs), results['trainDescending'], color='k', lw=1)
     ax[0].set_xlabel('Epoch')
     ax[0].set_ylabel('Fraction')
-    ax[0].set_ylim(0, 1)
+    ax[0].set_ylim(-0.05, 1.05)
     ax[0].set_title('Training Fraction Sorted')
 
     ax[1].plot(range(args.test_epochs), results['testDescending'], color='b', lw=1)
     ax[1].set_xlabel('Epoch')
     ax[1].set_ylabel('Fraction')
-    ax[1].set_ylim(0, 1)
+    ax[1].set_ylim(-0.05, 1.05)
     ax[1].set_title('Testing Fraction Sorted')
 
     if not(args.nosave):
@@ -269,20 +251,6 @@ def plotResults(results, args):
     
     plt.show()
 
-    
-def loadSaved():
-    prms = np.load(prmsPath / (getFileName()+'.npy'), allow_pickle=True).item()
-    assert prms.keys() <= vars(args).keys(), f"Saved parameters contain keys not found in ArgumentParser:  {set(prms.keys()).difference(vars(args).keys())}"
-    for ak in vars(args):
-        if ak=='justplot': continue
-        if ak=='nosave': continue
-        if ak=='printargs': continue
-        if ak in prms and prms[ak] != vars(args)[ak]:
-            print(f"Requested argument {ak}={vars(args)[ak]} differs from saved, which is: {ak}={prms[ak]}. Using saved...")
-            setattr(args,ak,prms[ak])    
-    results = np.load(resPath / (getFileName()+'.npy'), allow_pickle=True).item()
-
-    return results, args
 
 if __name__=='__main__':
     args = handleArguments()
