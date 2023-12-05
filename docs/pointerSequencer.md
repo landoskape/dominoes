@@ -139,10 +139,6 @@ training epochs, except for the standard pointer layer.
 
 ## Next Steps
 Coming soon:
-- Tests of sequencing with supervised learning (this job is currently running
-but it's pretty slow because coming up with the target requires brute force).
-- Tests of sequencing where the reward of each dominoe depends on the values
-of the dominoe, rather than being uniformly `1`. 
 - Test of sequencing where a parallel network has to predict the total reward
 accumulated for each hand using the same encoder as the pointer network -- 
 this is going to be useful for when I port these networks to a real dominoe
