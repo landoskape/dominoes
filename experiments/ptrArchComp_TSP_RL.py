@@ -22,6 +22,7 @@ import torch.cuda as torchCuda
 from dominoes import datasets
 from dominoes import training
 from dominoes import transformers
+from dominoes.utils import loadSavedExperiment
 
 device = 'cuda' if torchCuda.is_available() else 'cpu'
 
@@ -408,20 +409,7 @@ def plotResults(results, args):
         plt.savefig(str(figsPath/getFileName(extra='confidence')))
         
     plt.show()
-    
 
-def loadSaved():
-    prms = np.load(prmsPath / (getFileName()+'.npy'), allow_pickle=True).item()
-    assert prms.keys() <= vars(args).keys(), f"Saved parameters contain keys not found in ArgumentParser:  {set(prms.keys()).difference(vars(args).keys())}"
-    for ak in vars(args):
-        if ak=='justplot': continue
-        if ak=='nosave': continue
-        if ak in prms and prms[ak] != vars(args)[ak]:
-            print(f"Requested argument {ak}={vars(args)[ak]} differs from saved, which is: {ak}={prms[ak]}. Using saved...")
-            setattr(args,ak,prms[ak])    
-    results = np.load(resPath / (getFileName()+'.npy'), allow_pickle=True).item()
-
-    return results, args
 
     
 if __name__=='__main__':
@@ -429,7 +417,7 @@ if __name__=='__main__':
     show_results = True
 
     if args.printargs:
-        _, args = loadSaved()
+        _, args = loadSavedExperiment(prmsPath, resPath, getFileName(), args)
         for key, val in vars(args).items():
             print(f"{key}={val}")
         show_results = False
@@ -449,7 +437,7 @@ if __name__=='__main__':
             np.save(resPath / getFileName(), results)
         
     else:
-        results, args = loadSaved()
+        results, args = loadSavedExperiment(prmsPath, resPath, getFileName(), args)
 
     if show_results:
         plotResults(results, args)

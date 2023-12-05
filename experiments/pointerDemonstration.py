@@ -20,6 +20,7 @@ import torch.cuda as torchCuda
 # dominoes package
 from dominoes import functions as df
 from dominoes import transformers
+from dominoes.utils import loadSavedExperiment
 
 device = 'cuda' if torchCuda.is_available() else 'cpu'
 
@@ -42,7 +43,7 @@ def getFileName(extra=None):
 def handleArguments():
     parser = argparse.ArgumentParser(description='Run pointer demonstration.')
     parser.add_argument('-hd','--highest-dominoe', type=int, default=9, help='the highest dominoe in the board')
-    parser.add_argument('--train-fraction', type=float, default=0.75, help='the fraction of dominoes in the set to train with')
+    parser.add_argument('--train-fraction', type=float, default=0.8, help='the fraction of dominoes in the set to train with')
     parser.add_argument('-mn','--min-seq-length', type=int, default=4, help='the minimum tokens per sequence')
     parser.add_argument('-mx','--max-seq-length', type=int, default=12, help='the maximum tokens per sequence')
     parser.add_argument('-bs','--batch-size',type=int, default=512, help='number of sequences per batch')
@@ -50,10 +51,12 @@ def handleArguments():
     parser.add_argument('-te','--test-epochs',type=int, default=100, help='the number of testing epochs')
 
     parser.add_argument('--embedding_dim', type=int, default=48, help='the dimensions of the embedding')
-    parser.add_argument('--heads', type=int, default=4, help='the number of heads in transformer layers')
+    parser.add_argument('--heads', type=int, default=1, help='the number of heads in transformer layers')
     parser.add_argument('--encoding-layers', type=int, default=1, help='the number of stacked transformers in the encoder')
+    parser.add_argument('--expansion', default=4, type=int, help='expansion in FF layer of transformer in encoder')
     parser.add_argument('--justplot', default=False, action='store_true', help='if used, will only plot the saved results (results have to already have been run and saved)')
     parser.add_argument('--nosave', default=False, action='store_true')
+    parser.add_argument('--printargs', default=False, action='store_true')
     
     args = parser.parse_args()
 
@@ -97,15 +100,16 @@ def trainTestModel():
     embedding_dim = args.embedding_dim
     heads = args.heads
     encoding_layers = args.encoding_layers
+    expansion = args.expansion
     
     # Create a pointer network
-    pnet = transformers.PointerNetwork(input_dim, embedding_dim, encoding_layers=encoding_layers, 
-                                       heads=heads, kqnorm=True, decoder_method='transformer')
-    pnet = pnet.to(device)
-    pnet.train()
+    net = transformers.PointerNetwork(input_dim, embedding_dim, encoding_layers=encoding_layers, 
+                                       heads=heads, kqnorm=True, decoder_method='transformer', expansion=expansion)
+    net = net.to(device)
+    net.train()
 
     # Create an optimizer, Adam with weight decay is pretty good
-    optimizer = torch.optim.Adam(pnet.parameters(), lr=1e-4, weight_decay=1e-6)
+    optimizer = torch.optim.Adam(net.parameters(), lr=1e-4, weight_decay=1e-6)
     
     # Train network
     print("Training network...")
@@ -128,7 +132,7 @@ def trainTestModel():
 
         # zero gradients, get output of network
         optimizer.zero_grad()
-        log_scores, choices = pnet(input)
+        log_scores, choices = net(input)
 
         # measure loss with negative log-likelihood
         unrolled = log_scores.view(-1, log_scores.size(-1))
@@ -165,7 +169,7 @@ def trainTestModel():
     # Test network - same thing as in testing but without updates to model
     with torch.no_grad():
         print("Testing network...")
-        pnet.eval()
+        net.eval()
         
         testLoss = torch.zeros(testEpochs)
         testDescending = torch.zeros(testEpochs)
@@ -183,7 +187,7 @@ def trainTestModel():
             value_dominoes = torch.sum(selection, dim=2)
             
             # get network output
-            log_scores, choices = pnet(input)
+            log_scores, choices = net(input)
 
             # measure test loss
             unrolled = log_scores.view(-1, log_scores.size(-1))
@@ -266,11 +270,31 @@ def plotResults(results, args):
     plt.show()
 
     
-    
+def loadSaved():
+    prms = np.load(prmsPath / (getFileName()+'.npy'), allow_pickle=True).item()
+    assert prms.keys() <= vars(args).keys(), f"Saved parameters contain keys not found in ArgumentParser:  {set(prms.keys()).difference(vars(args).keys())}"
+    for ak in vars(args):
+        if ak=='justplot': continue
+        if ak=='nosave': continue
+        if ak=='printargs': continue
+        if ak in prms and prms[ak] != vars(args)[ak]:
+            print(f"Requested argument {ak}={vars(args)[ak]} differs from saved, which is: {ak}={prms[ak]}. Using saved...")
+            setattr(args,ak,prms[ak])    
+    results = np.load(resPath / (getFileName()+'.npy'), allow_pickle=True).item()
+
+    return results, args
+
 if __name__=='__main__':
     args = handleArguments()
-    
-    if not(args.justplot):
+    show_results = True
+
+    if args.printargs:
+        _, args = loadSavedExperiment(prmsPath, resPath, getFileName(), args)
+        for key, val in vars(args).items():
+            print(f"{key}={val}")
+        show_results = False
+
+    elif not(args.justplot):
         # train and test pointerNetwork 
         results = trainTestModel()
         
@@ -281,18 +305,10 @@ if __name__=='__main__':
             np.save(resPath / getFileName(), results)
         
     else:
-        prms = np.load(prmsPath / (getFileName()+'.npy'), allow_pickle=True).item()
-        assert prms.keys() <= vars(args).keys(), f"Saved parameters contain keys not found in ArgumentParser:  {set(prms.keys()).difference(vars(args).keys())}"
-        for (pk,pi), (ak,ai) in zip(prms.items(), vars(args).items()):
-            if pk=='justplot': continue
-            if pk=='nosave': continue
-            if prms[pk] != vars(args)[ak]:
-                print(f"Requested argument {ak}={ai} differs from saved, which is: {pk}={pi}. Using saved...")
-                setattr(args,pk,pi)
+        results, args = loadSavedExperiment(prmsPath, resPath, getFileName(), args)
         
-        results = np.load(resPath / (getFileName()+'.npy'), allow_pickle=True).item()
-        
-    plotResults(results, args)
+    if show_results:
+        plotResults(results, args)
     
     
     
