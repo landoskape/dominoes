@@ -18,6 +18,7 @@ import torch
 import torch.cuda as torchCuda
 
 # dominoes package
+from dominoes import fileManagement as fm
 from dominoes import functions as df
 from dominoes import datasets
 from dominoes import training
@@ -29,13 +30,13 @@ device = 'cuda' if torchCuda.is_available() else 'cpu'
 # general variables for experiment
 POINTER_METHODS = ['PointerStandard', 'PointerDot', 'PointerDotLean', 'PointerDotNoLN', 'PointerAttention', 'PointerTransformer']
 
-# can edit this for each machine it's being used on
-savePath = Path('.') / 'experiments' / 'savedNetworks'
-resPath = Path(mainPath) / 'experiments' / 'savedResults'
-prmsPath = Path(mainPath) / 'experiments' / 'savedParameters'
-figsPath = Path(mainPath) / 'docs' / 'media'
+# path strings
+netPath = fm.netPath()
+resPath = fm.resPath()
+prmsPath = fm.prmPath()
+figsPath = fm.figsPath()
 
-for path in (resPath, prmsPath, figsPath, savePath):
+for path in (resPath, prmsPath, figsPath, netPath):
     if not(path.exists()):
         path.mkdir()
 
@@ -367,7 +368,7 @@ if __name__=='__main__':
             # Save agent parameters
             for net, method in zip(nets, POINTER_METHODS):
                 save_name = f"{method}.pt"
-                torch.save(net, savePath / getFileName(extra=save_name))
+                torch.save(net, netPath / getFileName(extra=save_name))
             np.save(prmsPath / getFileName(), vars(args))
             np.save(resPath / getFileName(), results)
     

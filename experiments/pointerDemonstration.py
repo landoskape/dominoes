@@ -18,16 +18,17 @@ import torch
 import torch.cuda as torchCuda
 
 # dominoes package
+from dominoes import fileManagement as fm
 from dominoes import functions as df
 from dominoes import transformers
 from dominoes.utils import loadSavedExperiment
 
 device = 'cuda' if torchCuda.is_available() else 'cpu'
 
-# can edit this for each machine it's being used on
-resPath = Path(mainPath) / 'experiments' / 'savedResults'
-prmsPath = Path(mainPath) / 'experiments' / 'savedParameters'
-figsPath = Path(mainPath) / 'docs' / 'media'
+# path strings
+resPath = fm.resPath()
+prmsPath = fm.prmPath()
+figsPath = fm.figsPath()
 
 for path in (resPath, prmsPath, figsPath):
     if not(path.exists()):

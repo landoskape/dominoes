@@ -15,11 +15,11 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 # general variables for analysis
 POINTER_METHODS = ['PointerStandard', 'PointerDot', 'PointerDotLean', 'PointerDotNoLN', 'PointerAttention', 'PointerTransformer']
 
-# can edit this for each machine it's being used on
-savePath = Path(fm.codePath()) / 'experiments' / 'savedNetworks'
-resPath = Path(fm.codePath()) / 'experiments' / 'savedResults'
-prmsPath = Path(fm.codePath()) / 'experiments' / 'savedParameters'
-figsPath = Path(fm.codePath()) / 'docs' / 'media'
+# path strings
+netPath = fm.netPath()
+resPath = fm.resPath()
+prmsPath = fm.prmPath()
+figsPath = fm.figsPath()
 
 # method for returning the name of the file name for saving data to
 def getFileName(baseName, extra=None):
@@ -35,7 +35,7 @@ def loadNetworks(baseName):
     nets = []
     for pointer_method in POINTER_METHODS:
         name = f"{baseName}_{pointer_method}.pt"
-        nets.append(torch.load(savePath / name))
+        nets.append(torch.load(netPath / name))
     nets = [net.to(device) for net in nets]
     return results, nets
 
