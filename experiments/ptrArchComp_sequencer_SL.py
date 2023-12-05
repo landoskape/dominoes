@@ -23,6 +23,7 @@ from dominoes import functions as df
 from dominoes import datasets
 from dominoes import training
 from dominoes import transformers
+from dominoes.utils import loadSavedExperiment
 
 device = 'cuda' if torchCuda.is_available() else 'cpu'
 
@@ -322,8 +323,15 @@ def plotResults(results, args):
     
 if __name__=='__main__':
     args = handleArguments()
-    
-    if not(args.justplot):
+    show_results = True
+
+    if args.printargs:
+        _, args = loadSavedExperiment(prmsPath, resPath, getFileName(), args=args)
+        for key, val in vars(args).items():
+            print(f"{key}={val}")
+        show_results = False
+
+    elif not(args.justplot):
         # train and test pointerNetwork 
         results, nets = trainTestModel()
         
@@ -338,18 +346,10 @@ if __name__=='__main__':
             np.save(resPath / getFileName(), results)
         
     else:
-        prms = np.load(prmsPath / (getFileName()+'.npy'), allow_pickle=True).item()
-        assert prms.keys() <= vars(args).keys(), f"Saved parameters contain keys not found in ArgumentParser:  {set(prms.keys()).difference(vars(args).keys())}"
-        for (pk,pi), (ak,ai) in zip(prms.items(), vars(args).items()):
-            if pk=='justplot': continue
-            if pk=='nosave': continue
-            if prms[pk] != vars(args)[ak]:
-                print(f"Requested argument {ak}={ai} differs from saved, which is: {pk}={pi}. Using saved...")
-                setattr(args,pk,pi)
-        
-        results = np.load(resPath / (getFileName()+'.npy'), allow_pickle=True).item()
-        
-    plotResults(results, args)
+        results, args = loadSavedExperiment(prmsPath, resPath, getFileName(), args=args)
+    
+    if show_results:
+        plotResults(results, args)
 
 
 

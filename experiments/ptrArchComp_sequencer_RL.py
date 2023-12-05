@@ -382,7 +382,7 @@ if __name__=='__main__':
     show_results = True
 
     if args.printargs:
-        _, args = loadSavedExperiment(prmsPath, resPath, getFileName(), args)
+        _, args = loadSavedExperiment(prmsPath, resPath, getFileName(), args=args)
         for key, val in vars(args).items():
             print(f"{key}={val}")
         show_results = False
@@ -402,7 +402,7 @@ if __name__=='__main__':
             np.save(resPath / getFileName(), results)
         
     else:
-        results, args = loadSavedExperiment(prmsPath, resPath, getFileName(), args)
+        results, args = loadSavedExperiment(prmsPath, resPath, getFileName(), args=args)
     
     if show_results:
         plotResults(results, args)
