@@ -67,7 +67,7 @@ def handleArguments():
     
     parser.add_argument('--justplot', default=False, action='store_true', help='if used, will only plot the saved results (results have to already have been run and saved)')
     parser.add_argument('--nosave', default=False, action='store_true')
-    parser.add_argument('--printargs', default=True, action='store_true')
+    parser.add_argument('--printargs', default=False, action='store_true')
     
     args = parser.parse_args()
 

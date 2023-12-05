@@ -1,7 +1,11 @@
 import numpy as np
 
 def loadSavedExperiment(prmsPath, resPath, fileName, args=None):
-    prms = np.load(prmsPath / (fileName+'.npy'), allow_pickle=True).item()
+    try:
+        prms = np.load(prmsPath / (fileName+'.npy'), allow_pickle=True).item()
+    except:
+        raise ValueError(f"Failed to load parameter file at {prmsPath / (fileName+'.npy')}, this probably means it wasn't run yet.")
+    
     if args is not None:
         assert prms.keys() <= vars(args).keys(), f"Saved parameters contain keys not found in ArgumentParser:  {set(prms.keys()).difference(vars(args).keys())}"
         for ak in vars(args):
