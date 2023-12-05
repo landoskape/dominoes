@@ -1,5 +1,11 @@
 import numpy as np
 
+class AttributeDict(dict):
+    def __getattr__(self, attr):
+        return self[attr]
+    def __setattr__(self, attr, value):
+        self[attr] = value
+
 def loadSavedExperiment(prmsPath, resPath, fileName, args=None):
     try:
         prms = np.load(prmsPath / (fileName+'.npy'), allow_pickle=True).item()
@@ -16,7 +22,7 @@ def loadSavedExperiment(prmsPath, resPath, fileName, args=None):
                 print(f"Requested argument {ak}={vars(args)[ak]} differs from saved, which is: {ak}={prms[ak]}. Using saved...")
                 setattr(args,ak,prms[ak])
     else:
-        args = prms
+        args = AttributeDict(prms)
 
     results = np.load(resPath / (fileName+'.npy'), allow_pickle=True).item()
 
