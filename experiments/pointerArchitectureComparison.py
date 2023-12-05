@@ -324,7 +324,7 @@ def plotResults(results, args, eigvals):
     ax[0].set_ylabel('Mean Reward'+n_string)
     ax[0].set_title('Training Performance')
     ax[0].set_xlim(-50, 1000)
-    ax[0].set_ylim(None, 8)
+    ax[0].set_ylim(None, 8.005)
     ax[0].legend(loc='lower right', fontsize=9)
     yMin0, yMax0 = ax[0].get_ylim()
 
@@ -341,12 +341,8 @@ def plotResults(results, args, eigvals):
     ax[1].set_ylabel('Reward'+n_string)
     ax[1].set_title('Testing Performance')
     ax[1].set_xlim(-1, len(POINTER_METHODS))
-    ax[1].set_ylim(7.85, 8)
+    ax[1].set_ylim(7.85, 8.005)
     ax[1].set_yticks([7.85, 7.9, 7.95, 8])
-
-    idx = {val: idx for idx, val in enumerate(POINTER_METHODS)}['PointerDotNoLN']
-    mnDotNoLN = torch.min(torch.nanmean(results['testReward'][:,idx], dim=0))
-    ax[1].text(2.75, 7.86, f"1 net @ {mnDotNoLN:.1f}", ha='right', va='center', color=cmap(idx), fontsize=10)
 
     width = trainInspectFrom[1]-trainInspectFrom[0]
     height = yMax0 - yMin0
@@ -383,8 +379,8 @@ def plotResults(results, args, eigvals):
     yMin3, yMax3 = ax[1].get_ylim()
     
     new_ymin = min(yMin2, yMin3)
-    ax[0].set_ylim(new_ymin, 1)
-    ax[1].set_ylim(new_ymin, 1)
+    ax[0].set_ylim(new_ymin, 1.005)
+    ax[1].set_ylim(new_ymin, 1.005)
     
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName('confidence')))
@@ -411,8 +407,8 @@ def plotResults(results, args, eigvals):
     ax[1].set_xticklabels([pmethod[7:] for pmethod in POINTER_METHODS], rotation=45, ha='right', fontsize=8)
     ax[1].set_xlim(-1, len(POINTER_METHODS))
     _, yMax = ax[1].get_ylim()
-    ax[1].set_ylim(0, 1.3)
-    ax[1].set_yticks(np.linspace(0, 1.2, 3))
+    ax[1].set_ylim(0, 1.65)
+    ax[1].set_yticks(np.linspace(0, 1.6, 5))
     
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName('eigenvalues')))
