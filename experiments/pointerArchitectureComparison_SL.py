@@ -19,9 +19,8 @@ import torch.cuda as torchCuda
 
 # dominoes package
 from dominoes import functions as df
-from dominoes import datasets
-from dominoes import training
 from dominoes import transformers
+from dominoes.utils import loadSavedExperiment
 
 device = 'cuda' if torchCuda.is_available() else 'cpu'
 
@@ -56,11 +55,13 @@ def handleArguments():
     parser.add_argument('-nr','--num-runs', type=int, default=8, help='number of networks to train of each type')
 
     parser.add_argument('--embedding_dim', type=int, default=48, help='the dimensions of the embedding')
-    parser.add_argument('--heads', type=int, default=4, help='the number of heads in transformer layers')
+    parser.add_argument('--heads', type=int, default=1, help='the number of heads in transformer layers')
     parser.add_argument('--encoding-layers', type=int, default=1, help='the number of stacked transformers in the encoder')
-    parser.add_argument('--greedy', default=False, action='store_true', help='if used, will generate greedy predictions of each step rather than probability-weighted predictions')
+    parser.add_argument('--expansion', type=int, default=4, help='the expansion of the feedforward layer in the transformer of the encoder')
+    
     parser.add_argument('--justplot', default=False, action='store_true', help='if used, will only plot the saved results (results have to already have been run and saved)')
     parser.add_argument('--nosave', default=False, action='store_true')
+    parser.add_argument('--printargs', default=False, action='store_true')
     
     args = parser.parse_args()
 
@@ -102,6 +103,7 @@ def trainTestModel():
     embedding_dim = args.embedding_dim
     heads = args.heads
     encoding_layers = args.encoding_layers
+    expansion = args.expansion
     temperature = 1.0
     
     # train parameters
@@ -124,7 +126,7 @@ def trainTestModel():
         # create pointer networks with different pointer methods
         nets = [transformers.PointerNetwork(input_dim, embedding_dim, temperature=temperature, pointer_method=POINTER_METHOD, 
                                             thompson=False, encoding_layers=encoding_layers, heads=heads, kqnorm=True, 
-                                            decoder_method='transformer')
+                                            decoder_method='transformer', expansion=expansion)
                 for POINTER_METHOD in POINTER_METHODS]
         nets = [net.to(device) for net in nets]
         
@@ -301,8 +303,15 @@ def plotResults(results, args):
     
 if __name__=='__main__':
     args = handleArguments()
-    
-    if not(args.justplot):
+    show_results = True
+
+    if args.printargs:
+        _, args = loadSavedExperiment(prmsPath, resPath, getFileName(), args)
+        for key, val in vars(args).items():
+            print(f"{key}={val}")
+        show_results = False
+
+    elif not(args.justplot):
         # train and test pointerNetwork 
         results = trainTestModel()
         
@@ -313,18 +322,10 @@ if __name__=='__main__':
             np.save(resPath / getFileName(), results)
         
     else:
-        prms = np.load(prmsPath / (getFileName()+'.npy'), allow_pickle=True).item()
-        assert prms.keys() <= vars(args).keys(), f"Saved parameters contain keys not found in ArgumentParser:  {set(prms.keys()).difference(vars(args).keys())}"
-        for (pk,pi), (ak,ai) in zip(prms.items(), vars(args).items()):
-            if pk=='justplot': continue
-            if pk=='nosave': continue
-            if prms[pk] != vars(args)[ak]:
-                print(f"Requested argument {ak}={ai} differs from saved, which is: {pk}={pi}. Using saved...")
-                setattr(args,pk,pi)
-        
-        results = np.load(resPath / (getFileName()+'.npy'), allow_pickle=True).item()
-        
-    plotResults(results, args)
+        results, args = loadSavedExperiment(prmsPath, resPath, getFileName(), args)
+    
+    if show_results:
+        plotResults(results, args)
 
 
 
