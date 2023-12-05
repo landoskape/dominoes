@@ -52,7 +52,7 @@ def handleArguments():
     parser.add_argument('--train-fraction', type=float, default=0.8, help='the fraction of dominoes in the set to train with')
     parser.add_argument('-hs','--hand-size', type=int, default=8, help='tokens per sequence')
     parser.add_argument('-bs','--batch-size',type=int, default=512, help='number of sequences per batch')
-    parser.add_argument('-ne','--train-epochs',type=int, default=5000, help='the number of training epochs')
+    parser.add_argument('-ne','--train-epochs',type=int, default=4000, help='the number of training epochs')
     parser.add_argument('-te','--test-epochs',type=int, default=100, help='the number of testing epochs')
     parser.add_argument('--gamma', type=float, default=1.0, help='discounting factor')
     parser.add_argument('-nr','--num-runs', type=int, default=8, help='how many networks to train of each type')
