@@ -277,6 +277,7 @@ def plotResults(results, args):
     ax[0].set_ylabel('Mean Reward'+n_string)
     ax[0].set_title('Training Performance')
     ax[0].set_xlim(-50, 1000)
+    ax[0].set_ylim(None, 100.05)
     ax[0].legend(loc='lower right', fontsize=9)
     yMin0, yMax0 = ax[0].get_ylim()
 
@@ -293,13 +294,9 @@ def plotResults(results, args):
     ax[1].set_ylabel('Reward'+n_string)
     ax[1].set_title('Testing Performance')
     ax[1].set_xlim(-1, len(POINTER_METHODS))
-    ax[1].set_ylim(97.95, 100.05)
+    ax[1].set_ylim(97.5, 100.05)
     ax[1].set_yticks([98, 99, 100])
 
-    idx = {val: idx for idx, val in enumerate(POINTER_METHODS)}['PointerDotLean']
-    mnDotLean = torch.min(torch.nanmean(results['testReward'][:,idx], dim=0))
-    ax[1].text(idx+0.25, 98.2, f"1 net @ {mnDotLean:.1f}", ha='left', va='center', color=cmap(idx), fontsize=10)
-    
     width = trainInspectFrom[1]-trainInspectFrom[0]
     height = yMax0 - yMin0
     rect = mpl.patches.Rectangle([trainInspectFrom[0], yMin0], width, height, facecolor='k', edgecolor='none', alpha=0.2)
@@ -339,8 +336,8 @@ def plotResults(results, args):
     yMin3, yMax3 = ax[1].get_ylim()
     
     new_ymin = min(yMin2, yMin3)
-    ax[0].set_ylim(new_ymin, 1)
-    ax[1].set_ylim(0.94, 1)
+    ax[0].set_ylim(new_ymin, 1.005)
+    ax[1].set_ylim(new_ymin, 1.005)
     
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName('confidence')))
