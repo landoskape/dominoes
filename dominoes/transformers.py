@@ -899,6 +899,7 @@ class PointerNetwork(nn.Module):
         if mask is not None: 
             assert mask.ndim == 2, "mask must have shape (batch, tokens)"
             assert mask.size(0)==batch and mask.size(1)==tokens, "mask must have same batch size and max tokens as x"
+            assert not torch.any(torch.all(mask==0, dim=1)), "mask includes rows where all elements are masked, this is not permitted"
         else:
             mask = torch.ones((batch, tokens), dtype=x.dtype).to(get_device(x))
 
@@ -934,8 +935,8 @@ class PointerNetwork(nn.Module):
             decoder_input = torch.zeros((batch, self.embedding_dim)).to(get_device(x)) # initialize decoder_input as zeros
 
         # Then do pointer network (sequential decode-choice for N=max_output rounds)
-        log_scores, choices = self.pointer(encodedRepresentation, decoder_input, decoder_context, mask=mask, max_output=max_output)
-
+        log_scores, choices = self.pointer(encodedRepresentation, decoder_input, decoder_context, mask=mask, max_output=max_output, store_hidden=store_hidden)
+        
         if store_hidden:
             self.embeddedRepresentation = embeddedRepresentation
             self.encodedRepresentation = encodedRepresentation
