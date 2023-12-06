@@ -167,7 +167,7 @@ def trainTestModel():
                 blnet.setThompson(True)
 
             baseline_kwargs = dict(return_target=True, null_token=null_token, available_token=available_token, 
-                                   ignore_index=ignore_index, return_full=True, value_method='length')            
+                                   ignore_index=ignore_index, return_full=True)            
             baseline_data = resetBaselines(blnets, baselineBatchSize, highestDominoe, listDominoes, handSize, num_output, value_method, **baseline_kwargs)
             baseline_input, baseline_selection, baseline_available, baseline_rewards = baseline_data
         
