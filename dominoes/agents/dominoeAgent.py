@@ -1,14 +1,5 @@
-import re
-from glob import glob
-from datetime import datetime
-from copy import copy
 import random
-import itertools
 import numpy as np
-import torch
-from .. import functions as df
-from .. import networks as dnn
-
 
 class dominoeAgent:
     """
@@ -99,7 +90,7 @@ class dominoeAgent:
         return variable[self.egoShiftIdx]
     
     def linePlayedOn(self):
-        # edited on an agent by agent basis, usually not needed unless agents use the df.constructLineRecursive function
+        # edited on an agent by agent basis, usually not needed unless agents use the utils.constructLineRecursive function
         return None
     
     def checkTurnUpdate(self, currentPlayer, postState=False):

@@ -20,7 +20,6 @@ import torch.cuda as torchCuda
 
 # dominoes package
 from dominoes import fileManagement as fm
-from dominoes import functions as df
 from dominoes import datasets
 from dominoes import training
 from dominoes import transformers

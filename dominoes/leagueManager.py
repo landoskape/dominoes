@@ -2,7 +2,7 @@ import random
 import torch.cuda as torchCuda
 from . import gameplay as dg
 from .agents import dominoeAgent
-from . import functions as df
+from . import utils
 
 # league manager is an object that can contain a mutable list of dominoes agents
 # the agents should be instantiated objects that are all instances of the dominoeAgent class
@@ -17,7 +17,7 @@ class leagueManager:
     def __init__(self, highestDominoe, numPlayers, shuffleAgents=True, elo_k=32, elo_base=1500, device=None):
         self.highestDominoe = highestDominoe
         self.numPlayers = numPlayers
-        self.dominoes = df.listDominoes(highestDominoe)
+        self.dominoes = utils.listDominoes(highestDominoe)
         self.numDominoes = len(self.dominoes)
         self.shuffleAgents = shuffleAgents
         self.elo_k = elo_k
@@ -83,15 +83,15 @@ class leagueManager:
     def updateElo(self, leagueIndex, gameResults):
         # This method updates the ELO ratings of the agents in the game based on the gameResults
         updates = [0]*len(leagueIndex)
-        idxScoreOrder = df.argsort(gameResults) # scores in order
+        idxScoreOrder = utils.argsort(gameResults) # scores in order
         sLeagueIndex = [leagueIndex[i] for i in idxScoreOrder]
         sGameResults = [gameResults[i] for i in idxScoreOrder]
         for idx in range(len(sLeagueIndex)-1):
             # Retrieve ELOs
             Ra, Rb = self.elo[sLeagueIndex[idx]], self.elo[sLeagueIndex[idx+1]]
-            Ea = df.eloExpected(Ra, Rb) # eloExpected score (probability of winning)
+            Ea = utils.eloExpected(Ra, Rb) # eloExpected score (probability of winning)
             Eb = 1 - Ea 
-            rUpdate = round(df.eloUpdate(1, Ea, self.elo_k),2) # Calculate ELO update
+            rUpdate = round(utils.eloUpdate(1, Ea, self.elo_k),2) # Calculate ELO update
             updates[idx] += rUpdate # add update
             updates[idx+1] -= rUpdate
         # Go through elo updates and update elo for each agent that played

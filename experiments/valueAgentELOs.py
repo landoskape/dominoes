@@ -18,9 +18,7 @@ import torch.cuda as torchCuda
 
 # dominoes package
 from dominoes import leagueManager as lm
-from dominoes import gameplay as dg
 from dominoes import agents as da
-from dominoes import functions as df
 
 device = 'cuda' if torchCuda.is_available() else 'cpu'
 

@@ -17,7 +17,7 @@ code examples below, first run the following import statements:
 from dominoes import leagueManager as lm
 from dominoes import gameplay as dg
 from dominoes import agents as da
-from dominoes import functions as df
+from dominoes import utils
 ```
 
 ## Creating a league, running a game, updating ELO scores
@@ -98,8 +98,8 @@ The winner is agent: 2 with a score of 7, they went out in 2/3 rounds.
 Then, you can display a record of the events in the gameplay with the
 following lines: 
 ```
-df.gameSequenceToString(game.dominoes, game.lineSequence, game.linePlayDirection, player=None, playNumber=None, labelLines=True)
-df.gameSequenceToString(game.dominoes, game.dummySequence, game.dummyPlayDirection, player=None, playNumber=None, labelLines=True) 
+utils.gameSequenceToString(game.dominoes, game.lineSequence, game.linePlayDirection, player=None, playNumber=None, labelLines=True)
+utils.gameSequenceToString(game.dominoes, game.dummySequence, game.dummyPlayDirection, player=None, playNumber=None, labelLines=True) 
 
 output:
 player 0:  [' 4|8 ', ' 8|2 ', ' 2|9 ', ' 9|9 ', ' 9|5 ', ' 5|5 ', ' 5|0 ', ' 0|4 ', ' 4|1 ', ' 1|2 ', ' 2|0 ', ' 0|1 ']
@@ -114,6 +114,6 @@ appends the player index and the play number to each dominoe listed, which is
 a lot of text to look at, but contains all the information needed to 
 understand what happened each game. 
 ```
-df.gameSequenceToString(game.dominoes, game.lineSequence, game.linePlayDirection, player=game.linePlayer, playNumber=game.linePlayNumber, labelLines=True)
-df.gameSequenceToString(game.dominoes, game.dummySequence, game.dummyPlayDirection, player=game.dummyPlayer, playNumber=game.dummyPlayNumber, labelLines=True) 
+utils.gameSequenceToString(game.dominoes, game.lineSequence, game.linePlayDirection, player=game.linePlayer, playNumber=game.linePlayNumber, labelLines=True)
+utils.gameSequenceToString(game.dominoes, game.dummySequence, game.dummyPlayDirection, player=game.dummyPlayer, playNumber=game.dummyPlayNumber, labelLines=True) 
 ```

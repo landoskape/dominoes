@@ -1,12 +1,5 @@
 import numpy as np
-from .. import functions as df
-from .dominoeAgent import dominoeAgent
-import re
-from glob import glob
-from datetime import datetime
-from copy import copy
-import random
-import itertools
+from .. import utils
 import torch
 from .tdAgents import valueAgent
 from .. import networks as dnn
@@ -131,7 +124,7 @@ class transformerAgent(valueAgent):
         self.valueNetworkInput = (self.handRepresentationInput, self.gameStateInput)
     
     def generateValueInput(self):
-        handRepresentationInput = df.twohotDominoe(self.myHand, self.dominoes, self.highestDominoe, withBatch=True).to(self.device)
+        handRepresentationInput = utils.twohotDominoe(self.myHand, self.dominoes, self.highestDominoe, withBatch=True).to(self.device)
         gameStateInput = torch.tensor(np.concatenate((self.binaryHand if self.include_hand_index else np.empty(0), 
                                                       self.binaryPlayed, 
                                                       self.binaryLineAvailable.flatten(), 
@@ -146,7 +139,7 @@ class transformerAgent(valueAgent):
         return handRepresentationInput, gameStateInput
    
     def simulateValueInputs(self, binaryHand, binaryPlayed, binaryLineAvailable, binaryDummyAvailable, handSize, cantPlay, didntPlay, turnCounter, dummyPlayable, **kwargs):
-        handRepresentationInput = df.twohotDominoe(kwargs['myHand'], kwargs['dominoes'], kwargs['highestDominoe'], withBatch=True).to(self.device)
+        handRepresentationInput = utils.twohotDominoe(kwargs['myHand'], kwargs['dominoes'], kwargs['highestDominoe'], withBatch=True).to(self.device)
         gameStateInput = torch.tensor(np.concatenate((binaryHand if self.include_hand_index else np.empty(0), binaryPlayed, binaryLineAvailable.flatten(), binaryDummyAvailable, handSize, cantPlay, didntPlay, turnCounter, np.array(dummyPlayable).reshape(-1)))).float().to(self.device)
         return handRepresentationInput, gameStateInput
     

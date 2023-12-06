@@ -1,11 +1,10 @@
-import time
 from functools import partial
 import numpy as np
 from tqdm import tqdm
 from copy import copy
 
 from . import agents as da
-from . import functions as df
+from . import utils
 
 # Top Level Gameplay Object
 class dominoeGame:
@@ -19,8 +18,8 @@ class dominoeGame:
         self.highestDominoe = highestDominoe
         self.shuffleAgents = shuffleAgents
         # create list of dominoes and number of dominoes for convenience
-        self.dominoes = df.listDominoes(self.highestDominoe)
-        self.numDominoes = df.numberDominoes(self.highestDominoe)
+        self.dominoes = utils.listDominoes(self.highestDominoe)
+        self.numDominoes = utils.numberDominoes(self.highestDominoe)
         self.numDominoeDistribution()
         self.handNumber = self.highestDominoe # which hand are we at? (initialize at highest dominoe always...)
         self.playNumber = 0
@@ -101,7 +100,7 @@ class dominoeGame:
         self.performFinalScoreUpdates() # once hand is over, do final score parameter updates for each agent
             
         self.handNumber = np.mod(self.handNumber - 1, self.highestDominoe+1)
-        return np.array([df.handValue(self.dominoes, self.getAgent(idx).myHand) for idx in range(self.numPlayers)], dtype=int)
+        return np.array([utils.handValue(self.dominoes, self.getAgent(idx).myHand) for idx in range(self.numPlayers)], dtype=int)
 
     def doTurn(self):
         # 0. Store index of agent who's turn it is
@@ -205,11 +204,11 @@ class dominoeGame:
             isDouble = self.dominoes[dominoe][0]==self.dominoes[dominoe][1] # is double played? 
             playOnDummy = (location == -1)
             if playOnDummy:
-                playDirection, nextAvailable = df.playDirection(dummyAvailable, self.dominoes[dominoe]) # returns which direction and next available value
+                playDirection, nextAvailable = utils.playDirection(dummyAvailable, self.dominoes[dominoe]) # returns which direction and next available value
                 dummyAvailable = nextAvailable
             else:
                 lineIdx = np.mod(playerIndex + location, self.numPlayers)
-                playDirection, nextAvailable = df.playDirection(available[lineIdx], self.dominoes[dominoe]) 
+                playDirection, nextAvailable = utils.playDirection(available[lineIdx], self.dominoes[dominoe]) 
                 if not isDouble and lineIdx==playerIndex:
                     cantPlay[playerIndex] = False
                 lineStarted[lineIdx] = True

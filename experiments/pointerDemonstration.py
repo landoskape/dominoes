@@ -19,7 +19,8 @@ import torch.cuda as torchCuda
 
 # dominoes package
 from dominoes import fileManagement as fm
-from dominoes import functions as df
+from dominoes import utils
+from dominoes import datasets
 from dominoes import transformers
 from dominoes.utils import loadSavedExperiment
 
@@ -72,7 +73,7 @@ def trainTestModel():
     
     # get values from the argument parser
     highestDominoe = args.highest_dominoe
-    listDominoes = df.listDominoes(highestDominoe)
+    listDominoes = utils.listDominoes(highestDominoe)
 
     # create full set of dominoes (representing non-doubles in both ways)
     doubleDominoes = listDominoes[:,0] == listDominoes[:,1]
@@ -120,7 +121,7 @@ def trainTestModel():
     trainMaxScore = torch.full((trainEpochs, maxSeqLength), torch.nan) # keep track of confidence of model
     for epoch in tqdm(range(trainEpochs)):
         # generate batch
-        batch = df.dominoeUnevenBatch(batchSize, minSeqLength, maxSeqLength, keepDominoes, keepValue, 
+        batch = datasets.dominoeUnevenBatch(batchSize, minSeqLength, maxSeqLength, keepDominoes, keepValue, 
                                         highestDominoe, ignoreIndex=ignoreIndex, return_full=True)
         input, target, mask, selection = batch
         input, target, mask = input.to(device), target.to(device), mask.to(device)
@@ -176,7 +177,7 @@ def trainTestModel():
         testDescending = torch.zeros(testEpochs)
         for epoch in tqdm(range(testEpochs)):
             # generate batch
-            batch = df.dominoeUnevenBatch(batchSize, minSeqLength, maxSeqLength, listDominoes, dominoeValue, 
+            batch = datasets.dominoeUnevenBatch(batchSize, minSeqLength, maxSeqLength, listDominoes, dominoeValue, 
                                             highestDominoe, ignoreIndex=ignoreIndex, return_full=True)
             input, target, mask, selection = batch
             input, target, mask = input.to(device), target.to(device), mask.to(device)

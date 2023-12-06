@@ -17,9 +17,7 @@ import torch.cuda as torchCuda
 
 # dominoes package
 from dominoes import leagueManager as lm
-from dominoes import gameplay as dg
 from dominoes import agents as da
-from dominoes import functions as df
 
 # input arguments
 parser = argparse.ArgumentParser(description='Run dominoes experiment.')

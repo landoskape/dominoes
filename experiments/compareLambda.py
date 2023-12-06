@@ -7,20 +7,15 @@ mainPath = os.path.dirname(os.path.abspath(__file__)) + "/.."
 sys.path.append(mainPath)
 
 # standard imports
-from copy import copy
 import argparse
 from pathlib import Path
 from tqdm import tqdm
 import numpy as np
-from scipy.signal import savgol_filter
 import torch.cuda as torchCuda
-import matplotlib.pyplot as plt
 
 # dominoes package
-from dominoes import leagueManager as lm
 from dominoes import gameplay as dg
 from dominoes import agents as da
-from dominoes import functions as df
 
 parser = argparse.ArgumentParser(description='Run dominoes experiment.')
 parser.add_argument('-n','--num-players', type=int, default=4, help='the number of agents in the game of dominoes')

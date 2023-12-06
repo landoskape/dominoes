@@ -17,10 +17,8 @@ import torch.cuda as torchCuda
 import matplotlib.pyplot as plt
 
 # dominoes package
-from dominoes import leagueManager as lm
 from dominoes import gameplay as dg
 from dominoes import agents as da
-from dominoes import functions as df
 
 valueAgents = {
     'basicValueAgent':da.basicValueAgent,

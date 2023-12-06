@@ -17,10 +17,8 @@ import torch.cuda as torchCuda
 import matplotlib.pyplot as plt
 
 # dominoes package
-from dominoes import leagueManager as lm
 from dominoes import gameplay as dg
 from dominoes import agents as da
-from dominoes import functions as df
 
 parser = argparse.ArgumentParser(description='Run dominoes experiment.')
 parser.add_argument('-n','--num-players', type=int, default=4, help='the number of agents in the game of dominoes')

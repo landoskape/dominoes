@@ -1,5 +1,5 @@
 import numpy as np
-from .. import functions as df
+from .. import utils
 from .dominoeAgent import dominoeAgent
 
 # ----------------------------------------------------------------------------
@@ -67,7 +67,7 @@ class bestLineAgent(dominoeAgent):
         # make choice of which dominoe to play
         idxChoice = self.makeChoice(optionValue)
         # update possible line sequences based on choice
-        self.lineSequence,self.lineDirection = df.updateLine(self.lineSequence, self.lineDirection, dominoes[idxChoice], locations[idxChoice]==0)
+        self.lineSequence,self.lineDirection = utils.updateLine(self.lineSequence, self.lineDirection, dominoes[idxChoice], locations[idxChoice]==0)
         self.needsLineUpdate = False if self.useSmartUpdate else True
         # return choice to game play object
         return dominoes[idxChoice], locations[idxChoice]
@@ -90,7 +90,7 @@ class bestLineAgent(dominoeAgent):
         
     def getBestLine(self):
         if self.needsLineUpdate:
-            self.lineSequence,self.lineDirection = df.constructLineRecursive(self.dominoes, self.myHand, self.available[0], maxLineLength=self.maxLineLength)
+            self.lineSequence,self.lineDirection = utils.constructLineRecursive(self.dominoes, self.myHand, self.available[0], maxLineLength=self.maxLineLength)
             self.needsLineUpdate = False if self.useSmartUpdate else True
         
         # if no line is possible, return Nones
@@ -103,7 +103,7 @@ class bestLineAgent(dominoeAgent):
             lineValue[line] = self.getLineValue(self.lineSequence[line])
 
         # choose best line and return it (and it's line value)
-        lineProbability = df.softmax(lineValue/self.lineTemperature)
+        lineProbability = utils.softmax(lineValue/self.lineTemperature)
         bestLineIdx = np.argmax(lineProbability)
         return self.lineSequence[bestLineIdx], lineValue[bestLineIdx]
 

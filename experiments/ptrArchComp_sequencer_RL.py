@@ -20,7 +20,7 @@ import torch.cuda as torchCuda
 
 # dominoes package
 from dominoes import fileManagement as fm
-from dominoes import functions as df
+from dominoes import utils
 from dominoes import datasets
 from dominoes import training
 from dominoes import transformers
@@ -108,7 +108,7 @@ def get_gamma_transform(gamma, N):
 def trainTestModel():
     # get values from the argument parser
     highestDominoe = args.highest_dominoe
-    listDominoes = df.listDominoes(highestDominoe)
+    listDominoes = utils.listDominoes(highestDominoe)
 
     handSize = args.hand_size
     batchSize = args.batch_size

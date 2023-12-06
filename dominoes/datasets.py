@@ -2,19 +2,94 @@ import itertools
 import numpy as np
 import scipy as sp
 import torch
-from torch import nn
-import torch.nn.functional as F
-from . import functions as df
+from . import utils
 from multiprocessing import Pool
 from functools import partial
 
 
 
+def dominoeUnevenBatch(batchSize, minSeq, maxSeq, listDominoes, dominoeValue, highestDominoe, ignoreIndex=-1, return_full=False):
+    """
+    retrieve a batch of dominoes and their target order given the value of each dominoe
 
+    dominoes are paired values (combinations with replacement) of integers 
+    from 0 to <highestDominoe>. The total value of each dominoe is the sum of
+    the two integers associated with that dominoe. For example, the dominoe
+    (7|3) has value 10. 
+
+    Each element in the batch contains an input and target. The input is 
+    composed of a sequence of dominoes in a random order, transformed into a
+    simple representation (explained below). The target is a list of the order
+    of dominoes by the one with the highest value to the one with the lowest
+    value. Note that many dominoes share the same value, but since the dominoe
+    list is always the same, equal value dominoes will always be sorted in the
+    same way. 
+    
+    Each element can have a different sequence length, they will be padded 
+    with zeros to whatever the longest sequence is. The ignoreIndex is used to
+    determine what to label targets for any padded elements (i.e. any place 
+    where no prediction is needed). The nll_loss function then accepts this as
+    an input to ignore. This is part of the reason why pointer networks are
+    awesome... the input and output can vary in size!!!
+
+    The simple representation is a two-hot vector where the first 
+    <highestDominoe+1> elements represent the first value of the dominoe, and
+    the second <highestDominoe+1> elements represent the second value of the 
+    dominoe. Here are some examples for highest dominoe = 3:
+
+    (0 | 0): [1, 0, 0, 0, 1, 0, 0, 0]
+    (0 | 1): [1, 0, 0, 0, 0, 1, 0, 0]
+    (0 | 2): [1, 0, 0, 0, 0, 0, 1, 0]
+    (0 | 3): [1, 0, 0, 0, 0, 0, 0, 1]
+    (1 | 0): [0, 1, 0, 0, 1, 0, 0, 0]
+    (2 | 1): [0, 0, 1, 0, 0, 1, 0, 0]
+
+    """
+    numDominoes = len(listDominoes)
+    input_dim = 2*(highestDominoe+1)
+    
+    # choose how long each sequence in the batch will be
+    seqLength = np.random.randint(minSeq, maxSeq+1, batchSize)
+    maxSeqLength = max(seqLength) # max sequence length for padding
+
+    # choose dominoes from the batch, and get their value (in points)
+    selection = [np.random.choice(numDominoes, sl, replace=False).tolist() for sl in seqLength]
+    value = [dominoeValue[sel] for sel in selection]
+    
+    # index of first and second value in two-hot representation
+    pad = [[0]*(maxSeqLength-sl) for sl in seqLength]
+    firstValue = np.stack([listDominoes[sel,0].tolist()+p for p, sel in zip(pad, selection)])
+    secondValue = np.stack([(listDominoes[sel,1]+highestDominoe+1).tolist()+p for p, sel in zip(pad, selection)])
+    firstValue = torch.tensor(firstValue, dtype=torch.int64).unsqueeze(2)
+    secondValue = torch.tensor(secondValue, dtype=torch.int64).unsqueeze(2)
+
+    # create mask (used for scattering and also as an output)
+    mask = 1.*(torch.arange(maxSeqLength).view(1,-1).expand(batchSize, -1) < torch.tensor(seqLength).view(-1,1))
+
+    # scatter data into two-hot vectors, except where sequence length is exceed where the mask is 0
+    input = torch.zeros((batchSize, maxSeqLength, input_dim), dtype=torch.float)
+    input.scatter_(2, firstValue, mask.float().unsqueeze(2))
+    input.scatter_(2, secondValue, mask.float().unsqueeze(2))
+    
+    # sort and pad each list of dominoes by value
+    def sortPad(val, padTo, ignoreIndex=-1):
+        s = sorted(range(len(val)), key=lambda i: -val[i])
+        p = [ignoreIndex]*(padTo-len(val))
+        return s+p
+
+    # create a padded sort index, then turn into a torch tensor as the target vector
+    sortIdx = [sortPad(val, maxSeqLength, ignoreIndex) for val in value] # pad with ignore index so nll_loss ignores them
+    target = torch.stack([torch.LongTensor(idx) for idx in sortIdx])
+
+    if return_full:
+        return input, target, mask, selection
+    else:
+        return input, target, mask
+    
 
 def makeLines(input, dominoes, value_method="dominoe"):
     selection, available = input # unpack
-    cseq, cdir = df.constructLineRecursive(dominoes, selection, available)
+    cseq, cdir = utils.constructLineRecursive(dominoes, selection, available)
     if value_method == 'dominoe':
         cval = [np.sum(dominoes[cs]) for cs in cseq]
     else:
@@ -47,7 +122,7 @@ def randomDominoeHand(numInHand, listDominoes, highestDominoe, batch_size=1, nul
         available = [None]*batch_size
     
     # create tensor representations
-    input = torch.stack([df.twohotDominoe(sel, listDominoes, highestDominoe, available=ava,
+    input = torch.stack([utils.twohotDominoe(sel, listDominoes, highestDominoe, available=ava,
                                           available_token=available_token, null_token=null_token, with_batch=False) 
                          for sel,ava in zip(selection, available)])
     return input, selection, available
@@ -64,7 +139,7 @@ def getBestLine(dominoes, selection, highestDominoe, value_method="dominoe"):
         cBestDir = []
         cBestVal = []
         for available in range(highestDominoe+1):
-            cseq, cdir = df.constructLineRecursive(dominoes, sel, available)
+            cseq, cdir = utils.constructLineRecursive(dominoes, sel, available)
             if value_method == 'dominoe':
                 cval = [np.sum(dominoes[cs]) for cs in cseq]
             else:
@@ -88,7 +163,7 @@ def getBestLineFromAvailable(dominoes, selection, available, value_method="domin
     bestSequence = []
     bestDirection = []
     for sel, ava in zip(selection, available):
-        cseq, cdir = df.constructLineRecursive(dominoes, sel, ava)
+        cseq, cdir = utils.constructLineRecursive(dominoes, sel, ava)
         if value_method == 'dominoe':
             cval = [np.sum(dominoes[cs]) for cs in cseq]
         else:

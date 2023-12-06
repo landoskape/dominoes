@@ -1,14 +1,12 @@
 # standard imports
-from pathlib import Path
 import numpy as np
 import scipy as sp
 import torch
 
 # dominoes package
 from .. import fileManagement as fm
-from .. import functions as df
+from .. import utils
 from .. import datasets
-from .. import training
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -221,7 +219,7 @@ def process_dominoe_data(nets, batchSize):
     
     # get a "normal" batch
     highestDominoe = 9
-    listDominoes = df.listDominoes(highestDominoe)
+    listDominoes = utils.listDominoes(highestDominoe)
     
     # do subselection for training
     doubleDominoes = listDominoes[:,0] == listDominoes[:,1]

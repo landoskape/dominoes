@@ -1,6 +1,7 @@
 import torch
 from torch import nn
-import torch.nn.functional as F
+
+from .utils import get_device, masked_log_softmax, masked_softmax
 
 """
 Almost everything I've learned about machine learning and pytorch has been due
@@ -16,86 +17,6 @@ transformer code:
   - and the associated (very well-written!) blog: http://peterbloem.nl/blog/transformers
 - and of course the paper: https://proceedings.neurips.cc/paper_files/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf
 """
-
-
-# ---------------------------------
-# ----------- utilities -----------
-# ---------------------------------
-def get_device(tensor):
-    """simple method to get device of input tensor"""
-    return 'cuda' if tensor.is_cuda else 'cpu'
-    
-
-# the following masked softmax methods are from allennlp
-# https://github.com/allenai/allennlp/blob/80fb6061e568cb9d6ab5d45b661e86eb61b92c82/allennlp/nn/util.py#L243
-def masked_softmax(vector: torch.Tensor,
-                   mask: torch.Tensor,
-                   dim: int = -1,
-                   memory_efficient: bool = False,
-                   mask_fill_value: float = -1e32) -> torch.Tensor:
-    """
-    ``torch.nn.functional.softmax(vector)`` does not work if some elements of ``vector`` should be
-    masked.  This performs a softmax on just the non-masked portions of ``vector``.  Passing
-    ``None`` in for the mask is also acceptable; you'll just get a regular softmax.
-
-    ``vector`` can have an arbitrary number of dimensions; the only requirement is that ``mask`` is
-    broadcastable to ``vector's`` shape.  If ``mask`` has fewer dimensions than ``vector``, we will
-    unsqueeze on dimension 1 until they match.  If you need a different unsqueezing of your mask,
-    do it yourself before passing the mask into this function.
-
-    If ``memory_efficient`` is set to true, we will simply use a very large negative number for those
-    masked positions so that the probabilities of those positions would be approximately 0.
-    This is not accurate in math, but works for most cases and consumes less memory.
-
-    In the case that the input vector is completely masked and ``memory_efficient`` is false, this function
-    returns an array of ``0.0``. This behavior may cause ``NaN`` if this is used as the last layer of
-    a model that uses categorical cross-entropy loss. Instead, if ``memory_efficient`` is true, this function
-    will treat every element as equal, and do softmax over equal numbers.
-    """
-    if mask is None:
-        result = torch.nn.functional.softmax(vector, dim=dim)
-    else:
-        mask = mask.float()
-        while mask.dim() < vector.dim():
-            mask = mask.unsqueeze(1)
-        if not memory_efficient:
-            # To limit numerical errors from large vector elements outside the mask, we zero these out.
-            result = torch.nn.functional.softmax(vector * mask, dim=dim)
-            result = result * mask
-            result = result / (result.sum(dim=dim, keepdim=True) + 1e-13)
-        else:
-            masked_vector = vector.masked_fill((1 - mask).bool(), mask_fill_value)
-            result = torch.nn.functional.softmax(masked_vector, dim=dim)
-    return result
-
-
-def masked_log_softmax(vector: torch.Tensor, 
-                       mask: torch.Tensor, 
-                       dim: int = -1) -> torch.Tensor:
-    """
-    ``torch.nn.functional.log_softmax(vector)`` does not work if some elements of ``vector`` should be
-    masked.  This performs a log_softmax on just the non-masked portions of ``vector``.  Passing
-    ``None`` in for the mask is also acceptable; you'll just get a regular log_softmax.
-
-    ``vector`` can have an arbitrary number of dimensions; the only requirement is that ``mask`` is
-    broadcastable to ``vector's`` shape.  If ``mask`` has fewer dimensions than ``vector``, we will
-    unsqueeze on dimension 1 until they match.  If you need a different unsqueezing of your mask,
-    do it yourself before passing the mask into this function.
-
-    If the input is completely masked anywere (across the requested dimension), then this will make it
-    uniform instead of keeping it masked, which would lead to nans. 
-    """
-    if mask is None:
-        return torch.nn.functional.log_softmax(vector, dim=dim)
-    mask = mask.float()
-    while mask.dim() < vector.dim():
-        mask = mask.unsqueeze(1)
-    with torch.no_grad(): min_value = vector.min() - 50.0 # make sure it's lower than the lowest value
-    vector = vector.masked_fill(mask==0, min_value)
-    #vector = vector + (mask + 1e-45).log()
-    #vector = vector.masked_fill(mask==0, float('-inf'))
-    #vector[torch.all(mask==0, dim=dim)]=1.0 # if the whole thing is masked, this is needed to prevent nans
-    return torch.nn.functional.log_softmax(vector, dim=dim)
 
 
 # ---------------------------------
@@ -749,7 +670,7 @@ class PointerModule(nn.Module):
             raise ValueError(f"Pointer method not recognized, somehow it has changed to {self.pointer_method}")
         return decoder_state
         
-    def forward(self, encoded, decoder_input, decoder_context, mask=None, max_output=None): 
+    def forward(self, encoded, decoder_input, decoder_context, mask=None, max_output=None, store_hidden=False): 
         """
         forward method for pointer module
         
@@ -786,6 +707,7 @@ class PointerModule(nn.Module):
         # Decoding stage
         pointer_log_scores = []
         pointer_choices = []
+        pointer_context = []
         for i in range(max_output):
             # update context representation
             decoder_context = self.decode(encoded, decoder_input, decoder_context, mask)
@@ -814,9 +736,13 @@ class PointerModule(nn.Module):
             # Save output of each decoding round
             pointer_log_scores.append(log_score)
             pointer_choices.append(choice)
+            pointer_context.append(decoder_context)
             
         log_scores = torch.stack(pointer_log_scores, 1)
         choices = torch.stack(pointer_choices, 1).squeeze(2)
+
+        if store_hidden:
+            self.decoder_context = torch.stack(pointer_context, 1)
 
         return log_scores, choices
     
@@ -937,7 +863,7 @@ class PointerNetwork(nn.Module):
                 
         return x
         
-    def forward(self, x, mask=None, decode_mask=None, max_output=None, init=None): 
+    def forward(self, x, mask=None, decode_mask=None, max_output=None, init=None, store_hidden=False): 
         """
         forward method for pointer network with possible masked input
         
@@ -1007,8 +933,12 @@ class PointerNetwork(nn.Module):
         else:
             decoder_input = torch.zeros((batch, self.embedding_dim)).to(get_device(x)) # initialize decoder_input as zeros
 
-        # Then do pointer network (sequential decode-choice for max_output's)
+        # Then do pointer network (sequential decode-choice for N=max_output rounds)
         log_scores, choices = self.pointer(encodedRepresentation, decoder_input, decoder_context, mask=mask, max_output=max_output)
+
+        if store_hidden:
+            self.embeddedRepresentation = embeddedRepresentation
+            self.encodedRepresentation = encodedRepresentation
 
         return log_scores, choices
 

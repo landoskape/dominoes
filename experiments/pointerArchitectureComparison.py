@@ -8,7 +8,6 @@ sys.path.append(mainPath)
 # standard imports
 from copy import copy
 import argparse
-from pathlib import Path
 from tqdm import tqdm
 import numpy as np
 import scipy as sp
@@ -19,11 +18,11 @@ import torch.cuda as torchCuda
 
 # dominoes package
 from dominoes import fileManagement as fm
-from dominoes import functions as df
 from dominoes import datasets
 from dominoes import training
 from dominoes import transformers
 from dominoes.utils import loadSavedExperiment
+from dominoes import utils
 
 device = 'cuda' if torchCuda.is_available() else 'cpu'
 
@@ -95,7 +94,7 @@ def trainTestDominoes(baseDominoes, trainFraction):
 def trainTestModel():
     # get values from the argument parser
     highestDominoe = args.highest_dominoe
-    baseDominoes = df.listDominoes(highestDominoe)
+    baseDominoes = utils.listDominoes(highestDominoe)
     
     # other batch parameters
     ignoreIndex = -1 # this is only used when doing uneven batch sizes, which I'm not in this experiment
@@ -248,7 +247,7 @@ def eigenAnalyses(nets, args):
     
     # get a "normal" batch
     highestDominoe = args.highest_dominoe
-    listDominoes = df.listDominoes(highestDominoe)
+    listDominoes = utils.listDominoes(highestDominoe)
     
     # do subselection for training
     doubleDominoes = listDominoes[:,0] == listDominoes[:,1]

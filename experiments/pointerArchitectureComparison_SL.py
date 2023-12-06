@@ -19,7 +19,8 @@ import torch.cuda as torchCuda
 
 # dominoes package
 from dominoes import fileManagement as fm
-from dominoes import functions as df
+from dominoes import utils
+from dominoes import datasets
 from dominoes import transformers
 from dominoes.utils import loadSavedExperiment
 
@@ -91,7 +92,7 @@ def trainTestDominoes(baseDominoes, trainFraction):
 def trainTestModel():
     # get values from the argument parser
     highestDominoe = args.highest_dominoe
-    baseDominoes = df.listDominoes(highestDominoe)
+    baseDominoes = utils.listDominoes(highestDominoe)
     
     # other batch parameters
     ignoreIndex = -1 # this is only used when doing uneven batch sizes, which I'm not in this experiment
@@ -137,7 +138,7 @@ def trainTestModel():
         print(f"Run {run+1}/{numRuns} -- doing training...")
         for epoch in tqdm(range(trainEpochs)):
             # generate batch
-            input, target, mask = df.dominoeUnevenBatch(batchSize, minSeqLength, maxSeqLength, trainDominoes, trainValue, highestDominoe, ignoreIndex=ignoreIndex)
+            input, target, mask = datasets.dominoeUnevenBatch(batchSize, minSeqLength, maxSeqLength, trainDominoes, trainValue, highestDominoe, ignoreIndex=ignoreIndex)
             input, target, mask = input.to(device), target.to(device), mask.to(device)
 
             # zero gradients, get output of network
@@ -180,7 +181,7 @@ def trainTestModel():
             print('Testing network...')
             for epoch in tqdm(range(testEpochs)):
                 # generate batch
-                input, target, mask = df.dominoeUnevenBatch(batchSize, minSeqLength, maxSeqLength, fullDominoes, fullValue, highestDominoe, ignoreIndex=ignoreIndex)
+                input, target, mask = datasets.dominoeUnevenBatch(batchSize, minSeqLength, maxSeqLength, fullDominoes, fullValue, highestDominoe, ignoreIndex=ignoreIndex)
                 input, target, mask = input.to(device), target.to(device), mask.to(device)
         
                 log_scores, choices = map(list, zip(*[net(input) for net in nets]))

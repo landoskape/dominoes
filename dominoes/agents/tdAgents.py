@@ -1,12 +1,10 @@
 import numpy as np
-from .. import functions as df
+from .. import utils
 from .dominoeAgent import dominoeAgent
 import re
 from glob import glob
 from datetime import datetime
 from copy import copy
-import random
-import itertools
 import torch
 from .. import networks as dnn
 
@@ -439,7 +437,7 @@ class lineValueAgent(valueAgent):
     
     def prepareValueInputs(self):
         # First, get all possible lines that can be made on agent's own line.
-        if self.needsLineUpdate: self.lineSequence, self.lineDirection = df.constructLineRecursive(self.dominoes, self.myHand, self.available[0], maxLineLength=self.maxLineLength)
+        if self.needsLineUpdate: self.lineSequence, self.lineDirection = utils.constructLineRecursive(self.dominoes, self.myHand, self.available[0], maxLineLength=self.maxLineLength)
         lineValue = self.estimateLineValue(self.lineSequence) # estimate line value given current game state
         self.lineValueInput, self.gameStateInput = self.generateValueInput(lineValue)
         self.valueNetworkInput = (self.lineValueInput, self.gameStateInput)
@@ -472,7 +470,7 @@ class lineValueAgent(valueAgent):
             offLineDominoes[line] = numInHand - len(lineSequence[line]) # number of dominoes remaining after playing this line
         
         lineValue = inLineValue - offLineValue
-        lineProbability = df.softmax(lineValue / self.lineTemperature)
+        lineProbability = utils.softmax(lineValue / self.lineTemperature)
         
         # make grid of where all dominoes are -- then use this to get E[V] for dominoe if played in line and -E[V] for dominoe if not played
         dominoeInLine = np.zeros((numInHand,numLines))
@@ -530,7 +528,7 @@ class lineValueAgent(valueAgent):
         # make choice will return the argmin of option value, attempting to bring about the lowest final score possible
         nextState = gameEngine(dominoe, location) # enter play option (dominoe-location pair) into the gameEngine, and return simulated new gameState
         played, available, handSize, cantPlay, didntPlay, turnCounter, lineStarted, dummyAvailable, dummyPlayable = nextState # name the outputs 
-        lineSequence, lineDirection = df.updateLine(self.lineSequence, self.lineDirection, dominoe, location==0)
+        lineSequence, lineDirection = utils.updateLine(self.lineSequence, self.lineDirection, dominoe, location==0)
         # remove dominoe from hand
         newHand = np.delete(self.myHand, self.myHand==dominoe)
         handValues = self.dominoesInHand(updateObject=False)
@@ -548,7 +546,7 @@ class lineValueAgent(valueAgent):
         # make choice of which dominoe to play
         idxChoice = self.makeChoice(optionValue) 
         # update possible line sequences based on choice
-        self.lineSequence,self.lineDirection = df.updateLine(self.lineSequence, self.lineDirection, dominoes[idxChoice], locations[idxChoice]==0)
+        self.lineSequence,self.lineDirection = utils.updateLine(self.lineSequence, self.lineDirection, dominoes[idxChoice], locations[idxChoice]==0)
         self.needsLineUpdate = False if self.useSmartUpdate else True
         # return choice to game play object
         return dominoes[idxChoice], locations[idxChoice] 
