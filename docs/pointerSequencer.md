@@ -100,7 +100,7 @@ smaller maximum reward because there is no valid path through all dominoes in
 the graph. The curves show the mean +/- standard deviation of 8 networks 
 trained with each architecture.
 
-![RL sequencer results](media/ptrArchComp_sequencer_RL.png)
+![RL sequencer results](media/ptrArchComp_sequencer_RL_withBaseline.png)
 
 These results are awesome! They show that the networks start out very 
 confused and eventually have a moment of insight where they start sequencing
@@ -128,7 +128,7 @@ force algorithm. I only measured this during the testing phase.
 
 Analysis of performance at testing phase:
 
-![RL Reward Differential](media/ptrArchComp_sequencer_RL_maxRewardDifferential.png)
+![RL Reward Differential](media/ptrArchComp_sequencer_RL_withBaseline_maxRewardDifferential.png)
 
 The black dashed line indicates the maximum possible reward, and the colored
 lines indicate the actual (average) reward accumulated by each network. As the

@@ -46,6 +46,8 @@ def getFileName(extra=None):
     baseName = "ptrArchComp_sequencer_RL"
     if hasattr(args, 'nobaseline') and not(args.nobaseline):
         baseName += "_withBaseline"
+    if args.extraname is not None:
+        baseName += f"_{args.extraname}"
     if extra is not None:
         baseName = baseName + f"_{extra}"
     return baseName
@@ -72,6 +74,7 @@ def handleArguments():
     parser.add_argument('--justplot', default=False, action='store_true', help='if used, will only plot the saved results (results have to already have been run and saved)')
     parser.add_argument('--nosave', default=False, action='store_true')
     parser.add_argument('--printargs', default=False, action='store_true')
+    parser.add_argument('--extraname', default=None, type=str, help='extra string to be appended to basename for saving')
     
     args = parser.parse_args()
 
