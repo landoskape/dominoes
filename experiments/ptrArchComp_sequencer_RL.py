@@ -331,8 +331,9 @@ def plotResults(results, args):
         ax[0].fill_between(range(args.train_epochs), cdata+sdata/2, cdata-sdata/2, edgecolor='none', facecolor=(cmap(idx), 0.3))
     ax[0].set_ylabel(f'Total Reward (N={numRuns})')
     ax[0].set_title('Training Performance')
-    ax[0].legend(loc='upper left', fontsize=8)
+    ax[0].legend(loc='best', fontsize=9)
     ax[0].set_xticks([0, 2500, 5000, 7500, 10000])
+    ylims = ax[0].get_ylim()
 
     xOffset = [-0.2, 0.2]
     get_x = lambda idx: [xOffset[0]+idx, xOffset[1]+idx]
@@ -347,7 +348,7 @@ def plotResults(results, args):
     ax[1].set_ylabel(f'Reward (N={numRuns})')
     ax[1].set_title('Testing')
     ax[1].set_xlim(-1, len(POINTER_METHODS))
-    ax[1].set_ylim(0, 7)
+    ax[1].set_ylim(ylims)
     
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName()))
