@@ -43,14 +43,16 @@ for path in (resPath, prmsPath, figsPath, netPath):
         
 # method for returning the name of the saved network parameters (different save for each possible opponent)
 def getFileName(extra=None):
-    baseName = "ptrArchComp_sequencer_RL"
+    baseName = "pretrainedOneToMany_sequencer_RL"
     if hasattr(args, 'nobaseline') and not(args.nobaseline):
         baseName += "_withBaseline"
+    baseName += args.pointer_layer
     if args.extraname is not None:
         baseName += f"_{args.extraname}"
     if extra is not None:
         baseName = baseName + f"_{extra}"
     return baseName
+
 
 def handleArguments():
     parser = argparse.ArgumentParser(description='Run pointer dominoe sequencing experiment.')
@@ -62,7 +64,8 @@ def handleArguments():
     parser.add_argument('-nr','--num-runs',type=int, default=8, help='how many runs for each network to train')
     parser.add_argument('--gamma', type=float, default=0.9, help='discounting factor')
     parser.add_argument('--temperature',type=float, default=5.0, help='temperature for training')
-    
+    parser.add_argument('--pointer-layer', type=str, default='PointerStandard', help='the pointer layer to replace and specifically train')
+
     parser.add_argument('--nobaseline', default=False, action='store_true')
     parser.add_argument('--significance', default=0.05, type=float, help='significance of reward improvement for baseline updating')
     parser.add_argument('--baseline-batch-size', default=1024, type=int, help='the size of the baseline batch to use')
@@ -79,9 +82,75 @@ def handleArguments():
     args = parser.parse_args()
 
     assert args.gamma > 0 and args.gamma <= 1, "gamma must be greater than 0 or less than or equal to 1"
-    
+    assert args.pointer_layer in POINTER_METHODS, "--pointer-layer must be one of the pointer layer architectures in POINTER_METHODS"
+
     return args
     
+
+# method for returning the name of the saved network parameters (different save for each possible opponent)
+def pretrainedFileName(extra=None):
+    baseName = "ptrArchComp_sequencer_RL"
+    if hasattr(args, 'nobaseline') and not(args.nobaseline):
+        baseName += "_withBaseline"
+    if args.extraname is not None:
+        baseName += f"_{args.extraname}"
+    if extra is not None:
+        baseName = baseName + f"_{extra}"
+    return baseName
+
+
+# Parameters of arguments that have to be the same as saved parameters
+force_same = ('hand_size', 'embedding_dim', 'heads', 'expansion', 'encoding_layers')
+
+def loadNetworks():
+    # Load previously stored settings and pretrained networks 
+    nets = [torch.load(fm.netPath() / pretrainedFileName(extra=f"{args.pointer_layer}.pt")) for _ in POINTER_METHODS]
+    for net, method in zip(nets, POINTER_METHODS):
+        net.pointer_method = method
+        net.pointer.pointer_method = method
+        # build pointer (chooses an output)
+        if method == 'PointerStandard':
+            # output of the network uses a pointer attention layer as described in the original paper
+            net.pointer.pointer = transformers.PointerStandard(net.pointer.embedding_dim)
+
+        elif method == 'PointerDot':
+            net.pointer.pointer = transformers.PointerDot(net.pointer.embedding_dim)
+
+        elif method == 'PointerDotNoLN':
+            net.pointer.pointer = transformers.PointerDotNoLN(net.pointer.embedding_dim)
+
+        elif method == 'PointerDotLean':
+            net.pointer.pointer = transformers.PointerDotLean(net.pointer.embedding_dim)
+            
+        elif method == 'PointerAttention':
+            kwargs = {'heads':net.heads, 'kqnorm':net.kqnorm}
+            net.pointer.pointer = transformers.PointerAttention(net.pointer.embedding_dim, **kwargs)
+
+        elif method == 'PointerTransformer':
+            kwargs = {'heads':net.heads, 'expansion':1, 'kqnorm':net.kqnorm, 'bias':net.bias}
+            net.pointer.pointer = transformers.PointerTransformer(net.pointer.embedding_dim, **kwargs)
+            
+        else:
+            raise ValueError(f"the pointer_method was not set correctly, {method} not recognized")
+        
+    nets = [net.to(device) for net in nets]
+
+    # Define parameters to be learned and turn off gradients in all other parameters
+    learning_parameters = [[] for _ in nets]
+    for learn, net in zip(learning_parameters, nets):
+        for name, prm in net.named_parameters():
+            if 'pointer.pointer' in name:
+                prm.requires_grad = True
+                learn.append(prm)
+            else:
+                prm.requires_grad = False
+
+    # Prepare optimizer for the specific parameters to be learned
+    optimizers = [torch.optim.Adam(learn, lr=1e-3, weight_decay=1e-5) for learn in learning_parameters]
+
+    return nets, optimizers
+
+
 
 def resetBaselines(blnets, batchSize, highestDominoe, listDominoes, handSize, num_output, value_method, **kwargs):
     # initialize baseline input (to prevent overfitting with training data)
@@ -132,11 +201,6 @@ def trainTestModel():
     do_baseline = not(args.nobaseline)
     
     # network parameters
-    input_dim = (2 if not(available_token) else 3)*(highestDominoe+1) + (1 if null_token else 0)
-    embedding_dim = args.embedding_dim
-    heads = args.heads
-    encoding_layers = args.encoding_layers
-    contextual_encoder = True # don't transform the "available" token
     temperature = args.temperature
 
     # train parameters
@@ -154,14 +218,12 @@ def trainTestModel():
     testMaxReward = torch.zeros((testEpochs, numRuns, batchSize))
     for run in range(numRuns):
         print(f"Training round of networks {run+1}/{numRuns}...")
-        
-        # create pointer networks with different pointer methods
-        nets = [transformers.PointerNetwork(input_dim, embedding_dim, pointer_method=POINTER_METHOD, 
-                                            contextual_encoder=contextual_encoder, thompson=True, 
-                                            encoding_layers=encoding_layers, heads=heads, kqnorm=True, 
-                                            decoder_method='transformer', temperature=temperature)
-                for POINTER_METHOD in POINTER_METHODS]
-        nets = [net.to(device) for net in nets]
+
+        # Load pretrained networks with randomly initialized pointer layers
+        nets, optimizers = loadNetworks()
+        for net in nets:
+            net.setTemperature(temperature)
+            net.setThompson(True)
 
         if do_baseline:
             # create baseline nets, initialized as copy of learning nets
@@ -174,9 +236,6 @@ def trainTestModel():
                                    ignore_index=ignore_index, return_full=True)            
             baseline_data = resetBaselines(blnets, baselineBatchSize, highestDominoe, listDominoes, handSize, num_output, value_method, **baseline_kwargs)
             baseline_input, baseline_selection, baseline_available, baseline_rewards = baseline_data
-        
-        # Create an optimizer, Adam with weight decay is pretty good
-        optimizers = [torch.optim.Adam(net.parameters(), lr=1e-4, weight_decay=1e-6) for net in nets]
 
         for epoch in tqdm(range(trainEpochs)):
             # generate input batch
@@ -340,9 +399,10 @@ def plotResults(results, args):
         sdata = np.std(adata, axis=1)
         ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
         ax[0].fill_between(range(args.train_epochs), cdata+sdata/2, cdata-sdata/2, edgecolor='none', facecolor=(cmap(idx), 0.3))
+    ax[0].set_ylim(-1, 8)
     ax[0].set_ylabel(f'Total Reward (N={numRuns})')
     ax[0].set_title('Training Performance')
-    ax[0].legend(loc='best', fontsize=9)
+    ax[0].legend(loc='best', fontsize=8)
     ax[0].set_xticks([0, 2500, 5000, 7500, 10000])
     ylims = ax[0].get_ylim()
 
@@ -381,6 +441,7 @@ def plotResults(results, args):
     ax.set_ylabel('Actual Reward Acquired')
     ax.legend(loc='upper left', fontsize=10)
     
+
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName('maxRewardDifferential')))
     
@@ -388,23 +449,23 @@ def plotResults(results, args):
 
 
     # Plot baseline rewards to measure how networks are learning without the influence of temperature
-    fig, ax = plt.subplots(1, 1, figsize=(4, 4), layout="constrained")
+    fig, ax = plt.subplots(1, 1, figsize=(5, 4), layout="constrained")
     for idx, name in enumerate(POINTER_METHODS):
         adata = median_filter(results['trainRewardBaseline'][:,idx], size=(10,1))
         cdata = np.mean(adata, axis=1)
         sdata = np.std(adata, axis=1)
-        ax[0].plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
-        ax[0].fill_between(range(args.train_epochs), cdata+sdata/2, cdata-sdata/2, edgecolor='none', facecolor=(cmap(idx), 0.3))
-    ax[0].set_ylabel(f'Total Reward (N={numRuns})')
-    ax[0].set_title('Training Performance (Exploit)')
-    ax[0].legend(loc='best', fontsize=9)
-    ax[0].set_xticks([0, 2500, 5000, 7500, 10000])
+        ax.plot(range(args.train_epochs), cdata, color=cmap(idx), lw=1.2, label=name)
+        ax.fill_between(range(args.train_epochs), cdata+sdata/2, cdata-sdata/2, edgecolor='none', facecolor=(cmap(idx), 0.3))
+    ax.set_ylim(-1, 8)
+    ax.set_ylabel(f'Total Reward (N={numRuns})')
+    ax.set_title('Training Performance (Exploit)')
+    ax.legend(loc='best', fontsize=9)
+    ax.set_xticks([0, 2500, 5000, 7500, 10000])
 
     if not(args.nosave):
         plt.savefig(str(figsPath/getFileName('trainPerformanceExploit')))
     
     plt.show()
-
 
     
 if __name__=='__main__':
@@ -419,6 +480,13 @@ if __name__=='__main__':
 
     elif not(args.justplot):
         # train and test pointerNetwork 
+
+        # first load stored arguments and make sure they match currently requested arguments
+        _, stored_args = utils.loadSavedExperiment(fm.prmPath(), fm.resPath(), pretrainedFileName())
+        for attr in force_same:
+            if getattr(args, attr) != getattr(stored_args, attr):
+                raise ValueError(f"Requested attribute {attr}={getattr(args, attr)} is different from saved ={getattr(stored_args, attr)}")
+            
         results, nets = trainTestModel()
         
         # save results if requested
