@@ -18,3 +18,7 @@ dependencies:
   - torchaudio
   - pytorch-cuda=12.1
   - black
+  - natsort
+  - pip:
+    - wandb
+    - freezedry
