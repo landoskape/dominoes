@@ -1,10 +1,17 @@
+from abc import ABC, abstractmethod
 import itertools
+from multiprocessing import Pool
+from functools import partial
+
 import numpy as np
 import scipy as sp
 import torch
+
 from . import utils
-from multiprocessing import Pool
-from functools import partial
+
+class dominoe(ABC):
+    def __init__(self):
+        pass
 
 
 def dominoeUnevenBatch(batchSize, minSeq, maxSeq, listDominoes, dominoeValue, highestDominoe, ignoreIndex=-1, return_full=False):
