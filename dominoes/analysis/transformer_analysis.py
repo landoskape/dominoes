@@ -4,7 +4,7 @@ import scipy as sp
 import torch
 
 # dominoes package
-from .. import fileManagement as fm
+from .. import files as fm
 from .. import utils
 from .. import datasets
 

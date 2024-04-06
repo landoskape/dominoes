@@ -12,7 +12,7 @@ import torch
 import wandb
 from matplotlib import pyplot as plt
 
-from .. import fileManagement as files
+from .. import files as files
 from ..datasets import get_dataset
 
 

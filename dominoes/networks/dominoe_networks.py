@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
-from . import transformers_modules as transformers
+from . import transformers as transformers
 
 
 def get_device(tensor):

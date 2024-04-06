@@ -3,28 +3,28 @@ import os
 from pathlib import Path
 
 
-def codePath():
+def code_path():
     return Path("C:/Users/andrew/Documents/GitHub/dominoes")
 
 
 def savePath():
-    return codePath / "savedNetworks"
+    return code_path() / "savedNetworks"
 
 
 def prmPath():
-    return codePath() / "experiments" / "savedParameters"
+    return code_path() / "experiments" / "savedParameters"
 
 
 def resPath():
-    return codePath() / "experiments" / "savedResults"
+    return code_path() / "experiments" / "savedResults"
 
 
 def figsPath():
-    return codePath() / "docs" / "media"
+    return code_path() / "docs" / "media"
 
 
 def netPath():
-    return codePath() / "experiments" / "savedNetworks"
+    return code_path() / "experiments" / "savedNetworks"
 
 
 def local_repo_path():

@@ -2,7 +2,7 @@ from copy import copy
 import torch
 from torch import nn
 import torch.nn.functional as F
-from .networks import transformers_modules as transformers
+from .networks import transformers as transformers
 
 
 @torch.no_grad()

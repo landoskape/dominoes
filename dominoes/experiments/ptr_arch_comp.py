@@ -9,10 +9,10 @@ import matplotlib as mpl
 import torch
 
 # dominoes package
-from .. import fileManagement as fm
+from .. import files as fm
 from .. import datasets
 from .. import training
-from ..networks import transformers_modules as transformers
+from ..networks import transformers as transformers
 from ..utils import loadSavedExperiment
 from .. import utils
 
