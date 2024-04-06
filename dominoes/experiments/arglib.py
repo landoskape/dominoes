@@ -11,6 +11,15 @@ def add_standard_training_parameters(parser):
     return parser
 
 
+def add_transformer_parameters(parser):
+    """arguments for transformer layers"""
+    parser.add_argument("--embedding-dim", type=int, default=48, help="the dimensions of the embedding (default=48)")
+    parser.add_argument("--heads", type=int, default=1, help="the number of heads in transformer layers (default=1)")
+    parser.add_argument("--encoding-layers", type=int, default=1, help="the number of stacked transformers in the encoder (default=1)")
+    parser.add_argument("--expansion", type=int, default=4, help="the expansion of the FF layer in the transformer of the encoder (default=4)")
+    return parser
+
+
 def add_network_metaparameters(parser):
     """
     arguments for determining default network & training metaparameters

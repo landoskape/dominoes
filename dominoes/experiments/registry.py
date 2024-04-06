@@ -1,8 +1,8 @@
 from argparse import ArgumentParser
-from .example import ExampleExperiment
+from .ptr_arch_comp import PointerArchitectureComparison
 
 EXPERIMENT_REGISTRY = {
-    "example": ExampleExperiment,
+    "ptr_arch_comp": PointerArchitectureComparison,
 }
 
 
