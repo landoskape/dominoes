@@ -6,7 +6,7 @@ from glob import glob
 from datetime import datetime
 from copy import copy
 import torch
-from .. import networks as dnn
+from ..networks import dominoe_networks as dnn
 
 
 # ----------------------------------------------------------------------------

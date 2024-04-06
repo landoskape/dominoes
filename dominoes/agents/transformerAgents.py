@@ -2,7 +2,7 @@ import numpy as np
 from .. import utils
 import torch
 from .tdAgents import valueAgent
-from .. import networks as dnn
+from ..networks import dominoe_networks as dnn
 
 
 class transformerAgent(valueAgent):

@@ -20,7 +20,7 @@ import torch.cuda as torchCuda
 from dominoes import fileManagement as fm
 from dominoes import datasets
 from dominoes import training
-from dominoes import transformers
+from dominoes.networks import transformers_modules as transformers
 from dominoes.utils import loadSavedExperiment
 from dominoes import utils
 

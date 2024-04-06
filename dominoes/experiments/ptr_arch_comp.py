@@ -12,7 +12,7 @@ import torch
 from .. import fileManagement as fm
 from .. import datasets
 from .. import training
-from .. import transformers
+from ..networks import transformers_modules as transformers
 from ..utils import loadSavedExperiment
 from .. import utils
 
@@ -105,7 +105,7 @@ class PointerArchitectureComparison(Experiment):
         nets, optimizers, prms = self.create_networks()
 
         # load dataset
-        dataset = self.prepare_dataset(nets[0])
+        dataset = self.prepare_dataset()
 
         # train networks
         train_results, test_results = processing.train_networks(self, nets, optimizers, dataset)
