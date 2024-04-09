@@ -80,3 +80,46 @@ class DominoeDataset(Dataset):
         #     "return_full": True,
         #     "return_target": False,
         # }
+
+
+def generateBatch(
+    highestDominoe,
+    dominoes,
+    batch_size,
+    numInHand,
+    return_target=True,
+    value_method="dominoe",
+    available_token=False,
+    null_token=False,
+    ignore_index=-1,
+    return_full=False,
+):
+
+    input, selection, available = randomDominoeHand(
+        numInHand, dominoes, highestDominoe, batch_size=batch_size, null_token=null_token, available_token=available_token
+    )
+
+    mask_tokens = numInHand + (1 if null_token else 0) + (1 if available_token else 0)
+    mask = torch.ones((batch_size, mask_tokens), dtype=torch.float)
+
+    if return_target:
+        # then measure best line and convert it to a "target" array
+        if available_token:
+            bestSequence, bestDirection = getBestLineFromAvailable(dominoes, selection, available, value_method=value_method)
+        else:
+            bestSequence, bestDirection = getBestLine(dominoes, selection, highestDominoe, value_method=value_method)
+
+        # convert sequence to hand index
+        iseq = convertToHandIndex(selection, bestSequence)
+
+        # create target and append null_index once, then ignore_index afterwards
+        # the idea is that the agent should play the best line, then indicate that the line is over, then anything else doesn't matter
+        null_index = numInHand if null_token else ignore_index
+        target = torch.tensor(np.stack(padBestLine(iseq, numInHand + 1, null_index, ignore_index=ignore_index)), dtype=torch.long)
+    else:
+        # otherwise set these to None so we can use the same return structure
+        target, bestSequence, bestDirection = None, None, None
+
+    if return_full:
+        return input, target, mask, bestSequence, bestDirection, selection, available
+    return input, target, mask
