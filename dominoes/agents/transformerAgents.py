@@ -128,7 +128,8 @@ class transformerAgent(valueAgent):
         self.valueNetworkInput = (self.handRepresentationInput, self.gameStateInput)
 
     def generateValueInput(self):
-        handRepresentationInput = utils.twohot_dominoe(self.myHand, self.dominoes, self.highestDominoe, withBatch=True).to(self.device)
+        in_hand = self.dominoes[self.myHand]
+        handRepresentationInput = utils.twohot_dominoe(in_hand, self.highestDominoe, withBatch=True).to(self.device)
         gameStateInput = (
             torch.tensor(
                 np.concatenate(
@@ -153,7 +154,8 @@ class transformerAgent(valueAgent):
     def simulateValueInputs(
         self, binaryHand, binaryPlayed, binaryLineAvailable, binaryDummyAvailable, handSize, cantPlay, didntPlay, turnCounter, dummyPlayable, **kwargs
     ):
-        handRepresentationInput = utils.twohot_dominoe(kwargs["myHand"], kwargs["dominoes"], kwargs["highestDominoe"], withBatch=True).to(self.device)
+        in_hand = kwargs["dominoes"][kwargs["myHand"]]
+        handRepresentationInput = utils.twohot_dominoe(in_hand, kwargs["highestDominoe"], withBatch=True).to(self.device)
         gameStateInput = (
             torch.tensor(
                 np.concatenate(
