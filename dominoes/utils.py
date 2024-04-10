@@ -1,9 +1,12 @@
+from warnings import warn
 import numpy as np
 from copy import copy
 import itertools
 import numpy as np
 import torch
 import matplotlib
+
+from .datasets.support import get_dominoe_set
 
 
 class AttributeDict(dict):
@@ -86,8 +89,34 @@ def numberDominoes(highestDominoe):
 
 
 def listDominoes(highestDominoe):
+    """alias for new function that is deprecated"""
+    warn("listDominoes is deprecated, use get_dominoe_set instead", DeprecationWarning, stacklevel=2)
+    return get_dominoe_set(highestDominoe, as_torch=False)
+
+
+def get_dominoe_set(highest_dominoe, as_torch=False):
+    """
+    Create a list of dominoes in a set with highest value of <highest_dominoe>
+
+    The dominoes are paired values (combinations with replacement) of integers
+    from 0 to <highest_dominoe>. This method returns either a numpy array or a
+    torch tensor of the dominoes as integers.
+
+    The shape will be (num_dominoes, 2) where the first column is the first value
+    of the dominoe, and the second column is the second value of the dominoe.
+
+    args:
+        highest_dominoe: the highest value of a dominoe
+        as_torch: return dominoes as torch tensor if True, otherwise return numpy array
+
+    returns:
+        dominoes: an array or tensor of dominoes in the set
+    """
     # given a standard rule for how to organize the list of dominoes as one-hot arrays, list the dominoes present in a one hot array
-    return np.array([np.array(quake) for quake in itertools.combinations_with_replacement(np.arange(highestDominoe + 1), 2)], dtype=int)
+    array_function = torch.tensor if as_torch else np.array
+    stack_function = torch.stack if as_torch else np.stack
+    dominoe_set = [array_function(quake, dtype=int) for quake in itertools.combinations_with_replacement(np.arange(highest_dominoe + 1), 2)]
+    return stack_function(dominoe_set)
 
 
 def twohot_dominoe(selected, dominoes, highest_dominoe, available=None, available_token=False, null_token=False, with_batch=True):
