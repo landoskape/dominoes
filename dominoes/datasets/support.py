@@ -6,40 +6,32 @@ import numpy as np
 import scipy as sp
 import torch
 
-from ..utils import construct_line_recursive, twohot_dominoe
+from ..utils import construct_line_recursive
 
 
-def random_dominoe_hand(hand_size, dominoes, highest_dominoe, batch_size=1, null_token=True, available_token=True):
+def get_dominoe_set(highest_dominoe, as_torch=False):
     """
-    general method for creating a random hand of dominoes and encoding it in a two-hot representation
+    Create a list of dominoes in a set with highest value of <highest_dominoe>
+
+    The dominoes are paired values (combinations with replacement) of integers
+    from 0 to <highest_dominoe>. This method returns either a numpy array or a
+    torch tensor of the dominoes as integers.
+
+    The shape will be (num_dominoes, 2) where the first column is the first value
+    of the dominoe, and the second column is the second value of the dominoe.
 
     args:
-        hand_size: number of dominoes in each hand
-        dominoes: list of dominoes to choose from
-        highest_dominoe: highest value of a dominoe
-        batch_size: number of hands to create
-        null_token: whether to include a null token in the input
-        available_token: whether to include an available token in the input
+        highest_dominoe: the highest value of a dominoe
+        as_torch: return dominoes as torch tensor if True, otherwise return numpy array
+
+    returns:
+        dominoes: an array or tensor of dominoes in the set
     """
-    num_dominoes = len(dominoes)
-
-    # choose dominoes from the batch, and get their value (in points)
-    selection = np.stack([np.random.choice(num_dominoes, hand_size, replace=False) for _ in range(batch_size)])
-
-    # set available token to a random value from the dataset or None
-    if available_token:
-        available = np.random.randint(0, highest_dominoe + 1, batch_size)
-    else:
-        available = [None] * batch_size
-
-    # create a two-hot tensor representation of hand
-    input = torch.stack(
-        [
-            twohot_dominoe(sel, dominoes, highest_dominoe, available=ava, available_token=available_token, null_token=null_token, with_batch=False)
-            for sel, ava in zip(selection, available)
-        ]
-    )
-    return input, selection, available
+    # given a standard rule for how to organize the list of dominoes as one-hot arrays, list the dominoes present in a one hot array
+    array_function = torch.tensor if as_torch else np.array
+    stack_function = torch.stack if as_torch else np.stack
+    dominoe_set = [array_function(quake, dtype=int) for quake in itertools.combinations_with_replacement(np.arange(highest_dominoe + 1), 2)]
+    return stack_function(dominoe_set)
 
 
 def dominoeUnevenBatch(batchSize, minSeq, maxSeq, listDominoes, dominoeValue, highestDominoe, ignoreIndex=-1, return_full=False):
