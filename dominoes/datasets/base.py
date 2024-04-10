@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import torch
 
-from . import support
+from .support import get_best_line, get_best_line_from_available, get_dominoe_set
 
 
 class Dataset(ABC):
@@ -109,7 +109,7 @@ class DominoeDataset(DatasetRL):
         self,
         task,
         highest_dominoe,
-        train_fraction,
+        train_fraction=None,
         null_token=False,
         available_token=False,
         ignore_index=-1,
@@ -123,46 +123,247 @@ class DominoeDataset(DatasetRL):
         self.ignore_index = ignore_index
         self.return_target = return_target
 
+        # create base dominoe set
+        self.dominoe_set = get_dominoe_set(self.highest_dominoe, as_torch=True)
+
+        # set the training set if train_fraction is provided
+        if train_fraction is not None:
+            self.set_train_fraction(train_fraction)
+
+    def set_train_fraction(self, train_fraction):
+        """
+        Pick a random subset of dominoes to use as the training set.
+
+        args:
+            train_fraction: float, the fraction of the dominoes to use for training (0 < train_fraction < 1)
+
+        Will register the training set as self.train_set and the index to them as self.train_index.
+        """
+        assert train_fraction > 0 and train_fraction < 1, "train_fraction should be a float between 0 and 1"
+        self.train_index = torch.randperm(len(self.dominoe_set))[: int(train_fraction * len(self.dominoe_set))]
+        self.train_set = self.dominoe_set[self.train_index]
+
+    def binary_dominoe_representation(self, dominoes, highest_dominoe=None, available=None, available_token=False, null_token=False):
+        """
+        converts a set of dominoes to a stacked two-hot representation (with optional null and available tokens)
+
+        dominoes are paired values (combinations with replacement) of integers
+        from 0 to <highest_dominoe>.
+
+        This simple representation is a two-hot vector where the first
+        <highest_dominoe>+1 elements represent the first value of the dominoe, and
+        the second <highest_dominoe>+1 elements represent the second value of the
+        dominoe. Here are some examples for <highest_dominoe> = 3:
+
+        (0 | 0): [1, 0, 0, 0, 1, 0, 0, 0]
+        (0 | 1): [1, 0, 0, 0, 0, 1, 0, 0]
+        (0 | 2): [1, 0, 0, 0, 0, 0, 1, 0]
+        (0 | 3): [1, 0, 0, 0, 0, 0, 0, 1]
+        (1 | 0): [0, 1, 0, 0, 1, 0, 0, 0]
+        (2 | 1): [0, 0, 1, 0, 0, 1, 0, 0]
+
+        If provided, can also add a null token and an available token to the end of
+        the two-hot vector. The null token is a single-hot vector that represents a
+        null dominoe. The available token is a single-hot vector that represents the
+        available value to play on. If the null token is included, the dimensionality
+        of the input is increased by 1. If the available token is included, the
+        dimensionality of the input is increased by <highest_dominoe>+1 and the
+        available value is represented in the third section of the two-hot vector.
+
+        args:
+            dominoes: torch.Tensor, the dominoes to convert to a binary representation
+            highest_dominoe: int, the highest value of a dominoe, if None, will use self.highest_dominoe
+            available: torch.Tensor, the available value to play on
+            available_token: bool, whether to include an available token in the representation
+            null_token: bool, whether to include a null token in the representation
+        """
+        if available_token and (available is None):
+            raise ValueError("if with_available=True, then available needs to be provided")
+
+        # create a fake batch dimension if it doesn't exist for consistent code
+        with_batch = dominoes.dim() == 3
+        if not with_batch:
+            dominoes = dominoes.unsqueeze(0)
+
+        # get dataset size
+        batch_size = dominoes.size(0)
+        num_dominoes = dominoes.size(1)
+
+        # input dimension determined by highest dominoe (twice the number of possible values on a dominoe)
+        highest_dominoe = highest_dominoe or self.highest_dominoe
+        input_dim = (2 if not available_token else 3) * (highest_dominoe + 1) + (1 if null_token else 0)
+
+        # first & second value are index and index shifted by highest_dominoe + 1
+        first_value = dominoes[..., 0].unsqueeze(2)
+        second_value = dominoes[..., 1].unsqueeze(2) + highest_dominoe + 1
+
+        # scatter dominoe data into two-hot vectors
+        src = torch.ones((batch_size, num_dominoes, 1), dtype=torch.float)
+        binary = torch.zeros((batch_size, num_dominoes, input_dim), dtype=torch.float)
+        binary.scatter_(2, first_value, src)
+        binary.scatter_(2, second_value, src)
+
+        # add null token to the hand if requested
+        if null_token:
+            # create a representation of the null token
+            rep_null = torch.zeros((batch_size, 1, input_dim), dtype=torch.float)
+            rep_null.scatter_(2, torch.tensor(input_dim - 1).view(1, 1, 1).expand(batch_size, -1, -1), torch.ones(batch_size, 1, 1))
+            # stack it to the end of each hand
+            binary = torch.cat((binary, rep_null), dim=1)
+
+        # add available token to the hand if requested
+        if available_token:
+            # create a representation of the available token
+            available_index = available + 2 * (highest_dominoe + 1)
+            rep_available = torch.zeros((batch_size, 1, input_dim), dtype=torch.float)
+            rep_available.scatter_(2, available_index.view(batch_size, 1, 1), torch.ones(batch_size, 1, 1))
+            # stack it to the end of each hand
+            binary = torch.cat((binary, rep_available), dim=1)
+
+        # remove batch dimension if it didn't exist
+        if not with_batch:
+            binary = binary.squeeze(0)
+
+        return binary
+
     def generate_batch(self, train=True, **kwargs):
         """
         generates a batch of dominoes with the required additional outputs
         """
         # choose which set of dominoes to use
-        dominoes = self.train_dominoes if train else self.full_dominoes
+        dominoes = self.train_dominoe_set if train else self.dominoe_set
+
+        # randomize direction of the dominoes
+        dominoes = self._randomize_direction(dominoes)
 
         # get parameters with potential updates
         prms = self.parameters(**kwargs)
 
         # get a random dominoe hand
-        # will encode the hand as two-hot vectors including null and available tokens if requested
+        # will encode the hand as binary representations including null and available tokens if requested
         # will also include the index of the selection in each hand a list of available values for each batch element
-        input, selection, available = support.random_dominoe_hand(
-            prms["hand_size"], self.dominoes, self.highest_dominoe, prms["batch_size"], self.null_token, self.available_token
+        input, selection, available = self._random_dominoe_hand(
+            prms["hand_size"], dominoes, prms["batch_size"], prms["null_token"], prms["available_token"]
         )
-        mask_tokens = prms["hand_size"] + (1 if self.null_token else 0) + (1 if self.available_token else 0)
+
+        # make a mask for the input
+        mask_tokens = prms["hand_size"] + (1 if prms["null_token"] else 0) + (1 if prms["available_token"] else 0)
         mask = torch.ones((prms["batch_size"], mask_tokens), dtype=torch.float)
 
-        if self.return_target:
-            # then measure best line and convert it to a "target" array
-            if self.available_token:
-                bestSequence, bestDirection = support.get_best_line_from_available(dominoes, selection, available, value_method=prms["value_method"])
-            else:
-                bestSequence, bestDirection = support.get_best_line(dominoes, selection, self.highest_dominoe, value_method=prms["value_method"])
+        # construct batch dictionary
+        batch = dict(input=input, mask=mask)
 
-            # convert sequence to hand index
-            iseq = convertToHandIndex(selection, bestSequence)
+        # augment batch with more details if requested
+        if prms["return_full"]:
+            batch["selection"] = selection
+            batch["available"] = available
 
-            # create target and append null_index once, then ignore_index afterwards
-            # the idea is that the agent should play the best line, then indicate that the line is over, then anything else doesn't matter
-            null_index = numInHand if null_token else ignore_index
-            target = torch.tensor(np.stack(padBestLine(iseq, numInHand + 1, null_index, ignore_index=ignore_index)), dtype=torch.long)
+        # if target is requested (e.g. for SL tasks) then get target based on registered task
+        if prms["return_target"]:
+            # get target dictionary
+            target_dict = self.set_target(dominoes, selection, available, **prms)
+            # update batch dictionary with target dictionary
+            batch.update(target_dict)
+
+        # return batch
+        return batch
+
+    def set_target(self, dominoes, selection, available, **prms):
+        if prms["available_token"]:
+            bestSequence, bestDirection = get_best_line_from_available(dominoes, selection, available, value_method=prms["value_method"])
         else:
-            # otherwise set these to None so we can use the same return structure
-            target, bestSequence, bestDirection = None, None, None
+            bestSequence, bestDirection = get_best_line(dominoes, selection, self.highest_dominoe, value_method=prms["value_method"])
 
-        if return_full:
-            return input, target, mask, bestSequence, bestDirection, selection, available
-        return input, target, mask
+        # convert sequence to hand index
+        iseq = convertToHandIndex(selection, bestSequence)
+
+        # hand_size is the index corresponding to the null_token if it exists
+        null_index = prms["hand_size"] if prms["null_token"] else self.ignore_index
+
+        # create target and append null_index once, then ignore_index afterwards
+        # the idea is that the agent should play the best line, then indicate that the line is over, then anything else doesn't matter
+        target = torch.tensor(np.stack(padBestLine(iseq, prms["hand_size"] + 1, null_index, ignore_index=self.ignore_index)), dtype=torch.long)
+
+        # construct target dictionary
+        target_dict = dict(target=target)
+
+        # add the best sequence and direction if requested
+        if prms["return_full"]:
+            target_dict["bestSequence"] = bestSequence
+            target_dict["bestDirection"] = bestDirection
+
+        return target_dict
+
+    def _random_dominoe_hand(self, hand_size, dominoes, highest_dominoe=None, batch_size=1, null_token=True, available_token=True):
+        """
+        general method for creating a random hand of dominoes and encoding it in a two-hot representation
+
+        args:
+            hand_size: number of dominoes in each hand
+            dominoes: list of dominoes to choose from
+            highest_dominoe: highest value of a dominoe (if not provided, will use self.highest_dominoe)
+            batch_size: number of hands to create
+            null_token: whether to include a null token in the input
+            available_token: whether to include an available token in the input
+        """
+        num_dominoes = len(dominoes)
+        highest_dominoe = highest_dominoe or self.highest_dominoe
+
+        # choose a hand of hand_size dominoes from the full set for each batch element
+        selection = torch.stack([torch.randperm(num_dominoes)[:hand_size] for _ in range(batch_size)])
+        hands = dominoes[selection]
+
+        # set available token to a random value from the dataset or None
+        if available_token:
+            available = torch.randint(0, highest_dominoe + 1, (batch_size,))
+        else:
+            available = None
+
+        # create a binary representation of the hands
+        input = self.binary_dominoe_representation(
+            hands, highest_dominoe=highest_dominoe, available=available, available_token=available_token, null_token=null_token
+        )
+
+        # return binary representation, the selection indices and the available values
+        return input, selection, available
+
+    def _randomize_direction(self, dominoes):
+        """
+        randomize the direction of a dominoes representation in a batch
+
+        Note: doubles don't need to be flipped because they are symmetric, but this method does it anyway
+        because it doesn't make a difference and it's easier and just as fast to implement with torch.gather()
+
+        args:
+            dominoes: torch.Tensor, the dominoes to randomize with shape (batch_size, num_dominoes, 2) or (num_dominoes, 2)
+
+        returns:
+            torch.Tensor, the dominoes with the direction of the dominoes randomized
+        """
+        # check shape of dominoes dataset
+        assert dominoes.size(-1) == 2, "dominoes should have shape (batch_size, num_dominoes, 2) or (num_dominoes, 2)"
+
+        # create a fake batch dimension if it doesn't exist for consistent code
+        with_batch = dominoes.dim() == 3
+        if not with_batch:
+            dominoes = dominoes.unsqueeze(0)
+
+        # get the batch size and number of dominoes
+        batch_size = dominoes.size(0)
+        num_dominoes = dominoes.size(1)
+
+        # pick a random order for the dominoes (0 means forward order, 1 means reverse)
+        order = torch.randint(2, (batch_size, num_dominoes), device=dominoes.device)
+        gather_idx = torch.stack([order, 1 - order], dim=2)
+
+        # get randomized dataset
+        randomized = torch.gather(dominoes, 2, gather_idx)
+
+        # remove the batch dimension if it wasn't there before
+        if not with_batch:
+            randomized = randomized.squeeze(0)
+
+        return randomized
 
 
 @torch.no_grad()
