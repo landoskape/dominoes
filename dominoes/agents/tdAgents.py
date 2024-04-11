@@ -1,5 +1,6 @@
 import numpy as np
 from .. import utils
+from ..datasets.support import construct_line_recursive
 from .dominoeAgent import dominoeAgent
 import re
 from glob import glob
@@ -498,8 +499,8 @@ class lineValueAgent(valueAgent):
     def prepareValueInputs(self):
         # First, get all possible lines that can be made on agent's own line.
         if self.needsLineUpdate:
-            self.lineSequence, self.lineDirection = utils.constructLineRecursive(
-                self.dominoes, self.myHand, self.available[0], maxLineLength=self.maxLineLength
+            self.lineSequence, self.lineDirection = construct_line_recursive(
+                self.dominoes, self.available[0], hand_index=self.myHand, maxLineLength=self.maxLineLength
             )
         lineValue = self.estimateLineValue(self.lineSequence)  # estimate line value given current game state
         self.lineValueInput, self.gameStateInput = self.generateValueInput(lineValue)

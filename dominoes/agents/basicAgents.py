@@ -1,5 +1,6 @@
 import numpy as np
 from .. import utils
+from ..datasets.support import construct_line_recursive
 from .dominoeAgent import dominoeAgent
 
 
@@ -102,8 +103,8 @@ class bestLineAgent(dominoeAgent):
 
     def getBestLine(self):
         if self.needsLineUpdate:
-            self.lineSequence, self.lineDirection = utils.constructLineRecursive(
-                self.dominoes, self.myHand, self.available[0], maxLineLength=self.maxLineLength
+            self.lineSequence, self.lineDirection = construct_line_recursive(
+                self.dominoes, self.available[0], hand_index=self.myHand, maxLineLength=self.maxLineLength
             )
             self.needsLineUpdate = False if self.useSmartUpdate else True
 
