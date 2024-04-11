@@ -319,7 +319,7 @@ class DominoeDataset(DatasetRL):
         # will encode the hand as binary representations including null and available tokens if requested
         # will also include the index of the selection in each hand a list of available values for each batch element
         input, selection, available = self._random_dominoe_hand(
-            prms["hand_size"], dominoes, prms["batch_size"], self.null_token, self.available_token
+            prms["hand_size"], dominoes, batch_size=prms["batch_size"], null_token=self.null_token, available_token=self.available_token
         )
 
         # make a mask for the input
@@ -331,6 +331,7 @@ class DominoeDataset(DatasetRL):
 
         # augment batch with more details if requested
         if prms["return_full"]:
+            batch["train"] = train
             batch["selection"] = selection
             batch["available"] = available
 
