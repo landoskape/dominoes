@@ -1,3 +1,4 @@
+from copy import copy
 import itertools
 from multiprocessing import Pool
 from functools import partial
@@ -5,8 +6,6 @@ from functools import partial
 import numpy as np
 import scipy as sp
 import torch
-
-from ..utils import construct_line_recursive
 
 
 def get_dominoe_set(highest_dominoe, as_torch=False):
@@ -32,6 +31,112 @@ def get_dominoe_set(highest_dominoe, as_torch=False):
     stack_function = torch.stack if as_torch else np.stack
     dominoe_set = [array_function(quake, dtype=int) for quake in itertools.combinations_with_replacement(np.arange(highest_dominoe + 1), 2)]
     return stack_function(dominoe_set)
+
+
+def get_best_line(dominoes, selection, highest_dominoe, value_method="dominoe"):
+    # check value method
+    if not (value_method == "dominoe" or value_method == "length"):
+        raise ValueError("did not recognize value_method, it has to be either 'dominoe' or 'length'")
+
+    bestSequence = []
+    bestDirection = []
+    for sel in selection:
+        cBestSeq = []
+        cBestDir = []
+        cBestVal = []
+        for available in range(highest_dominoe + 1):
+            cseq, cdir = construct_line_recursive(dominoes, sel, available)
+            if value_method == "dominoe":
+                cval = [np.sum(dominoes[cs]) for cs in cseq]
+            else:
+                cval = [len(cs) for cs in cseq]
+            cidx = max(enumerate(cval), key=lambda x: x[1])[0]
+            cBestSeq.append(cseq[cidx])
+            cBestDir.append(cdir[cidx])
+            cBestVal.append(cval[cidx])
+
+        cBestIdx = max(enumerate(cBestVal), key=lambda x: x[1])[0]
+        bestSequence.append(cBestSeq[cBestIdx])
+        bestDirection.append(cBestDir[cBestIdx])
+
+    return bestSequence, bestDirection
+
+
+def get_best_line_from_available(dominoes, selection, available, value_method="dominoe"):
+    # check value method
+    if not (value_method == "dominoe" or value_method == "length"):
+        raise ValueError("did not recognize value_method, it has to be either 'dominoe' or 'length'")
+
+    bestSequence = []
+    bestDirection = []
+    for sel, ava in zip(selection, available):
+        cseq, cdir = construct_line_recursive(dominoes, sel, ava)
+        if value_method == "dominoe":
+            cval = [np.sum(dominoes[cs]) for cs in cseq]
+        else:
+            cval = [len(cs) for cs in cseq]
+        cidx = max(enumerate(cval), key=lambda x: x[1])[0]
+        bestSequence.append(cseq[cidx])
+        bestDirection.append(cdir[cidx])
+    return bestSequence, bestDirection
+
+
+def construct_line_recursive(dominoes, myHand, available, previousSequence=[], previousDirection=[], maxLineLength=None):
+    # this version of the function uses absolute dominoe numbers, rather than indexing based on which order they are in the hand
+    # if there are too many dominoes in hand, constructing all possible lines takes way too long...
+    if (maxLineLength is not None) and (len(previousSequence) == maxLineLength):
+        return [previousSequence], [previousDirection]
+
+    assert type(previousSequence) == list and type(previousDirection) == list, "previous sequence and direction must be lists"
+    if len(previousSequence) > 0:
+        # if a previous sequence was provided, make sure the end of it matches what is defined as available
+        assert (
+            dominoes[previousSequence[-1]][0 if previousDirection[-1] == 1 else 1] == available
+        ), "the end of the last sequence doesn't match what is defined as available!"
+
+    # recursively constructs all possible lines given a hand (value pairs in list), an available value to play on, and the previous played/direction dominoe index sequences
+    hand = dominoes[myHand]
+    possiblePlays = np.where(np.any(hand == available, axis=1) & ~np.isin(myHand, previousSequence))[0]
+
+    # if there are no possible plays, the return the finished sequence
+    if len(possiblePlays) == 0:
+        return [previousSequence], [previousDirection]
+
+    # otherwise, make new lines for each possible play
+    sequence = []
+    direction = []
+    for idxPlay in possiblePlays:
+        # if the first value of the possible play matches the available, then play it in the forward direction
+        if hand[idxPlay][0] == available:
+            # copy previousSequence and previousDirection, append new play in forward direction to it
+            cseq = copy(previousSequence)
+            cseq.append(myHand[idxPlay])
+            cdir = copy(previousDirection)
+            cdir.append(0)
+            # then recursively construct line from this standpoint
+            cSequence, cDirection = construct_line_recursive(
+                dominoes, myHand, hand[idxPlay][1], previousSequence=cseq, previousDirection=cdir, maxLineLength=maxLineLength
+            )
+            # once lines are constructed, add them all to "sequence" and "direction", which will be a list of lists of all possible sequences
+            for cns, cnd in zip(cSequence, cDirection):
+                sequence.append(cns)
+                direction.append(cnd)
+
+        # if the second value of the possible play matches the available and it isn't a double, then play it in the reverse direction (all same except direction and next available)
+        if (hand[idxPlay][0] != hand[idxPlay][1]) and (hand[idxPlay][1] == available):
+            cseq = copy(previousSequence)
+            cseq.append(myHand[idxPlay])
+            cdir = copy(previousDirection)
+            cdir.append(1)
+            cSequence, cDirection = construct_line_recursive(
+                dominoes, myHand, hand[idxPlay][0], previousSequence=cseq, previousDirection=cdir, maxLineLength=maxLineLength
+            )
+            for cns, cnd in zip(cSequence, cDirection):
+                sequence.append(cns)
+                direction.append(cnd)
+
+    # return :)
+    return sequence, direction
 
 
 def dominoeUnevenBatch(batchSize, minSeq, maxSeq, listDominoes, dominoeValue, highestDominoe, ignoreIndex=-1, return_full=False):
@@ -133,54 +238,6 @@ def getBestLineFromAvailablePool(dominoes, selection, available, value_method="d
     with Pool(threads) as p:
         lines = p.map(p_makeLines, zip(selection, available))
     bestSequence, bestDirection = map(list, zip(*lines))
-    return bestSequence, bestDirection
-
-
-def get_best_line(dominoes, selection, highest_dominoe, value_method="dominoe"):
-    # check value method
-    if not (value_method == "dominoe" or value_method == "length"):
-        raise ValueError("did not recognize value_method, it has to be either 'dominoe' or 'length'")
-
-    bestSequence = []
-    bestDirection = []
-    for sel in selection:
-        cBestSeq = []
-        cBestDir = []
-        cBestVal = []
-        for available in range(highest_dominoe + 1):
-            cseq, cdir = construct_line_recursive(dominoes, sel, available)
-            if value_method == "dominoe":
-                cval = [np.sum(dominoes[cs]) for cs in cseq]
-            else:
-                cval = [len(cs) for cs in cseq]
-            cidx = max(enumerate(cval), key=lambda x: x[1])[0]
-            cBestSeq.append(cseq[cidx])
-            cBestDir.append(cdir[cidx])
-            cBestVal.append(cval[cidx])
-
-        cBestIdx = max(enumerate(cBestVal), key=lambda x: x[1])[0]
-        bestSequence.append(cBestSeq[cBestIdx])
-        bestDirection.append(cBestDir[cBestIdx])
-
-    return bestSequence, bestDirection
-
-
-def get_best_line_from_available(dominoes, selection, available, value_method="dominoe"):
-    # check value method
-    if not (value_method == "dominoe" or value_method == "length"):
-        raise ValueError("did not recognize value_method, it has to be either 'dominoe' or 'length'")
-
-    bestSequence = []
-    bestDirection = []
-    for sel, ava in zip(selection, available):
-        cseq, cdir = construct_line_recursive(dominoes, sel, ava)
-        if value_method == "dominoe":
-            cval = [np.sum(dominoes[cs]) for cs in cseq]
-        else:
-            cval = [len(cs) for cs in cseq]
-        cidx = max(enumerate(cval), key=lambda x: x[1])[0]
-        bestSequence.append(cseq[cidx])
-        bestDirection.append(cdir[cidx])
     return bestSequence, bestDirection
 
 
