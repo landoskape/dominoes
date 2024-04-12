@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import matplotlib
 
-from .datasets.support import get_dominoe_set
+from .datasets.support import get_dominoes
 
 
 class AttributeDict(dict):
@@ -106,8 +106,8 @@ def numberDominoes(highestDominoe):
 
 def listDominoes(highestDominoe):
     """alias for new function that is deprecated"""
-    warn("listDominoes is deprecated, use get_dominoe_set instead", DeprecationWarning, stacklevel=2)
-    return get_dominoe_set(highestDominoe, as_torch=False)
+    warn("listDominoes is deprecated, use get_dominoes instead", DeprecationWarning, stacklevel=2)
+    return get_dominoes(highestDominoe, as_torch=False)
 
 
 def dominoesString(dominoe):

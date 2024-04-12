@@ -8,7 +8,7 @@ import scipy as sp
 import torch
 
 
-def get_dominoe_set(highest_dominoe, as_torch=False):
+def get_dominoes(highest_dominoe, as_torch=False):
     """
     Create a list of dominoes in a set with highest value of <highest_dominoe>
 

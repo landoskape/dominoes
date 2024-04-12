@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from copy import copy
 import torch
 
-from .support import get_dominoe_set, get_best_line, pad_best_lines
+from .support import get_dominoes, get_best_line, pad_best_lines
 from ..utils import named_transpose
 
 
@@ -109,14 +109,12 @@ class DominoeDataset(DatasetRL):
         self._check_task(task)
         self.task = task
         self.highest_dominoe = highest_dominoe
-        self.train_fraction = train_fraction
 
         # create base dominoe set
-        self.dominoe_set = get_dominoe_set(self.highest_dominoe, as_torch=True)
+        self.dominoe_set = get_dominoes(self.highest_dominoe, as_torch=True)
 
         # set the training set if train_fraction is provided
-        if train_fraction is not None:
-            self.set_train_fraction(train_fraction)
+        self.set_train_fraction(train_fraction)
 
         # check parameters
         self._check_parameters(**parameters)
@@ -215,21 +213,32 @@ class DominoeDataset(DatasetRL):
 
         Will register the training set as self.train_set and the index to them as self.train_index.
         """
-        assert train_fraction > 0 and train_fraction < 1, "train_fraction should be a float between 0 and 1"
-        self.train_index = torch.randperm(len(self.dominoe_set))[: int(train_fraction * len(self.dominoe_set))]
-        self.train_set = self.dominoe_set[self.train_index]
+        self.train_fraction = train_fraction
+        if train_fraction is None:
+            self.train_index = None
+            self.train_set = None
+        else:
+            assert train_fraction > 0 and train_fraction < 1, "train_fraction should be a float between 0 and 1"
+            self.train_index = torch.randperm(len(self.dominoe_set))[: int(train_fraction * len(self.dominoe_set))]
+            self.train_set = self.dominoe_set[self.train_index]
 
-    def binary_dominoe_representation(self, dominoes, highest_dominoe=None, available=None, available_token=False, null_token=False):
+    def get_dominoe_set(self, train):
+        """ """
+        if train and self.train_set is None:
+            raise ValueError("Requested training set but it hasn't been made yet, use `set_train_fraction` to make one")
+        return self.train_set if train else self.dominoe_set
+
+    def binary_dominoe_representation(self, dominoes, available=None, available_token=False, null_token=False):
         """
         converts a set of dominoes to a stacked two-hot representation (with optional null and available tokens)
 
         dominoes are paired values (combinations with replacement) of integers
-        from 0 to <highest_dominoe>.
+        from 0 to self.highest_dominoe.
 
         This simple representation is a two-hot vector where the first
-        <highest_dominoe>+1 elements represent the first value of the dominoe, and
-        the second <highest_dominoe>+1 elements represent the second value of the
-        dominoe. Here are some examples for <highest_dominoe> = 3:
+        self.highest_dominoe+1 elements represent the first value of the dominoe, and
+        the second self.highest_dominoe+1 elements represent the second value of the
+        dominoe. Here are some examples for self.highest_dominoe = 3:
 
         (0 | 0): [1, 0, 0, 0, 1, 0, 0, 0]
         (0 | 1): [1, 0, 0, 0, 0, 1, 0, 0]
@@ -266,12 +275,11 @@ class DominoeDataset(DatasetRL):
         num_dominoes = dominoes.size(1)
 
         # input dimension determined by highest dominoe (twice the number of possible values on a dominoe)
-        highest_dominoe = highest_dominoe or self.highest_dominoe
-        input_dim = (2 if not available_token else 3) * (highest_dominoe + 1) + (1 if null_token else 0)
+        input_dim = (2 if not available_token else 3) * (self.highest_dominoe + 1) + (1 if null_token else 0)
 
         # first & second value are index and index shifted by highest_dominoe + 1
         first_value = dominoes[..., 0].unsqueeze(2)
-        second_value = dominoes[..., 1].unsqueeze(2) + highest_dominoe + 1
+        second_value = dominoes[..., 1].unsqueeze(2) + self.highest_dominoe + 1
 
         # scatter dominoe data into two-hot vectors
         src = torch.ones((batch_size, num_dominoes, 1), dtype=torch.float)
@@ -290,7 +298,7 @@ class DominoeDataset(DatasetRL):
         # add available token to the hand if requested
         if available_token:
             # create a representation of the available token
-            available_index = available + 2 * (highest_dominoe + 1)
+            available_index = available + 2 * (self.highest_dominoe + 1)
             rep_available = torch.zeros((batch_size, 1, input_dim), dtype=torch.float)
             rep_available.scatter_(2, available_index.view(batch_size, 1, 1), torch.ones(batch_size, 1, 1))
             # stack it to the end of each hand
@@ -307,7 +315,7 @@ class DominoeDataset(DatasetRL):
         generates a batch of dominoes with the required additional outputs
         """
         # choose which set of dominoes to use
-        dominoes = self.train_dominoe_set if train else self.dominoe_set
+        dominoes = self.get_dominoe_set(train)
 
         # randomize direction of the dominoes
         dominoes = self._randomize_direction(dominoes)
@@ -333,7 +341,10 @@ class DominoeDataset(DatasetRL):
         if prms["return_full"]:
             batch["train"] = train
             batch["selection"] = selection
-            batch["available"] = available
+            # note: this should probably be handled in it's own function (like with set_target)
+            # but right now it's the only part of a "full" batch that depends on the task...
+            if self.task == "sequencer":
+                batch["available"] = available
 
         # if target is requested (e.g. for SL tasks) then get target based on registered task
         if prms["return_target"]:
@@ -405,20 +416,18 @@ class DominoeDataset(DatasetRL):
     #     sortIdx = [sortPad(val, maxSeqLength, ignoreIndex) for val in value]  # pad with ignore index so nll_loss ignores them
     #     target = torch.stack([torch.LongTensor(idx) for idx in sortIdx])
 
-    def _random_dominoe_hand(self, hand_size, dominoes, highest_dominoe=None, batch_size=1, null_token=True, available_token=True):
+    def _random_dominoe_hand(self, hand_size, dominoes, batch_size=1, null_token=True, available_token=True):
         """
         general method for creating a random hand of dominoes and encoding it in a two-hot representation
 
         args:
             hand_size: number of dominoes in each hand
             dominoes: list of dominoes to choose from
-            highest_dominoe: highest value of a dominoe (if not provided, will use self.highest_dominoe)
             batch_size: number of hands to create
             null_token: whether to include a null token in the input
             available_token: whether to include an available token in the input
         """
         num_dominoes = len(dominoes)
-        highest_dominoe = highest_dominoe or self.highest_dominoe
 
         # choose a hand of hand_size dominoes from the full set for each batch element
         selection = torch.stack([torch.randperm(num_dominoes)[:hand_size] for _ in range(batch_size)])
@@ -426,14 +435,12 @@ class DominoeDataset(DatasetRL):
 
         # set available token to a random value from the dataset or None
         if available_token:
-            available = torch.randint(0, highest_dominoe + 1, (batch_size,))
+            available = torch.randint(0, self.highest_dominoe + 1, (batch_size,))
         else:
             available = None
 
         # create a binary representation of the hands
-        input = self.binary_dominoe_representation(
-            hands, highest_dominoe=highest_dominoe, available=available, available_token=available_token, null_token=null_token
-        )
+        input = self.binary_dominoe_representation(hands, available=available, available_token=available_token, null_token=null_token)
 
         # return binary representation, the selection indices and the available values
         return input, selection, available
