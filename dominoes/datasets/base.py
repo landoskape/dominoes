@@ -433,7 +433,7 @@ class DominoeDataset(DatasetRL):
                   containing the target for the batch and optionally the value of each dominoe in the batch
         """
         batch_value = torch.sum(dominoes[selection], dim=2)
-        target = torch.argsort(batch_value, dim=1, descending=True).long()
+        target = torch.argsort(batch_value, dim=1, descending=True, stable=True).long()
         target_dict = dict(target=target)
 
         if prms["return_full"]:
