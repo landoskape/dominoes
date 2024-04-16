@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
 from copy import copy
+from itertools import repeat
 import torch
+
+from multiprocessing import Pool, cpu_count
 
 from .support import get_dominoes, get_best_line, pad_best_lines
 from ..utils import named_transpose
@@ -317,9 +320,6 @@ class DominoeDataset(DatasetRL):
         # choose which set of dominoes to use
         dominoes = self.get_dominoe_set(train)
 
-        # randomize direction of the dominoes
-        dominoes = self._randomize_direction(dominoes)
-
         # get parameters with potential updates
         prms = self.parameters(**kwargs)
 
@@ -327,7 +327,11 @@ class DominoeDataset(DatasetRL):
         # will encode the hand as binary representations including null and available tokens if requested
         # will also include the index of the selection in each hand a list of available values for each batch element
         input, selection, available = self._random_dominoe_hand(
-            prms["hand_size"], dominoes, batch_size=prms["batch_size"], null_token=self.null_token, available_token=self.available_token
+            prms["hand_size"],
+            self._randomize_direction(dominoes),
+            batch_size=prms["batch_size"],
+            null_token=self.null_token,
+            available_token=self.available_token,
         )
 
         # make a mask for the input
@@ -353,7 +357,6 @@ class DominoeDataset(DatasetRL):
             # update batch dictionary with target dictionary
             batch.update(target_dict)
 
-        # return batch
         return batch
 
     def set_target(self, dominoes, selection, available, **prms):
@@ -363,7 +366,7 @@ class DominoeDataset(DatasetRL):
         if self.task == "sequencer":
             return self._gettarget_sequencer(dominoes, selection, available, **prms)
         elif self.task == "sorting":
-            return self._gettarget_sorting(dominoes, selection, available, **prms)
+            return self._gettarget_sorting(dominoes, selection, **prms)
         else:
             raise ValueError(f"task {self.task} not recognized")
 
@@ -383,17 +386,27 @@ class DominoeDataset(DatasetRL):
                   see self.parameters() for more information and look in this method for the specific parameters used
 
         """
-        # get best sequence (and direction) for each batch element
-        best_seq, best_dir = named_transpose(
-            [get_best_line(dominoes[sel], ava, value_method=prms["value_method"]) for sel, ava in zip(selection, available)]
-        )
+        # Depending on the batch size and hand size, doing this with parallel pool is sometimes faster
+        if prms.get("parallel", False):
+            # Allow user to set the number of processes or fallback onto an agressive default
+            num_processes = prms.get("num_processes", cpu_count() - 2)
+            with Pool(num_processes) as pool:
+                # arguments to get_best_line are (dominoes, available, value_method)
+                pool_args = [(dominoes[sel], ava, value) for sel, ava, value in zip(selection, available, repeat(prms["value_method"]))]
+                results = pool.starmap(get_best_line, pool_args)
+            best_seq, best_dir = named_transpose(results)
+        else:
+            # Unless the batch size is very large, this is usually faster
+            best_seq, best_dir = named_transpose(
+                [get_best_line(dominoes[sel], ava, value_method=prms["value_method"]) for sel, ava in zip(selection, available)]
+            )
 
         # hand_size is the index corresponding to the null_token if it exists
         null_index = prms["hand_size"] if self.null_token else prms["ignore_index"]
 
         # create target and append null_index once, then ignore_index afterwards
         # the idea is that the agent should play the best line, then indicate that the line is over, then anything else doesn't matter
-        target = torch.stack(pad_best_lines(best_seq, prms["hand_size"] + 1, null_index, ignore_index=prms["ignore_index"]), dtype=torch.long)
+        target = torch.stack(pad_best_lines(best_seq, prms["hand_size"] + 1, null_index, ignore_index=prms["ignore_index"])).long()
 
         # construct target dictionary
         target_dict = dict(target=target)
@@ -405,16 +418,28 @@ class DominoeDataset(DatasetRL):
 
         return target_dict
 
-    # def _gettarget_sorting(self, dominoes, selection, available, **prms):
-    #     # sort and pad each list of dominoes by value
-    #     def sortPad(val, padTo, ignoreIndex=-1):
-    #         s = sorted(range(len(val)), key=lambda i: -val[i])
-    #         p = [ignoreIndex] * (padTo - len(val))
-    #         return s + p
+    def _gettarget_sorting(self, dominoes, selection, **prms):
+        """
+        target method for the "sorting" task in which dominoes are sorted by value
 
-    #     # create a padded sort index, then turn into a torch tensor as the target vector
-    #     sortIdx = [sortPad(val, maxSeqLength, ignoreIndex) for val in value]  # pad with ignore index so nll_loss ignores them
-    #     target = torch.stack([torch.LongTensor(idx) for idx in sortIdx])
+        args:
+            dominoes: torch.Tensor, the dominoes in the dataset (num_dominoes, 2)
+            selection: torch.Tensor, the selection of dominoes in the hand (batch_size, hand_size)
+            prms: dict, the parameters for the batch generation
+                  see self.parameters() for more information and look in this method for the specific parameters used
+
+        returns:
+            dict, the target dictionary for the batch
+                  containing the target for the batch and optionally the value of each dominoe in the batch
+        """
+        batch_value = torch.sum(dominoes[selection], dim=2)
+        target = torch.argsort(batch_value, dim=1, descending=True).long()
+        target_dict = dict(target=target)
+
+        if prms["return_full"]:
+            target_dict["value"] = batch_value
+
+        return target_dict
 
     def _random_dominoe_hand(self, hand_size, dominoes, batch_size=1, null_token=True, available_token=True):
         """
