@@ -12,7 +12,10 @@ from .base import DatasetRL
 class DominoeDataset(DatasetRL):
     """A dataset for generating dominoe sequences for training and evaluation"""
 
-    def __init__(self, task, highest_dominoe, train_fraction=None, **parameters):
+    def __init__(self, task, highest_dominoe, device="cpu", train_fraction=None, **parameters):
+        """constructor method"""
+        self.set_device(device)
+
         self._check_task(task)
         self.task = task
         self.highest_dominoe = highest_dominoe
@@ -49,36 +52,6 @@ class DominoeDataset(DatasetRL):
         else:
             raise ValueError("task should be either 'sequencer', 'sorting', or None")
 
-    def _check_parameters(self, reference=None, init=False, **task_parameters):
-        """
-        check if parameters provided in the task_parameters are valid (and complete)
-
-        checks two things:
-        1. If any parameters are provided that are not recognized for the task, an error will be generated
-
-        ... if init=True, will additionally check:
-        2. If any parameters are required for the task but not provided, an error will be generated
-
-        args:
-            reference: dict, the reference parameters to check against (if not provided, uses self._required_parameters())
-            init: bool, whether this is being called by the constructor's __init__ method
-                  in practive, this determines whether any required parameters without defaults are set properly
-            task_parameters: dict, the parameters provided at initialization
-
-        raise ValueError if any parameters are not recognized or required parameters are not provided
-        """
-        if reference is None:
-            reference = self._required_parameters()
-        for param in task_parameters:
-            if param not in reference:
-                raise ValueError(f"parameter {param} not recognized for task {self.task}")
-        # if init==True, then this is being called by the constructor's __init__ method and
-        # we need to check if any required parameters without defaults are set properly
-        if init:
-            for param in reference:
-                if param not in task_parameters and reference[param] is None:
-                    raise ValueError(f"parameter {param} not provided for task {self.task}")
-
     def _required_parameters(self):
         """
         return the required parameters for the task. This is hard-coded here and only here,
@@ -110,27 +83,6 @@ class DominoeDataset(DatasetRL):
         else:
             return {}
 
-    def parameters(self, **prms):
-        """
-        Helper method for handling default parameters for each task
-
-        The way this is designed is for there to be default parameters set at initialization,
-        which never change (unless you edit them directly), and then batch-specific parameters
-        that you can update for each batch. Here, the default parameters are copied then updated
-        by the optional kwargs for this function, then the updated parameters are returned
-        and used by whatever method called ``parameters``.
-
-        For more details on possible inputs, look at "_required_parameters"
-        """
-        # get registered parameters
-        prms_to_use = copy(self.prms)
-        # check if updates are valid
-        self._check_parameters(reference=prms_to_use, init=False, **prms)
-        # update parameters
-        prms_to_use.update(prms)
-        # return to caller function
-        return prms_to_use
-
     @torch.no_grad()
     def set_train_fraction(self, train_fraction):
         """
@@ -158,10 +110,28 @@ class DominoeDataset(DatasetRL):
         return self.train_set if train else self.dominoe_set
 
     @torch.no_grad()
-    def generate_batch(self, train=True, **kwargs):
+    def generate_batch(self, train=True, device=None, **kwargs):
         """
         generates a batch of dominoes with the required additional outputs
+
+        batch keys:
+            input: torch.Tensor, the input to the network, as a binary dominoe representation (and null token)
+            train: bool, whether the batch is for training or evaluation
+            selection: torch.Tensor, the selection of dominoes in the hand
+            target: torch.Tensor, the target for the network (only if requested)
+
+        additional keys for the sequencer task:
+            available: torch.Tensor, the available value to play on at the start of the hand
+                       only included for the sequencer task
+            best_seq: torch.Tensor, the best sequence of dominoes to play (only if requested)
+            best_dir: torch.Tensor, the direction of play for the best sequence (only if requested)
+
+        additional keys for the sorting task:
+            value: torch.Tensor, the value of each dominoe in the batch (sum of the dominoe)
         """
+        # get device
+        device = self.get_device(device)
+
         # choose which set of dominoes to use
         dominoes = self.get_dominoe_set(train)
 
@@ -180,12 +150,8 @@ class DominoeDataset(DatasetRL):
             available_token=self.available_token,
         )
 
-        # make a mask for the input
-        mask_tokens = prms["hand_size"] + (1 if self.null_token else 0) + (1 if self.available_token else 0)
-        mask = torch.ones((prms["batch_size"], mask_tokens), dtype=torch.float)
-
         # construct batch dictionary
-        batch = dict(input=input, mask=mask, train=train, selection=selection)
+        batch = dict(input=input.to(device), train=train, selection=selection)
 
         # add task specific parameters to the batch dictionary
         batch = self._add_task_parameters(batch, available, **prms)
@@ -194,7 +160,7 @@ class DominoeDataset(DatasetRL):
         # if target is requested (e.g. for SL tasks) then get target based on registered task
         if prms["return_target"]:
             # get target dictionary
-            target_dict = self.set_target(dominoes, selection, available, **prms)
+            target_dict = self.set_target(dominoes, selection, available, device=device, **prms)
             # update batch dictionary with target dictionary
             batch.update(target_dict)
 
@@ -208,14 +174,14 @@ class DominoeDataset(DatasetRL):
             pass
         return batch
 
-    def set_target(self, dominoes, selection, available, **prms):
+    def set_target(self, dominoes, selection, available, device=None, **prms):
         """
         set the target output for the batch based on the registered task
         """
         if self.task == "sequencer":
-            return self._gettarget_sequencer(dominoes, selection, available, **prms)
+            return self._gettarget_sequencer(dominoes, selection, available, device=device, **prms)
         elif self.task == "sorting":
-            return self._gettarget_sorting(dominoes, selection, **prms)
+            return self._gettarget_sorting(dominoes, selection, device=device, **prms)
         else:
             raise ValueError(f"task {self.task} not recognized")
 
@@ -241,7 +207,7 @@ class DominoeDataset(DatasetRL):
             raise ValueError(f"task {self.task} not recognized!")
 
     @torch.no_grad()
-    def _gettarget_sequencer(self, dominoes, selection, available, **prms):
+    def _gettarget_sequencer(self, dominoes, selection, available, device=None, **prms):
         """
         get the target for the sequencer task
 
@@ -253,10 +219,14 @@ class DominoeDataset(DatasetRL):
             dominoes: torch.Tensor, the dominoes in the dataset (num_dominoes, 2)
             selection: torch.Tensor, the selection of dominoes in the hand (batch_size, hand_size)
             available: torch.Tensor, the available value to play on (batch_size,)
+            device: torch.device, the device to put the target on (optional, default is None)
             prms: dict, the parameters for the batch generation
                   see self.parameters() for more information and look in this method for the specific parameters used
 
         """
+        # get device
+        device = self.get_device(device)
+
         # Depending on the batch size and hand size, doing this with parallel pool is sometimes faster
         if prms.get("parallel", False):
             # Allow user to set the number of processes or fallback onto an agressive default
@@ -280,7 +250,7 @@ class DominoeDataset(DatasetRL):
         target = torch.stack(pad_best_lines(best_seq, prms["hand_size"] + 1, null_index, ignore_index=prms["ignore_index"])).long()
 
         # construct target dictionary
-        target_dict = dict(target=target)
+        target_dict = dict(target=target.to(device))
 
         # add the best sequence and direction if requested
         target_dict["best_seq"] = best_seq
@@ -289,13 +259,14 @@ class DominoeDataset(DatasetRL):
         return target_dict
 
     @torch.no_grad()
-    def _gettarget_sorting(self, dominoes, selection, **prms):
+    def _gettarget_sorting(self, dominoes, selection, device=None, **prms):
         """
         target method for the "sorting" task in which dominoes are sorted by value
 
         args:
             dominoes: torch.Tensor, the dominoes in the dataset (num_dominoes, 2)
             selection: torch.Tensor, the selection of dominoes in the hand (batch_size, hand_size)
+            device: torch.device, the device to put the target on (optional, default is None)
             prms: dict, the parameters for the batch generation
                   see self.parameters() for more information and look in this method for the specific parameters used
 
@@ -303,9 +274,17 @@ class DominoeDataset(DatasetRL):
             dict, the target dictionary for the batch
                   containing the target for the batch and optionally the value of each dominoe in the batch
         """
+        # get device
+        device = self.get_device(device)
+
+        # measure the value of each dominoe in the batch
         value = torch.sum(dominoes[selection], dim=2)
+
+        # set target as the index of descending sorted values
         target = torch.argsort(value, dim=1, descending=True, stable=True).long()
-        return dict(target=target, value=value)
+
+        # return dictionary with target and value
+        return dict(target=target.to(device), value=value)
 
     @torch.no_grad()
     def _measurereward_sequencer(self, choices, batch, return_direction=False, verbose=None):
