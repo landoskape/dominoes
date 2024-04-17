@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from copy import copy
 import torch
 
 
@@ -9,8 +10,91 @@ class Dataset(ABC):
     """
 
     @abstractmethod
+    def _required_parameters(self):
+        """
+        return the required parameters for the task. This is hard-coded here and only here,
+        so if the parameters change, this method should be updated.
+
+        None means the parameter is required and doesn't have a default value. Otherwise,
+        the value is the default value for the parameter.
+
+        returns:
+            dict, the required parameters for the task
+        """
+        pass
+
+    def _check_parameters(self, reference=None, init=False, **task_parameters):
+        """
+        check if parameters provided in the task_parameters are valid (and complete)
+
+        checks two things:
+        1. If any parameters are provided that are not recognized for the task, an error will be generated
+
+        ... if init=True, will additionally check:
+        2. If any parameters are required for the task but not provided, an error will be generated
+
+        args:
+            reference: dict, the reference parameters to check against (if not provided, uses self._required_parameters())
+            init: bool, whether this is being called by the constructor's __init__ method
+                  in practive, this determines whether any required parameters without defaults are set properly
+            task_parameters: dict, the parameters provided at initialization
+
+        raise ValueError if any parameters are not recognized or required parameters are not provided
+        """
+        if reference is None:
+            reference = self._required_parameters()
+        for param in task_parameters:
+            if param not in reference:
+                raise ValueError(f"parameter {param} not recognized for task {self.task}")
+        # if init==True, then this is being called by the constructor's __init__ method and
+        # we need to check if any required parameters without defaults are set properly
+        if init:
+            for param in reference:
+                if param not in task_parameters and reference[param] is None:
+                    raise ValueError(f"parameter {param} not provided for task {self.task}")
+
+    def parameters(self, **prms):
+        """
+        Helper method for handling default parameters for each task
+
+        The way this is designed is for there to be default parameters set at initialization,
+        which never change (unless you edit them directly), and then batch-specific parameters
+        that you can update for each batch. Here, the default parameters are copied then updated
+        by the optional kwargs for this function, then the updated parameters are returned
+        and used by whatever method called ``parameters``.
+
+        For more details on possible inputs, look at "_required_parameters"
+        """
+        # get registered parameters
+        prms_to_use = copy(self.prms)
+        # check if updates are valid
+        self._check_parameters(reference=prms_to_use, init=False, **prms)
+        # update parameters
+        prms_to_use.update(prms)
+        # return to caller function
+        return prms_to_use
+
+    @abstractmethod
     def generate_batch(self, *args, **kwargs):
         """required method for generating a batch"""
+
+    def set_device(self, device):
+        """
+        set the device for the dataset
+
+        args:
+            device: torch.device, the device to use for the dataset
+        """
+        self.device = torch.device(device)
+
+    def get_device(self, device=None):
+        """
+        get the device for the dataset (if not provided, will use the device registered upon dataset creation)
+
+        returns:
+            torch.device, the device for the dataset
+        """
+        return torch.device(device) or self.device
 
 
 class DatasetRL(Dataset):
