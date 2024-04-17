@@ -203,7 +203,7 @@ class DominoeDataset(DatasetRL):
         """
         Helper method for handling default parameters for each task
 
-        The way this is designed is for there to be default parameters set at initialization, 
+        The way this is designed is for there to be default parameters set at initialization,
         which never change (unless you edit them directly), and then batch-specific parameters
         that you can update for each batch. Here, the default parameters are copied then updated
         by the optional kwargs for this function, then the updated parameters are returned
@@ -278,6 +278,7 @@ class DominoeDataset(DatasetRL):
 
         # add task specific parameters to the batch dictionary
         batch = self._add_task_parameters(batch, available, **prms)
+        batch.update(prms)
 
         # if target is requested (e.g. for SL tasks) then get target based on registered task
         if prms["return_target"]:
@@ -292,10 +293,8 @@ class DominoeDataset(DatasetRL):
         """Add task specific parameters to the batch dictionary"""
         if self.task == "sequencer":
             batch["available"] = available
-            batch["value_method"] = prms["value_method"]
-            batch["value_multiplier"] = prms["value_multiplier"]
         if self.task == "sorting":
-            batch["allow_mistakes"] = prms["allow_mistakes"]
+            pass
         return batch
 
     def set_target(self, dominoes, selection, available, **prms):
