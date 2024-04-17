@@ -5,20 +5,8 @@ import torch
 class Dataset(ABC):
     """
     the dataset class is a general purpose dataset for loading and evaluating performance on sequencing problems
+    since it is the master class for RL and SL datasets, the only required method is `generate_batch`
     """
-
-    # @abstractmethod
-    # def initialize(self, *args, **kwargs):
-    #     """required method for initializing the dataset"""
-
-    @abstractmethod
-    def parameters(self, **kwargs):
-        """
-        method for defining parameters for batch generation
-        if none provided as kwargs, will use the defaults registered upon dataset creation
-
-        required in all children of this dataset type
-        """
 
     @abstractmethod
     def generate_batch(self, *args, **kwargs):
@@ -54,6 +42,25 @@ class DatasetRL(Dataset):
         # return the gamma transform matrix
         return (gamma**exponent).to(device)
 
+    def get_pretemp_score(self, scores, choices, temperature):
+        pass
+
+    def _get_choice_score(self, choices, scores):
+        """
+        get the score for the choices made by the networks
+
+        args:
+            choices: torch.Tensor, the choices made by the networks
+                     should be 2-d Long tensor of indices
+            scores: torch.Tensor, the log scores for the choices
+                    should be a 3-d float tensor of scores for each possible choice
+
+        returns:
+            torch.Tensor: the score for the choices made by the networks
+                          2-d float tensor, same shape as choices
+        """
+        return torch.gather(scores, 2, choices.unsqueeze(2)).squeeze(2)
+
     def process_reward(self, rewards, scores, choices, gamma_transform):
         """
         process the reward for performing policy gradient
@@ -71,7 +78,7 @@ class DatasetRL(Dataset):
         G = [torch.matmul(reward, gamma_transform) for reward in rewards]
 
         # measure choice score for each network (the log-probability for each choice)
-        choice_scores = [torch.gather(score, 2, choice.unsqueeze(2)).squeeze(2) for score, choice in zip(scores, choices)]
+        choice_scores = [self._get_choice_score(choice, score) for choice, score in zip(choices, scores)]
 
         # measure J for each network
         J = [-torch.sum(cs * g) for cs, g in zip(choice_scores, G)]
@@ -93,36 +100,3 @@ class DatasetRL(Dataset):
             (additional outputs are task dependent)
         """
         pass
-
-
-# @torch.no_grad()
-# def measureReward_tsp(dists, choices):
-#     """reward function for measuring tsp performance"""
-#     assert choices.ndim == 2, "choices should be a 2-d tensor of the sequence of choices for each batch element"
-#     assert dists.ndim == 3, "dists should be a 3-d tensor of the distance matrix across cities for each batch element"
-#     numCities = dists.size(1)
-#     batchSize, numChoices = choices.shape
-#     assert 1 < numChoices <= (numCities + 1), "numChoices per batch element should be more than 1 and no more than twice the number of cities"
-#     device = transformers.get_device(choices)
-#     distance = torch.zeros((batchSize, numChoices)).to(device)
-#     new_city = torch.ones((batchSize, numChoices)).to(device)
-
-#     last_location = copy(choices[:, 0])  # last (i.e. initial position) is final step of permutation of cities
-#     src = torch.ones((batchSize, 1), dtype=torch.bool).to(device)
-#     visited = torch.zeros((batchSize, numChoices), dtype=torch.bool).to(device)
-#     visited.scatter_(1, last_location.view(batchSize, 1), src)  # put first city in to the "visited" tensor
-#     for nc in range(1, numChoices):
-#         next_location = choices[:, nc]
-#         c_dist_possible = torch.gather(dists, 1, last_location.view(batchSize, 1, 1).expand(-1, -1, numCities)).squeeze(1)
-#         distance[:, nc] = torch.gather(c_dist_possible, 1, next_location.view(batchSize, 1)).squeeze(1)
-#         c_visited = torch.gather(visited, 1, next_location.view(batchSize, 1)).squeeze(1)
-#         visited.scatter_(1, next_location.view(batchSize, 1), src)
-#         new_city[c_visited, nc] = -1.0
-#         new_city[~c_visited, nc] = 1.0
-#         last_location = copy(next_location)  # update last location
-
-#     # add return step (to initial city) to the final choice
-#     c_dist_possible = torch.gather(dists, 1, choices[:, 0].view(batchSize, 1, 1).expand(-1, -1, numCities)).squeeze(1)
-#     distance[:, -1] += torch.gather(c_dist_possible, 1, choices[:, -1].view(batchSize, 1)).squeeze(1)
-
-#     return distance, new_city

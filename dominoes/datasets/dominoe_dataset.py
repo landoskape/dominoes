@@ -1,8 +1,8 @@
 from copy import copy
 from itertools import repeat
+from multiprocessing import Pool, cpu_count
 import torch
 
-from multiprocessing import Pool, cpu_count
 
 from .support import get_dominoes, get_best_line, pad_best_lines
 from ..utils import named_transpose
