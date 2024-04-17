@@ -332,7 +332,7 @@ class DominoeDataset(DatasetRL):
         if self.task == "sequencer":
             return self._measurereward_sequencer(choices, batch, **kwargs)
         elif self.task == "sorting":
-            return self._measurereward_sorter(choices, batch, **kwargs):
+            return self._measurereward_sorter(choices, batch, **kwargs)
         else:
             raise ValueError(f"task {self.task} not recognized")
 
