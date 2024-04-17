@@ -120,7 +120,7 @@ class DominoeDataset(DatasetRL):
         self.set_train_fraction(train_fraction)
 
         # check parameters
-        self._check_parameters(**parameters)
+        self._check_parameters(init=True, **parameters)
 
         # set parameters to required defaults first, then update
         self.prms = self._required_parameters()
@@ -145,7 +145,7 @@ class DominoeDataset(DatasetRL):
         else:
             raise ValueError("task should be either 'sequencer', 'sorting', or None")
 
-    def _check_parameters(self, **task_parameters):
+    def _check_parameters(self, reference=None, init=False, **task_parameters):
         """
         check if the parameters provided at initialization are valid and complete
 
@@ -156,13 +156,17 @@ class DominoeDataset(DatasetRL):
         args:
             task_parameters: dict, the parameters provided at initialization
         """
-        required_params = self._required_parameters()
+        if reference is None:
+            reference = self._required_parameters()
         for param in task_parameters:
-            if param not in required_params:
+            if param not in reference:
                 raise ValueError(f"parameter {param} not recognized for task {self.task}")
-        for param in required_params:
-            if param not in task_parameters and required_params[param] is None:
-                raise ValueError(f"parameter {param} not provided for task {self.task}")
+        # if init==True, then this is being called by the constructor's __init__ method and
+        # we need to check if any required parameters without defaults are set properly
+        if init:
+            for param in reference:
+                if param not in task_parameters and reference[param] is None:
+                    raise ValueError(f"parameter {param} not provided for task {self.task}")
 
     def _required_parameters(self):
         """
@@ -187,6 +191,7 @@ class DominoeDataset(DatasetRL):
         )
         if self.task == "sequencer":
             params["value_method"] = "length"
+            params["value_multiplier"] = 1.0
             return params
         elif self.task == "sorting":
             params["allow_mistakes"] = False
@@ -196,17 +201,26 @@ class DominoeDataset(DatasetRL):
 
     def parameters(self, **prms):
         """
-        Helper method for setting parameters for batch generation or just using the defaults
-        set at initialization
+        Helper method for handling default parameters for each task
+
+        The way this is designed is for there to be default parameters set at initialization, 
+        which never change (unless you edit them directly), and then batch-specific parameters
+        that you can update for each batch. Here, the default parameters are copied then updated
+        by the optional kwargs for this function, then the updated parameters are returned
+        and used by whatever method called ``parameters``.
+
+        For more details on possible inputs, look at "_required_parameters"
         """
+        # get registered parameters
         prms_to_use = copy(self.prms)
-        # check if any parameters are provided that are not recognized
-        for param in prms:
-            if param not in prms_to_use:
-                raise ValueError(f"parameter {param} not recognized for task {self.task}")
+        # check if updates are valid
+        self._check_parameters(reference=prms_to_use, init=False, **prms)
+        # update parameters
         prms_to_use.update(prms)
+        # return to caller function
         return prms_to_use
 
+    @torch.no_grad()
     def set_train_fraction(self, train_fraction):
         """
         Pick a random subset of dominoes to use as the training set.
@@ -225,12 +239,14 @@ class DominoeDataset(DatasetRL):
             self.train_index = torch.randperm(len(self.dominoe_set))[: int(train_fraction * len(self.dominoe_set))]
             self.train_set = self.dominoe_set[self.train_index]
 
+    @torch.no_grad()
     def get_dominoe_set(self, train):
         """ """
         if train and self.train_set is None:
             raise ValueError("Requested training set but it hasn't been made yet, use `set_train_fraction` to make one")
         return self.train_set if train else self.dominoe_set
 
+    @torch.no_grad()
     def generate_batch(self, train=True, **kwargs):
         """
         generates a batch of dominoes with the required additional outputs
@@ -244,6 +260,7 @@ class DominoeDataset(DatasetRL):
         # get a random dominoe hand
         # will encode the hand as binary representations including null and available tokens if requested
         # will also include the index of the selection in each hand a list of available values for each batch element
+        # note that dominoes direction is randomized for the input, but not for the target
         input, selection, available = self._random_dominoe_hand(
             prms["hand_size"],
             self._randomize_direction(dominoes),
@@ -259,13 +276,8 @@ class DominoeDataset(DatasetRL):
         # construct batch dictionary
         batch = dict(input=input, mask=mask, train=train, selection=selection)
 
-        # note: this should probably be handled in it's own function (like with set_target)
-        # but right now it's the only part of a "full" batch that depends on the task...
-        if self.task == "sequencer":
-            batch["available"] = available
-            batch["value_method"] = prms["value_method"]
-        if self.task == "sorting":
-            batch["allow_mistakes"] = prms["allow_mistakes"]
+        # add task specific parameters to the batch dictionary
+        batch = self._add_task_parameters(batch, available, **prms)
 
         # if target is requested (e.g. for SL tasks) then get target based on registered task
         if prms["return_target"]:
@@ -274,6 +286,16 @@ class DominoeDataset(DatasetRL):
             # update batch dictionary with target dictionary
             batch.update(target_dict)
 
+        return batch
+
+    def _add_task_parameters(self, batch, available, **prms):
+        """Add task specific parameters to the batch dictionary"""
+        if self.task == "sequencer":
+            batch["available"] = available
+            batch["value_method"] = prms["value_method"]
+            batch["value_multiplier"] = prms["value_multiplier"]
+        if self.task == "sorting":
+            batch["allow_mistakes"] = prms["allow_mistakes"]
         return batch
 
     def set_target(self, dominoes, selection, available, **prms):
@@ -287,6 +309,7 @@ class DominoeDataset(DatasetRL):
         else:
             raise ValueError(f"task {self.task} not recognized")
 
+    @torch.no_grad()
     def reward_function(self, choices, batch, **kwargs):
         """
         measure the reward acquired by the choices made by a set of networks for the current batch
@@ -301,6 +324,7 @@ class DominoeDataset(DatasetRL):
         """
         pass
 
+    @torch.no_grad()
     def _gettarget_sequencer(self, dominoes, selection, available, **prms):
         """
         get the target for the sequencer task
@@ -348,6 +372,7 @@ class DominoeDataset(DatasetRL):
 
         return target_dict
 
+    @torch.no_grad()
     def _gettarget_sorting(self, dominoes, selection, **prms):
         """
         target method for the "sorting" task in which dominoes are sorted by value
@@ -416,15 +441,11 @@ class DominoeDataset(DatasetRL):
             debug = False
 
         # check value method
-        if batch["value_method"] == "dominoe":
-            pass
-        elif isinstance(batch["value_method"], str) and batch["value_method"].isdigit() and int(batch["value_method"]) > 0:
-            valid_play_value = float(int(batch["value_method"]))
-        else:
-            raise ValueError("did not recognize value_method, it has to be either 'dominoe' or a string representation of a positive digit")
+        if not (batch["value_method"] == "dominoe" or batch["value_method"] == "length"):
+            raise ValueError("did not recognize value_method, it has to be either 'dominoe' or 'length'")
 
         # initialize these tracker variables
-        next_available = torch.tensor(batch["available"], dtype=torch.float).to(device)  # next value available to play on
+        next_available = batch["available"].clone().float().to(device)  # next value available to play on
         already_played = torch.zeros((batch_size, num_in_hand + 1), dtype=torch.bool).to(device)  # False until dominoe has been played
         made_mistake = torch.zeros((batch_size,), dtype=torch.bool).to(device)  # False until a mistake is made
         played_null = torch.zeros((batch_size,), dtype=torch.bool).to(device)  # False until the null dominoe has been played
@@ -497,13 +518,15 @@ class DominoeDataset(DatasetRL):
 
             # Set rewards for dominoe plays
             if batch["value_method"] == "dominoe":
-                rewards[valid_dominoe_play, idx] += torch.sum(chosen_play[valid_dominoe_play], dim=1) + 1.0  # offset by 1 so (0|0) has value
-                rewards[first_invalid_dominoe_play, idx] -= torch.sum(chosen_play[first_invalid_dominoe_play], dim=1) + 1.0
+                valid_play_rewards = torch.sum(chosen_play[valid_dominoe_play], dim=1) + 1.0  # offset by 1 so (0|0) has value
+                invalid_play_rewards = torch.sum(chosen_play[first_invalid_dominoe_play], dim=1) + 1.0
+                rewards[valid_dominoe_play, idx] += valid_play_rewards * batch["value_multiplier"]
+                rewards[first_invalid_dominoe_play, idx] -= invalid_play_rewards * batch["value_multiplier"]
             else:
-                rewards[valid_dominoe_play, idx] += valid_play_value
-                rewards[first_invalid_dominoe_play, idx] -= valid_play_value
+                rewards[valid_dominoe_play, idx] += 1.0 * batch["value_multiplier"]
+                rewards[first_invalid_dominoe_play, idx] -= 1.0 * batch["value_multiplier"]
 
-            # Set rewards for null plays
+            # Set rewards for null plays (don't use value multiplier for the null tokens)
             rewards[valid_null_play, idx] += 1.0
             rewards[first_invalid_null_play, idx] -= 1.0
 
@@ -596,6 +619,7 @@ class DominoeDataset(DatasetRL):
 
         return rewards
 
+    @torch.no_grad()
     def _binary_dominoe_representation(self, dominoes, available=None, available_token=False, null_token=False):
         """
         converts a set of dominoes to a stacked two-hot representation (with optional null and available tokens)
@@ -678,6 +702,7 @@ class DominoeDataset(DatasetRL):
 
         return binary
 
+    @torch.no_grad()
     def _random_dominoe_hand(self, hand_size, dominoes, batch_size=1, null_token=True, available_token=True):
         """
         general method for creating a random hand of dominoes and encoding it in a two-hot representation
@@ -707,6 +732,7 @@ class DominoeDataset(DatasetRL):
         # return binary representation, the selection indices and the available values
         return input, selection, available
 
+    @torch.no_grad()
     def _randomize_direction(self, dominoes):
         """
         randomize the direction of a dominoes representation in a batch
