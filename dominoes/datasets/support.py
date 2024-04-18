@@ -287,7 +287,7 @@ def make_path(coordinates, distances, idx_init):
         best_path = torch.flip(torch.roll(best_path, -1), dims=(0,))
 
     # finally, roll it once so the origin is the last location
-    best_path = torch.roll(best_path, -1)
+    best_path = best_path[1:]  # torch.roll(best_path, -1)
 
     return best_path
 
