@@ -23,9 +23,9 @@ class Dataset(ABC):
         """
         pass
 
-    def _check_parameters(self, reference=None, init=False, **task_parameters):
+    def _check_parameters(self, reference=None, init=False, **parameters):
         """
-        check if parameters provided in the task_parameters are valid (and complete)
+        check if parameters provided in the parameters are valid (and complete)
 
         checks two things:
         1. If any parameters are provided that are not recognized for the task, an error will be generated
@@ -37,20 +37,20 @@ class Dataset(ABC):
             reference: dict, the reference parameters to check against (if not provided, uses self._required_parameters())
             init: bool, whether this is being called by the constructor's __init__ method
                   in practive, this determines whether any required parameters without defaults are set properly
-            task_parameters: dict, the parameters provided at initialization
+            parameters: dict, the parameters provided at initialization
 
         raise ValueError if any parameters are not recognized or required parameters are not provided
         """
         if reference is None:
             reference = self._required_parameters()
-        for param in task_parameters:
+        for param in parameters:
             if param not in reference:
                 raise ValueError(f"parameter {param} not recognized for task {self.task}")
         # if init==True, then this is being called by the constructor's __init__ method and
         # we need to check if any required parameters without defaults are set properly
         if init:
             for param in reference:
-                if param not in task_parameters and reference[param] is None:
+                if param not in parameters and reference[param] is None:
                     raise ValueError(f"parameter {param} not provided for task {self.task}")
 
     def parameters(self, **prms):
@@ -94,7 +94,9 @@ class Dataset(ABC):
         returns:
             torch.device, the device for the dataset
         """
-        return torch.device(device) or self.device
+        if device is not None:
+            return torch.device(device)
+        return self.device
 
 
 class DatasetRL(Dataset):
