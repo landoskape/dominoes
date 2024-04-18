@@ -11,6 +11,8 @@ class TSPDataset(DatasetRL):
 
     def __init__(self, device="cpu", **parameters):
         """constructor method"""
+        self.task = "tsp"
+
         self.set_device(device)
 
         # check parameters
@@ -28,13 +30,10 @@ class TSPDataset(DatasetRL):
         None means the parameter is required and doesn't have a default value. Otherwise,
         the value is the default value for the parameter.
 
-        args:
-            task: str, the task for which to get the required parameters
-
         returns:
             list of str, the required parameters for the task
         """
-        # base parameters for all tasks
+        # tsp parameters
         params = dict(
             num_cities=None,  # this parameter is required to be set at initialization
             coord_dims=2,
@@ -66,7 +65,7 @@ class TSPDataset(DatasetRL):
 
         # def tsp_batch(batch_size, num_cities, return_target=True, return_full=False, threads=1):
         input = torch.rand((prms["batch_size"], prms["num_cities"], prms["coord_dims"]), dtype=torch.float)
-        dists = torch.cdist(input)
+        dists = torch.cdist(input, input)
 
         # define initial position as closest to origin (arbitrary but standard choice)
         init_idx = torch.argmin(torch.sum(input**2, dim=2), dim=1)
@@ -86,91 +85,68 @@ class TSPDataset(DatasetRL):
         return batch
 
     @torch.no_grad()
-    def reward_function(self, choices, batch, **kwargs):
+    def reward_function(self, choices, batch, new_city_scalar=0.0, **kwargs):
         """
         measure the reward acquired by the choices made by a set of networks for the current batch
 
+        rewards have two components, a distance component and a new city component
 
-        rewards are 1 when a dominoe is chosen that:
-        - hasn't been played yet
-        - has less than or equal value to the last dominoe played (first dominoe always valid)
+        1. the distance component is the negative of the distance traveled between cities for each step
+        including the implicit return to the initial city at the end of the sequence (added to the total
+        distance traveled in the last step).
 
-        rewards are -1 when a dominoe is chosen that:
-        - has already been played
-        - has greater value than the last dominoe played
-
-        note: rewards are set to 0 after a mistake is made
-
-
-
+        2. the new city component is 1 for new cities and -1 for visited cities. This is used to penalize
+        the network from returning to a city that has already been visited. In practice, pointer networks
+        usually use a permutation rule (with prior city masking) to ensure that the network doesn't return
+        to any previous city, so the new city component is multiplied by a scalar (default 0) to make it
+        irrelevant to the reward.
 
         args:
             choice: torch.Tensor, index to the choices made by the network
             batch: tuple, the batch of data generated for this training step
+            new_city_scalar: float, the scalar to multiply the new city component by
             kwargs: not used, here for consistency with other dataset types
 
         returns:
-            torch.Tensor, the rewards for the network
+            torch.Tensor, the rewards for the network (batch_size, choices)
         """
         assert choices.ndim == 2, "choices should be a 2-d tensor of the sequence of choices for each batch element"
         num_cities = batch["num_cities"]
-        batch_size = num_choices = choices.shape
+        batch_size, num_choices = choices.shape
         device = choices.device
 
         distance = torch.zeros((batch_size, num_choices)).to(device)
         new_city = torch.ones((batch_size, num_choices)).to(device)
 
-        last_location = batch["init_idx"]  # last (i.e. initial position) is final step of permutation of cities
-
-        last_location = copy(choices[:, 0])  # last (i.e. initial position) is final step of permutation of cities
-        src = torch.ones((batchSize, 1), dtype=torch.bool).to(device)
-        visited = torch.zeros((batchSize, numChoices), dtype=torch.bool).to(device)
-        visited.scatter_(1, last_location.view(batchSize, 1), src)  # put first city in to the "visited" tensor
-        for nc in range(1, numChoices):
+        last_location = batch["init_idx"]  # last (i.e. initial position) is preset initial position
+        src = torch.ones((batch_size, 1), dtype=torch.bool).to(device)  # src tensor for updating other tensors
+        visited = torch.zeros((batch_size, num_cities), dtype=torch.bool).to(device)  # boolean for whether city has been visited
+        visited.scatter_(1, last_location.view(batch_size, 1), src)  # put first city in to the "visited" tensor
+        for nc in range(num_choices):
+            # get index to next city
             next_location = choices[:, nc]
-            c_dist_possible = torch.gather(dists, 1, last_location.view(batchSize, 1, 1).expand(-1, -1, numCities)).squeeze(1)
-            distance[:, nc] = torch.gather(c_dist_possible, 1, next_location.view(batchSize, 1)).squeeze(1)
-            c_visited = torch.gather(visited, 1, next_location.view(batchSize, 1)).squeeze(1)
-            visited.scatter_(1, next_location.view(batchSize, 1), src)
+            # this is a batched vector of possible distances from previous city to all other cities
+            c_dist_possible = torch.gather(batch["dists"], 1, last_location.view(batch_size, 1, 1).expand(-1, -1, num_cities)).squeeze(1)
+            # this is a vector (over the batch) of the distance between previous and next city
+            distance[:, nc] = torch.gather(c_dist_possible, 1, next_location.view(batch_size, 1)).squeeze(1)
+            # get whether the next city has been visited
+            c_visited = torch.gather(visited, 1, next_location.view(batch_size, 1)).squeeze(1)
+            # update visited tensor with next city
+            visited.scatter_(1, next_location.view(batch_size, 1), src)
+            # new_city is a tensor of 1s and -1s, where 1s are new cities and -1s are visited cities
             new_city[c_visited, nc] = -1.0
             new_city[~c_visited, nc] = 1.0
-            last_location = copy(next_location)  # update last location
+            # update last location for next choices
+            last_location = copy(next_location)
 
-        # add return step (to initial city) to the final choice
-        c_dist_possible = torch.gather(dists, 1, choices[:, 0].view(batchSize, 1, 1).expand(-1, -1, numCities)).squeeze(1)
-        distance[:, -1] += torch.gather(c_dist_possible, 1, choices[:, -1].view(batchSize, 1)).squeeze(1)
+        # the traveling salesman defines an initial city, and assumes that the agent travels through all
+        # other cities in a permutation then returns to the initial city... so that final step needs to
+        # be represented somewhere in the reward function.
+        # here, we just add the implicit distance traveled to that final choice
+        c_dist_possible = torch.gather(batch["dists"], 1, batch["init_idx"].view(batch_size, 1, 1).expand(-1, -1, num_cities)).squeeze(1)
+        distance[:, -1] += torch.gather(c_dist_possible, 1, choices[:, -1].view(batch_size, 1)).squeeze(1)
 
-        return distance, new_city
+        # combine two reward types
+        reward = -distance + new_city_scalar * new_city
 
-
-# @torch.no_grad()
-# def measureReward_tsp(dists, choices):
-#     """reward function for measuring tsp performance"""
-#     assert choices.ndim == 2, "choices should be a 2-d tensor of the sequence of choices for each batch element"
-#     assert dists.ndim == 3, "dists should be a 3-d tensor of the distance matrix across cities for each batch element"
-#     numCities = dists.size(1)
-#     batchSize, numChoices = choices.shape
-#     assert 1 < numChoices <= (numCities + 1), "numChoices per batch element should be more than 1 and no more than twice the number of cities"
-#     device = transformers.get_device(choices)
-#     distance = torch.zeros((batchSize, numChoices)).to(device)
-#     new_city = torch.ones((batchSize, numChoices)).to(device)
-
-#     last_location = copy(choices[:, 0])  # last (i.e. initial position) is final step of permutation of cities
-#     src = torch.ones((batchSize, 1), dtype=torch.bool).to(device)
-#     visited = torch.zeros((batchSize, numChoices), dtype=torch.bool).to(device)
-#     visited.scatter_(1, last_location.view(batchSize, 1), src)  # put first city in to the "visited" tensor
-#     for nc in range(1, numChoices):
-#         next_location = choices[:, nc]
-#         c_dist_possible = torch.gather(dists, 1, last_location.view(batchSize, 1, 1).expand(-1, -1, numCities)).squeeze(1)
-#         distance[:, nc] = torch.gather(c_dist_possible, 1, next_location.view(batchSize, 1)).squeeze(1)
-#         c_visited = torch.gather(visited, 1, next_location.view(batchSize, 1)).squeeze(1)
-#         visited.scatter_(1, next_location.view(batchSize, 1), src)
-#         new_city[c_visited, nc] = -1.0
-#         new_city[~c_visited, nc] = 1.0
-#         last_location = copy(next_location)  # update last location
-
-#     # add return step (to initial city) to the final choice
-#     c_dist_possible = torch.gather(dists, 1, choices[:, 0].view(batchSize, 1, 1).expand(-1, -1, numCities)).squeeze(1)
-#     distance[:, -1] += torch.gather(c_dist_possible, 1, choices[:, -1].view(batchSize, 1)).squeeze(1)
-
-#     return distance, new_city
+        return reward
