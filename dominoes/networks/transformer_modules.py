@@ -867,9 +867,8 @@ class PointerNetwork(nn.Module):
                 ]
             )
 
-        self.encoding = (
-            self.forwardEncoder
-        )  # since there are masks, it's easier to write a custom forward than wrangle the transformer layers to work with nn.Sequential
+        # since there are masks, it's easier to write a custom forward than wrangle the transformer layers to work with nn.Sequential
+        self.encoding = self.forwardEncoder
 
         self.pointer = PointerModule(
             self.embedding_dim,
@@ -984,6 +983,10 @@ class PointerNetwork(nn.Module):
             rinit = init.view(batch, 1, 1).expand(-1, -1, self.embedding_dim)
             decoder_input = torch.gather(encodedRepresentation, 1, rinit).squeeze(1)
             mask = mask.scatter(1, init.view(batch, 1), torch.zeros((batch, 1), dtype=mask.dtype).to(get_device(mask)))
+
+            # note from refactoring effort:
+            # I think if init is used and permutation=True, then we should assert that max_output <= len(tokens)-1 !!!
+            raise ValueError("See above comment")
         else:
             decoder_input = torch.zeros((batch, self.embedding_dim)).to(get_device(x))  # initialize decoder_input as zeros
 
