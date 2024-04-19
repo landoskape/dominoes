@@ -99,6 +99,38 @@ class Dataset(ABC):
         return self.device
 
 
+class DatasetSL(Dataset):
+    """
+    A child of the general dataset class that is designed for supervised learning tasks
+    """
+
+    def __init__(self, loss_function=torch.nn.functional.nll_loss, loss_kwargs={}):
+        """
+        initialize the dataset for supervised learning
+
+        args:
+            loss_function: function, the loss function to use for the dataset
+        """
+        self.loss_function = loss_function
+        self.loss_kwargs = loss_kwargs
+
+    def measure_loss(self, scores, target, check_divergence=True):
+        """
+        measure the loss between the scores and target for a set of networks
+
+        assumes the scores are log probabilities of each choice with shape (batch, max_output, num_choices)
+        assumes the target is the correct choice with shape (batch, max_output)
+        unrolls the scores to a 2-d tensors and measures the loss
+        """
+        # unroll scores and target to fold sequence dimension into batch dimension
+        unrolled = [score.view(-1, score.size(2)) for score in scores]
+        loss = [self.loss_function(unroll, target.view(-1), **self.loss_kwargs) for unroll in unrolled]
+        if check_divergence:
+            for i, l in enumerate(loss):
+                assert not torch.isnan(l).item(), f"model {i} diverged :("
+        return loss
+
+
 class DatasetRL(Dataset):
     """
     A child of the general dataset class that is designed for reinforcement learning tasks
@@ -128,10 +160,33 @@ class DatasetRL(Dataset):
         # return the gamma transform matrix
         return (gamma**exponent).to(device)
 
-    def get_pretemp_score(self, scores, choices, temperature):
-        pass
+    def get_pretemp_score(self, scores, choices, temperatures, return_full_score=False):
+        """
+        get the pre-temperature score for the choices made by the networks
 
-    def _get_choice_score(self, choices, scores):
+        args:
+            scores: list of torch.Tensor, the log scores for the choices for each network
+                    should be a 3-d float tensor of scores for each possible choice
+            choices: list of torch.Tensor, index to the choices made by each network
+                     should be 2-d Long tensor of indices
+            temperatures: list of float, the temperature for each network
+            return_full_score: bool, whether to return the full score or just the score for the choices
+
+        returns:
+            pretemp_policies: list of torch.Tensor, the score for the choices made by the networks
+                              2-d float tensor, same shape as choices
+            pretemp_scores: list of torch.Tensor, the pre-temperature score for the choices for each network
+                            3-d float tensor, same shape as scores, only returned if return_full_score=True
+        """
+        # Measure the pre-temperature score of each network (this may have an additive offset, but that's okay)
+        pretemp_scores = [torch.softmax(score * temp, dim=2) for score, temp in zip(scores, temperatures)]
+        # Get pre-temperature score for the choices made by the networks
+        pretemp_policies = [self.get_choice_score(choice, score) for choice, score in zip(choices, pretemp_scores)]
+        if return_full_score:
+            return pretemp_policies, pretemp_scores
+        return pretemp_policies
+
+    def get_choice_score(self, choices, scores):
         """
         get the score for the choices made by the networks
 
@@ -164,7 +219,7 @@ class DatasetRL(Dataset):
         G = [torch.matmul(reward, gamma_transform) for reward in rewards]
 
         # measure choice score for each network (the log-probability for each choice)
-        choice_scores = [self._get_choice_score(choice, score) for choice, score in zip(choices, scores)]
+        choice_scores = [self.get_choice_score(choice, score) for choice, score in zip(choices, scores)]
 
         # measure J for each network
         J = [-torch.sum(cs * g) for cs, g in zip(choice_scores, G)]
