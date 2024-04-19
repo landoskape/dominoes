@@ -107,55 +107,55 @@ class PointerArchitectureComparison(Experiment):
         # load dataset
         dataset = self.prepare_dataset()
 
-        # train networks
-        train_results, test_results = processing.train_networks(self, nets, optimizers, dataset)
-
-        # do targeted dropout experiment
-        dropout_results, dropout_parameters = processing.progressive_dropout_experiment(
-            self, nets, dataset, alignment=test_results.get("alignment", None), train_set=False
-        )
-
-        # measure eigenfeatures
-        eigen_results = processing.measure_eigenfeatures(self, nets, dataset, train_set=False)
-
-        # do targeted dropout experiment
-        evec_dropout_results, evec_dropout_parameters = processing.eigenvector_dropout(self, nets, dataset, eigen_results, train_set=False)
-
         # make full results dictionary
-        results = dict(
-            prms=prms,
-            train_results=train_results,
-            test_results=test_results,
-            dropout_results=dropout_results,
-            dropout_parameters=dropout_parameters,
-            eigen_results=eigen_results,
-            evec_dropout_results=evec_dropout_results,
-            evec_dropout_parameters=evec_dropout_parameters,
-        )
+        results = dict(prms=prms)
 
         # return results and trained networks
         return results, nets
+
+    def train_network(self, nets, optimizers, dataset):
+        """
+        method for training networks
+
+        this method will take the networks, optimizers, and dataset and train the networks
+        """
+        gamma_transform = datasets.create_gamma_transform(self.args.max_output, self.args.gamma, device=self.device)
+
+        for epoch in range(self.args.num_epochs):
+            batch = dataset.generate_batch()
+
+            for opt in optimizers:
+                opt.zero_grad()
+
+            scores, choices = map(list, zip(*[net(batch["input"], max_output=self.args.max_output) for net in nets]))
+
+            # measure reward
+            rewards = [dataset.reward_function(choice, batch) for choice in choices]
+
+            # do backward pass on rewards
+            for j in datasets.process_reward(rewards, scores, choices, gamma_transform)[1]:
+                j.backward()
+
+            # update networks
+            for opt in optimizers:
+                opt.step()
+
+            # save training data
+            with torch.no_grad():
+                for i in range(numNets):
+                    trainReward[epoch, i, run] = torch.mean(torch.sum(rewards[i], dim=1)).detach()
+                    trainRewardByPos[epoch, :, i, run] = torch.mean(rewards[i], dim=0).detach()
+
+                    # Measure the models confidence -- ignoring the effect of temperature
+                    pretemp_score = torch.softmax(log_scores[i] * nets[i].temperature, dim=2)
+                    pretemp_policy = torch.gather(pretemp_score, 2, choices[i].unsqueeze(2)).squeeze(2)
+                    trainScoreByPos[epoch, :, i, run] = torch.mean(pretemp_policy, dim=0).detach()
 
     def plot(self, results):
         """
         main plotting loop
         """
-        plotting.plot_train_results(self, results["train_results"], results["test_results"], results["prms"])
-        plotting.plot_dropout_results(
-            self,
-            results["dropout_results"],
-            results["dropout_parameters"],
-            results["prms"],
-            dropout_type="nodes",
-        )
-        plotting.plot_eigenfeatures(self, results["eigen_results"], results["prms"])
-        plotting.plot_dropout_results(
-            self,
-            results["evec_dropout_results"],
-            results["evec_dropout_parameters"],
-            results["prms"],
-            dropout_type="eigenvectors",
-        )
+        pass
 
 
 # ====================== previous experiment code ==========================
