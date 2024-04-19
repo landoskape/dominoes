@@ -2,15 +2,18 @@ from copy import copy
 import torch
 
 
-from .base import DatasetRL
+from .base import DatasetSL, DatasetRL
 from .support import get_paths
 
 
-class TSPDataset(DatasetRL):
+class TSPDataset(DatasetRL, DatasetSL):
     """A dataset for generating traveling salesman problem environments for training and evaluation"""
 
-    def __init__(self, device="cpu", **parameters):
+    def __init__(self, device="cpu", loss_function=torch.nn.functional.nll_loss, loss_kwargs={}, **parameters):
         """constructor method"""
+        # first add loss function setup to the supervised loss component of this class
+        DatasetSL.__init__(self, loss_function=loss_function, loss_kwargs=loss_kwargs)
+
         self.task = "tsp"
 
         self.set_device(device)

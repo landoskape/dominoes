@@ -6,14 +6,19 @@ import torch
 
 from .support import get_dominoes, get_best_line, pad_best_lines
 from ..utils import named_transpose
-from .base import DatasetRL
+from .base import DatasetSL, DatasetRL
 
 
-class DominoeDataset(DatasetRL):
+class DominoeDataset(DatasetRL, DatasetSL):
     """A dataset for generating dominoe sequences for training and evaluation"""
 
-    def __init__(self, task, highest_dominoe, device="cpu", train_fraction=None, **parameters):
+    def __init__(
+        self, task, highest_dominoe, device="cpu", train_fraction=None, loss_function=torch.nn.functional.nll_loss, loss_kwargs={}, **parameters
+    ):
         """constructor method"""
+        # first add loss function setup to the supervised loss component of this class
+        DatasetSL.__init__(self, loss_function=loss_function, loss_kwargs=loss_kwargs)
+
         self.set_device(device)
 
         self._check_task(task)
