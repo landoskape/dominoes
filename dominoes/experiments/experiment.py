@@ -343,15 +343,10 @@ class Experiment(ABC):
         pass
 
     # -- support for main processing loop --
-    def prepare_dataset(self, transform_parameters):
+    def prepare_dataset(self):
         """simple method for getting dataset"""
-        return get_dataset(
-            self.args.dataset,
-            build=True,
-            transform_parameters=transform_parameters,
-            loader_parameters={"batch_size": self.args.batch_size},
-            device=self.args.device,
-        )
+        print("In experiment prepare_dataset method we need the kwargs of the dataset!")
+        return get_dataset(self.args.dataset, build=True, device=self.args.device)
 
     def plot_ready(self, name):
         """standard method for saving and showing plot when it's ready"""
