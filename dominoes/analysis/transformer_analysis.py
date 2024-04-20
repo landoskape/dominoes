@@ -225,7 +225,7 @@ def process_dominoe_data(nets, batchSize):
     batch_inputs = {
         "null_token": False,
         "available_token": False,
-        "ignore_index": -1,
+        "ignore_index": -100,
         "return_full": True,
         "return_target": False,
     }
