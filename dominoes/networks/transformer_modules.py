@@ -945,8 +945,14 @@ class PointerNetwork(nn.Module):
         if max_output is None:
             max_output = tokens
 
-        if self.permutation and max_output > tokens:
-            raise ValueError(f"if using permutation mode, max output ({max_output}) must be less than or equal to the number of tokens ({tokens})")
+        if self.permutation:
+            msg = f"if using permutation mode, max_output ({max_output}) must be less than or equal to the number of tokens ({tokens})"
+            if init is not None:
+                if max_output > tokens - 1:
+                    raise ValueError(msg + " minus 1 (for the initial token)")
+            else:
+                if max_output > tokens:
+                    raise ValueError(msg)
 
         if mask is not None:
             assert mask.ndim == 2, "mask must have shape (batch, tokens)"
