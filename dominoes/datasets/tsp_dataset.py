@@ -9,10 +9,12 @@ from .support import get_paths
 class TSPDataset(DatasetRL, DatasetSL):
     """A dataset for generating traveling salesman problem environments for training and evaluation"""
 
-    def __init__(self, device="cpu", loss_function=torch.nn.functional.nll_loss, loss_kwargs={}, **parameters):
+    task = "tsp"
+
+    def __init__(self, device="cpu", **parameters):
         """constructor method"""
         # first add loss function setup to the supervised loss component of this class
-        DatasetSL.__init__(self, loss_function=loss_function, loss_kwargs=loss_kwargs)
+        DatasetSL.__init__(self)
 
         self.task = "tsp"
 
@@ -22,12 +24,13 @@ class TSPDataset(DatasetRL, DatasetSL):
         self._check_parameters(init=True, **parameters)
 
         # set parameters to required defaults first, then update
-        self.prms = self._required_parameters()
+        self.prms = self.get_class_parameters()
         self.prms = self.parameters(**parameters)
 
-    def _required_parameters(self):
+    @classmethod
+    def get_class_parameters(cls):
         """
-        return the required parameters for the task. This is hard-coded here and only here,
+        return the class parameters for the task. This is hard-coded here and only here,
         so if the parameters change, this method should be updated.
 
         None means the parameter is required and doesn't have a default value. Otherwise,
@@ -71,19 +74,17 @@ class TSPDataset(DatasetRL, DatasetSL):
         dists = torch.cdist(input, input)
 
         # define initial position as closest to origin (arbitrary but standard choice)
-        init_idx = torch.argmin(torch.sum(input**2, dim=2), dim=1)
-
-        # get representation of initial position (will be fed to decoder)
-        init_input = torch.gather(input, 1, init_idx.view(-1, 1, 1).expand(-1, -1, prms["coord_dims"]))
+        init = torch.argmin(torch.sum(input**2, dim=2), dim=1)
 
         # construct batch dictionary
-        batch = dict(input=input.to(device), dists=dists, init_idx=init_idx, init_input=init_input)
+        input = self.input_to_device(input, device=device)
+        batch = dict(input=input, dists=dists.to(device), init=init.to(device))
 
         # add task specific parameters to the batch dictionary
         batch.update(prms)
 
         if prms["return_target"]:
-            batch["target"] = get_paths(input, dists, init_idx, prms["threads"]).to(device)
+            batch["target"] = get_paths(input, dists, init, prms["threads"]).to(device)
 
         return batch
 
@@ -121,7 +122,7 @@ class TSPDataset(DatasetRL, DatasetSL):
         distance = torch.zeros((batch_size, num_choices)).to(device)
         new_city = torch.ones((batch_size, num_choices)).to(device)
 
-        last_location = batch["init_idx"]  # last (i.e. initial position) is preset initial position
+        last_location = batch["init"]  # last (i.e. initial position) is preset initial position
         src = torch.ones((batch_size, 1), dtype=torch.bool).to(device)  # src tensor for updating other tensors
         visited = torch.zeros((batch_size, num_cities), dtype=torch.bool).to(device)  # boolean for whether city has been visited
         visited.scatter_(1, last_location.view(batch_size, 1), src)  # put first city in to the "visited" tensor
@@ -146,7 +147,7 @@ class TSPDataset(DatasetRL, DatasetSL):
         # other cities in a permutation then returns to the initial city... so that final step needs to
         # be represented somewhere in the reward function.
         # here, we just add the implicit distance traveled to that final choice
-        c_dist_possible = torch.gather(batch["dists"], 1, batch["init_idx"].view(batch_size, 1, 1).expand(-1, -1, num_cities)).squeeze(1)
+        c_dist_possible = torch.gather(batch["dists"], 1, batch["init"].view(batch_size, 1, 1).expand(-1, -1, num_cities)).squeeze(1)
         distance[:, -1] += torch.gather(c_dist_possible, 1, choices[:, -1].view(batch_size, 1)).squeeze(1)
 
         # combine two reward types
