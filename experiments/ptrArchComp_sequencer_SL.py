@@ -86,7 +86,7 @@ def trainTestModel():
     available_token = True  # using available token to indicate which value to start on
     num_output = copy(handSize) + 1  # always require end on null token
     null_index = copy(handSize)  # index of null token
-    ignore_index = -1
+    ignore_index = -100
     value_method = "1"
 
     # other batch parameters

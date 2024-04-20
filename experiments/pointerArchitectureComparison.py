@@ -283,7 +283,7 @@ def eigenAnalyses(nets, args):
     dominoeValue = np.sum(listDominoes, axis=1)
     batchSize = args.batch_size * 2  # lots of data!
     handSize = args.hand_size
-    batch_inputs = dict(null_token=False, available_token=False, ignore_index=-1, return_full=True, return_target=False)
+    batch_inputs = dict(null_token=False, available_token=False, ignore_index=-100, return_full=True, return_target=False)
 
     selection = np.array([])
     while len(np.unique(selection)) != numDominoes:

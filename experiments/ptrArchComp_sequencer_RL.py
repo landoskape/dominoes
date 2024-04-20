@@ -127,7 +127,7 @@ def trainTestModel():
     null_token = True  # using a null token to indicate end of line
     null_index = copy(handSize)  # index of null token
     available_token = True  # using available token to indicate which value to start on
-    ignore_index = -1
+    ignore_index = -100
     value_method = "1"  # method for generating rewards in reward function
 
     num_output = copy(handSize)
