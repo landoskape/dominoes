@@ -10,16 +10,18 @@ class Dataset(ABC):
     """
 
     @abstractmethod
-    def _required_parameters(self):
+    def get_class_parameters(self):
         """
-        return the required parameters for the task. This is hard-coded here and only here,
+        return the class parameters for the dataset. This is hard-coded here and only here,
         so if the parameters change, this method should be updated.
 
         None means the parameter is required and doesn't have a default value. Otherwise,
         the value is the default value for the parameter.
 
         returns:
-            dict, the required parameters for the task
+            dict, the class-specific parameters for this dataset
+
+        Note: this is expected to be implemented as a @classmethod for access without class instances
         """
         pass
 
@@ -28,13 +30,13 @@ class Dataset(ABC):
         check if parameters provided in the parameters are valid (and complete)
 
         checks two things:
-        1. If any parameters are provided that are not recognized for the task, an error will be generated
+        1. If any parameters are provided that are not recognized for the dataset, an error will be generated
 
         ... if init=True, will additionally check:
-        2. If any parameters are required for the task but not provided, an error will be generated
+        2. If any parameters are required for the dataset but not provided, an error will be generated
 
         args:
-            reference: dict, the reference parameters to check against (if not provided, uses self._required_parameters())
+            reference: dict, the reference parameters to check against (if not provided, uses self.get_class_parameters())
             init: bool, whether this is being called by the constructor's __init__ method
                   in practive, this determines whether any required parameters without defaults are set properly
             parameters: dict, the parameters provided at initialization
@@ -42,7 +44,7 @@ class Dataset(ABC):
         raise ValueError if any parameters are not recognized or required parameters are not provided
         """
         if reference is None:
-            reference = self._required_parameters()
+            reference = self.get_class_parameters()
         for param in parameters:
             if param not in reference:
                 raise ValueError(f"parameter {param} not recognized for task {self.task}")
@@ -63,7 +65,7 @@ class Dataset(ABC):
         by the optional kwargs for this function, then the updated parameters are returned
         and used by whatever method called ``parameters``.
 
-        For more details on possible inputs, look at "_required_parameters"
+        For more details on possible inputs, look at "get_class_parameters"
         """
         # get registered parameters
         prms_to_use = copy(self.prms)
@@ -98,21 +100,46 @@ class Dataset(ABC):
             return torch.device(device)
         return self.device
 
+    def input_to_device(self, input, device=None):
+        """
+        move input to the device for the dataset
+
+        args:
+            input: torch.Tensor or tuple of torch.Tensor, the input to move to the device
+            device: torch.device, the device to use for the input
+                    if device is not provided, will use the device registered upon dataset creation
+
+        returns:
+            same as input, but moved to requested device
+        """
+        device = self.get_device(device)
+        if isinstance(input, tuple):
+            return tuple(i.to(device) for i in input)
+        return input.to(device)
+
 
 class DatasetSL(Dataset):
     """
     A child of the general dataset class that is designed for supervised learning tasks
     """
 
-    def __init__(self, loss_function=torch.nn.functional.nll_loss, loss_kwargs={}):
+    def __init__(self):
         """
         initialize the dataset for supervised learning
 
         args:
             loss_function: function, the loss function to use for the dataset
         """
+        self.loss_function = torch.nn.functional.nll_loss
+        self.loss_kwargs = {}
+
+    def set_loss_function(self, loss_function):
+        """simple method for setting the loss function"""
         self.loss_function = loss_function
-        self.loss_kwargs = loss_kwargs
+
+    def set_loss_kwargs(self, **kwargs):
+        """simple method for setting the loss function kwargs"""
+        self.loss_kwargs = kwargs
 
     def measure_loss(self, scores, target, check_divergence=True):
         """
