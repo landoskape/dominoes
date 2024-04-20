@@ -12,16 +12,12 @@ import torch
 from .. import files as fm
 from .. import datasets
 from .. import train
-from ..networks import transformers as transformers
+from ..networks import get_pointer_methods, PointerNetwork
 from ..utils import loadSavedExperiment
 from .. import utils
 
 from .experiment import Experiment
 from . import arglib
-
-
-# general variables for experiment
-POINTER_METHODS = ["PointerStandard", "PointerDot", "PointerDotLean", "PointerDotNoLN", "PointerAttention", "PointerTransformer"]
 
 
 class PointerArchitectureComparison(Experiment):
@@ -42,23 +38,17 @@ class PointerArchitectureComparison(Experiment):
         """
         Method for adding experiment specific arguments to the argument parser
         """
-        parser.add_argument("-hd", "--highest-dominoe", type=int, default=9, help="the highest dominoe in the board")
-        parser.add_argument("--train-fraction", type=float, default=0.8, help="the fraction of dominoes in the set to train with")
-        parser.add_argument("-hs", "--hand-size", type=int, default=8, help="tokens per sequence")
-        parser.add_argument("-bs", "--batch-size", type=int, default=512, help="number of sequences per batch")
-        parser.add_argument("-ne", "--train-epochs", type=int, default=4000, help="the number of training epochs")
-        parser.add_argument("-te", "--test-epochs", type=int, default=100, help="the number of testing epochs")
-        parser.add_argument("--gamma", type=float, default=1.0, help="discounting factor")
-        parser.add_argument("-nr", "--num-runs", type=int, default=8, help="how many networks to train of each type")
-
         parser = arglib.add_network_metaparameters(parser)
         parser = arglib.add_transformer_parameters(parser)
-
-        parser.add_argument("--train-temperature", type=float, default=5.0, help="temperature for training")
-
+        parser = arglib.add_checkpointing(parser)
+        parser = arglib.add_dataset_parameters(parser)
+        parser = arglib.add_tsp_parameters(parser)
+        parser = arglib.add_dominoe_parameters(parser)
+        parser = arglib.add_dominoe_sequencer_parameters(parser)
+        parser = arglib.add_dominoe_sorting_parameters(parser)
         return parser
 
-    def create_networks(self):
+    def create_networks(self, input_dim):
         """
         method for creating networks
 
@@ -67,29 +57,26 @@ class PointerArchitectureComparison(Experiment):
         their optimizers and a params dictionary with the experiment parameters associated
         with each network
         """
-        # thompson sampling always on
-        with_thompson = True
 
+        # create networks
+        net_kwargs = dict(
+            temperature=self.args.train_temperature,
+            thompson=not self.args.no_thompson,
+            encoding_layers=self.args.encoding_layers,
+            heads=self.args.heads,
+            kqnorm=not self.args.no_kqnorm,
+            decoder_method=self.args.decoder_method,
+            expansion=self.args.expansion,
+        )
         nets = [
-            transformers.PointerNetwork(
-                2 * self.args.highestDominoe,
-                self.args.embedding_dim,
-                temperature=self.args.temperature,
-                pointer_method=POINTER_METHOD,
-                thompson=with_thompson,
-                encoding_layers=self.args.encoding_layers,
-                heads=self.args.heads,
-                kqnorm=True,
-                decoder_method="transformer",
-                expansion=self.expansion,
-            )
-            for POINTER_METHOD in POINTER_METHODS
+            PointerNetwork(input_dim, self.args.embedding_dim, pointer_method=POINTER_METHOD, **net_kwargs)
+            for POINTER_METHOD in get_pointer_methods()
+            for _ in range(self.args.replicates)
         ]
         nets = [net.to(self.device) for net in nets]
-        optimizers = [torch.optim.Adam(net.parameters(), lr=self.args.default_lr, weight_decay=self.args.default_wd) for net in nets]
+        optimizers = [torch.optim.Adam(net.parameters(), lr=self.args.lr, weight_decay=self.args.wd) for net in nets]
 
         prms = {}
-        raise ValueError("remove this when you fill in prms dictionary")
         return nets, optimizers, prms
 
     def main(self):
@@ -100,66 +87,42 @@ class PointerArchitectureComparison(Experiment):
         train and test networks
         do supplementary analyses
         """
-
-        # create networks
-        nets, optimizers, prms = self.create_networks()
-
         # load dataset
         dataset = self.prepare_dataset()
 
+        # input dimensionality
+        input_dim = dataset.get_input_dim()
+
+        # create networks
+        nets, optimizers, prms = self.create_networks(input_dim)
+
         # train networks
         train_parameters = self.make_train_parameters()
-        train_results = train.train(nets, optimizers, dataset, **prms)
+        # gamma=self.args.gamma
+        # learning_method
+        # saving loss / reward etc
+
+        train_results = train.train(nets, optimizers, dataset, **train_parameters)
 
         # make full results dictionary
-        results = dict(prms=prms)
+        results = dict(train_results=train_results)
 
         # return results and trained networks
         return results, nets
-
-    def train_network(self, nets, optimizers, dataset):
-        """
-        method for training networks
-
-        this method will take the networks, optimizers, and dataset and train the networks
-        """
-        gamma_transform = datasets.create_gamma_transform(self.args.max_output, self.args.gamma, device=self.device)
-
-        for epoch in range(self.args.num_epochs):
-            batch = dataset.generate_batch()
-
-            for opt in optimizers:
-                opt.zero_grad()
-
-            scores, choices = map(list, zip(*[net(batch["input"], max_output=self.args.max_output) for net in nets]))
-
-            # measure reward
-            rewards = [dataset.reward_function(choice, batch) for choice in choices]
-
-            # do backward pass on rewards
-            for j in datasets.process_reward(rewards, scores, choices, gamma_transform)[1]:
-                j.backward()
-
-            # update networks
-            for opt in optimizers:
-                opt.step()
-
-            # save training data
-            with torch.no_grad():
-                for i in range(numNets):
-                    trainReward[epoch, i, run] = torch.mean(torch.sum(rewards[i], dim=1)).detach()
-                    trainRewardByPos[epoch, :, i, run] = torch.mean(rewards[i], dim=0).detach()
-
-                    # Measure the models confidence -- ignoring the effect of temperature
-                    pretemp_score = torch.softmax(log_scores[i] * nets[i].temperature, dim=2)
-                    pretemp_policy = torch.gather(pretemp_score, 2, choices[i].unsqueeze(2)).squeeze(2)
-                    trainScoreByPos[epoch, :, i, run] = torch.mean(pretemp_policy, dim=0).detach()
 
     def plot(self, results):
         """
         main plotting loop
         """
-        pass
+        train_results = results["train_results"]
+        if "train_loss" in train_results:
+            train_loss = train_results["train_loss"]
+            plt.plot(train_loss)
+            plt.show()
+        if "train_reward" in train_results:
+            train_reward = train_results["train_reward"]
+            plt.plot(train_reward)
+            plt.show()
 
 
 # ====================== previous experiment code ==========================
@@ -419,7 +382,7 @@ def eigenAnalyses(nets, args):
     dominoeValue = np.sum(listDominoes, axis=1)
     batchSize = args.batch_size * 2  # lots of data!
     handSize = args.hand_size
-    batch_inputs = dict(null_token=False, available_token=False, ignore_index=-1, return_full=True, return_target=False)
+    batch_inputs = dict(null_token=False, available_token=False, ignore_index=-100, return_full=True, return_target=False)
 
     selection = np.array([])
     while len(np.unique(selection)) != numDominoes:
