@@ -13,7 +13,7 @@ import wandb
 from matplotlib import pyplot as plt
 
 from .. import files as files
-from ..datasets import get_dataset
+from ..datasets import get_dataset, get_dataset_kwargs
 
 
 class Experiment(ABC):
@@ -24,7 +24,7 @@ class Experiment(ABC):
         self.get_args(args=args)  # Parse arguments to python program
         self.register_timestamp()  # Register timestamp of experiment
         self.run = self.configure_wandb()  # Create a wandb run object (or None depending on args.use_wandb)
-        self.device = self.args.device
+        self.device = self.args.device or "cuda" if torch.cuda.is_available() else "cpu"  # Register device for experiment
 
     def report(self, init=False, args=False, meta_args=False) -> None:
         """Method for programmatically reporting details about experiment"""
@@ -345,8 +345,10 @@ class Experiment(ABC):
     # -- support for main processing loop --
     def prepare_dataset(self):
         """simple method for getting dataset"""
-        print("In experiment prepare_dataset method we need the kwargs of the dataset!")
-        return get_dataset(self.args.dataset, build=True, device=self.args.device)
+        # convert args to a dictionary and get the dataset kwargs (can generate an error if not set properly)
+        kwargs = get_dataset_kwargs(vars(self.args))
+        # return the dataset
+        return get_dataset(self.args.task, build=True, device=self.device, **kwargs)
 
     def plot_ready(self, name):
         """standard method for saving and showing plot when it's ready"""
