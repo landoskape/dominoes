@@ -23,10 +23,7 @@ def train(nets, optimizers, dataset, **parameters):
 
     if learning_mode == "reinforce":
         # create gamma transform for processing reward if not provided in parameters
-        if "gamma_transform" in parameters:
-            gamma_transform = parameters["gamma_transform"]
-        else:
-            gamma_transform = dataset.create_gamma_transform(max_output, parameters["gamma"], device=device)
+        gamma_transform = dataset.create_gamma_transform(max_output, parameters["gamma"], device=device)
 
     # create some variables for storing data related to supervised loss
     if save_loss:
