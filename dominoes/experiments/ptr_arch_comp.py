@@ -11,7 +11,7 @@ import torch
 # dominoes package
 from .. import files as fm
 from .. import datasets
-from .. import training
+from .. import train
 from ..networks import transformers as transformers
 from ..utils import loadSavedExperiment
 from .. import utils
@@ -36,7 +36,7 @@ class PointerArchitectureComparison(Experiment):
         return "ptr_arch_comp"
 
     def prepare_path(self):
-        return [self.args.network, self.args.dataset, self.args.optimizer]
+        return [self.args.task, self.args.learning_method]
 
     def make_args(self, parser):
         """
@@ -106,6 +106,10 @@ class PointerArchitectureComparison(Experiment):
 
         # load dataset
         dataset = self.prepare_dataset()
+
+        # train networks
+        train_parameters = self.make_train_parameters()
+        train_results = train.train(nets, optimizers, dataset, **prms)
 
         # make full results dictionary
         results = dict(prms=prms)
