@@ -69,7 +69,7 @@ def get_best_line(dominoes, available, value_method="dominoe"):
     return allseqs[best_idx], alldirs[best_idx]
 
 
-def pad_best_lines(best_seq, max_output, null_index, ignore_index=-1):
+def pad_best_lines(best_seq, max_output, null_index, ignore_index=-100):
     """
     pad the best sequence of dominoes to a fixed length
 

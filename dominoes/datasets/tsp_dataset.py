@@ -45,10 +45,23 @@ class TSPDataset(DatasetRL, DatasetSL):
             coord_dims=2,
             batch_size=1,
             return_target=False,
-            ignore_index=-1,
+            ignore_index=-100,
             threads=1,
         )
         return params
+
+    def get_input_dim(self, coord_dims=None):
+        """
+        get the input dimension of the dataset
+
+        args (optional, uses default registered at initialization if not provided):
+            coord_dims: int, the number of dimensions for the coordinates
+
+        returns:
+            int, the input dimension of the dataset
+        """
+        input_dim = coord_dims or self.prms["coord_dims"]
+        return input_dim
 
     @torch.no_grad()
     def generate_batch(self, device=None, **kwargs):

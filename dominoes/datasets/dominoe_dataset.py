@@ -77,7 +77,8 @@ class DominoeMaster(DatasetRL, DatasetSL):
             train_fraction=1.0,
             batch_size=1,
             return_target=False,
-            ignore_index=-1,
+            ignore_index=-100,
+            threads=1,
         )
         if cls.task == "sequencer":
             params["value_method"] = "length"
@@ -113,6 +114,29 @@ class DominoeMaster(DatasetRL, DatasetSL):
         if train and self.train_set is None:
             raise ValueError("Requested training set but it hasn't been made yet, use `set_train_fraction` to make one")
         return self.train_set if train else self.dominoe_set
+
+    @torch.no_grad()
+    def get_input_dim(self, highest_dominoe=None, available_token=None, null_token=None):
+        """
+        get the input dimension of the dataset based on the highest dominoe and the tokens
+
+        args (all optional, uses default registered at initialization if not provided):
+            highest_dominoe: int, the highest value of a dominoe
+            available_token: bool, whether to include an available token in the representation
+            null_token: bool, whether to include a null token in the representation
+
+        returns:
+            int, the input dimension of the dataset
+        """
+        # use requested parameters or registered value set at initialization
+        highest_dominoe = highest_dominoe or self.prms["highest_dominoe"]
+        available_token = available_token or self.prms["available_token"]
+        null_token = null_token or self.prms["null_token"]
+
+        # input dimension determined by highest dominoe (twice the number of possible values on a dominoe)
+        input_dim = (2 if not available_token else 3) * (highest_dominoe + 1) + (1 if null_token else 0)
+
+        return input_dim
 
     @torch.no_grad()
     def generate_batch(self, train=True, device=None, **kwargs):
@@ -235,10 +259,9 @@ class DominoeMaster(DatasetRL, DatasetSL):
         device = self.get_device(device)
 
         # Depending on the batch size and hand size, doing this with parallel pool is sometimes faster
-        if prms.get("parallel", False):
-            # Allow user to set the number of processes or fallback onto an agressive default
-            num_processes = prms.get("num_processes", cpu_count() - 2)
-            with Pool(num_processes) as pool:
+        threads = prms.get("threads")
+        if threads > 1:
+            with Pool(threads) as pool:
                 # arguments to get_best_line are (dominoes, available, value_method)
                 pool_args = [(dominoes[sel], ava, value) for sel, ava, value in zip(selection, available, repeat(prms["value_method"]))]
                 results = pool.starmap(get_best_line, pool_args)
@@ -558,7 +581,7 @@ class DominoeMaster(DatasetRL, DatasetSL):
         if available_token and (available is None):
             raise ValueError("if with_available=True, then available needs to be provided")
 
-        # use requested or registered value set by __init__
+        # use requested or registered value set at initialization
         highest_dominoe = highest_dominoe or self.prms["highest_dominoe"]
 
         # create a fake batch dimension if it doesn't exist for consistent code
@@ -570,8 +593,8 @@ class DominoeMaster(DatasetRL, DatasetSL):
         batch_size = dominoes.size(0)
         num_dominoes = dominoes.size(1)
 
-        # input dimension determined by highest dominoe (twice the number of possible values on a dominoe)
-        input_dim = (2 if not available_token else 3) * (highest_dominoe + 1) + (1 if null_token else 0)
+        # get input dim
+        input_dim = self.get_input_dim(highest_dominoe, available_token, null_token)
 
         # first & second value are index and index shifted by highest_dominoe + 1
         first_value = dominoes[..., 0].unsqueeze(2)
