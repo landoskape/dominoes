@@ -258,7 +258,7 @@ def held_karp(dists):
     return opt, list(reversed(path))
 
 
-def make_path(coordinates, distances, idx_init):
+def make_path(coordinates, distances, init):
     """
     for a set of coordinates, returns the shortest path that starts at the
     initial index and ends closest to the origin, and is clockwise
@@ -266,7 +266,7 @@ def make_path(coordinates, distances, idx_init):
     args:
         coordinates: (num_cities, 2) tensor of coordinates
         distances: (num_cities, num_cities) tensor of distances between coordinates
-        idx_init: index of the initial city
+        init: index of the initial city
 
     returns:
         best_path: (num_cities) tensor of the best path
@@ -275,7 +275,7 @@ def make_path(coordinates, distances, idx_init):
     best_path = torch.tensor(held_karp(distances)[1], dtype=torch.long)
 
     # shift the path so it starts at the initial index
-    shift = {val.item(): idx for idx, val in enumerate(best_path)}[idx_init.item()]
+    shift = {val.item(): idx for idx, val in enumerate(best_path)}[init.item()]
     best_path = torch.roll(best_path, -shift)
 
     # make second point in path the second closest to origin
@@ -292,15 +292,15 @@ def make_path(coordinates, distances, idx_init):
     return best_path
 
 
-def get_paths(coordinates, distances, idx_init, threads=1):
+def get_paths(coordinates, distances, init, threads=1):
     """
     for batch of (batch, num_cities, 2), returns shortest path using
     held-karp algorithm that ends closest to origin and is clockwise
     """
     if threads > 1:
         with Pool(threads) as p:
-            path = list(p.starmap(make_path, zip(coordinates, distances, idx_init)))
+            path = list(p.starmap(make_path, zip(coordinates, distances, init)))
     else:
-        path = [make_path(coord, dist, idx) for coord, dist, idx in zip(coordinates, distances, idx_init)]
+        path = [make_path(coord, dist, idx) for coord, dist, idx in zip(coordinates, distances, init)]
 
     return torch.stack(path).long()
