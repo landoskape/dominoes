@@ -77,6 +77,11 @@ class Dataset(ABC):
         return prms_to_use
 
     @abstractmethod
+    def get_input_dim(self):
+        """required method for getting the input dimension of the dataset"""
+        pass
+
+    @abstractmethod
     def generate_batch(self, *args, **kwargs):
         """required method for generating a batch"""
 
