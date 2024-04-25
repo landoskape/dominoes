@@ -108,14 +108,12 @@ class DominoeMaster(DatasetRL, DatasetSL):
         self.train_index = torch.randperm(len(self.dominoe_set))[: int(train_fraction * len(self.dominoe_set))]
         self.train_set = self.dominoe_set[self.train_index]
 
-    @torch.no_grad()
     def get_dominoe_set(self, train):
         """ """
         if train and self.train_set is None:
             raise ValueError("Requested training set but it hasn't been made yet, use `set_train_fraction` to make one")
         return self.train_set if train else self.dominoe_set
 
-    @torch.no_grad()
     def get_input_dim(self, highest_dominoe=None, available_token=None, null_token=None):
         """
         get the input dimension of the dataset based on the highest dominoe and the tokens
@@ -137,6 +135,16 @@ class DominoeMaster(DatasetRL, DatasetSL):
         input_dim = (2 if not available_token else 3) * (highest_dominoe + 1) + (1 if null_token else 0)
 
         return input_dim
+
+    def get_context_type(self):
+        """
+        get the type of the context input for the dataset
+
+        returns:
+            dict, the type of the context input for the dataset (see Pointer constructor)
+        """
+        context_type = dict(contextual=True, multicontext=False, contextual_dims=0)
+        return context_type
 
     @torch.no_grad()
     def generate_batch(self, train=True, device=None, **kwargs):
