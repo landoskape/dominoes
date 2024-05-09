@@ -63,15 +63,15 @@ class TSPDataset(DatasetRL, DatasetSL):
         input_dim = coord_dims or self.prms["coord_dims"]
         return input_dim
 
-    def get_context_type(self):
+    def get_context_parameters(self):
         """
-        get the type of the context input for the dataset
+        get the parameters of the contextual/multimodal inputs for the dataset
 
         returns:
             dict, the type of the context input for the dataset (see Pointer constructor)
         """
-        context_type = dict(contextual=False, multimodal=False, num_multimodal=0)
-        return context_type
+        context_parameters = dict(contextual=False, multimodal=False, num_multimodal=0, mm_input_dim=None)
+        return context_parameters
 
     @torch.no_grad()
     def generate_batch(self, device=None, **kwargs):

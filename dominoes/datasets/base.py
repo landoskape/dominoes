@@ -82,8 +82,8 @@ class Dataset(ABC):
         pass
 
     @abstractmethod
-    def get_context_type(self):
-        """required method for getting the context type of the dataset for constructing pointer networks"""
+    def get_context_parameters(self):
+        """required method for getting the context parameters of the dataset for constructing pointer networks"""
         pass
 
     @abstractmethod
@@ -123,8 +123,6 @@ class Dataset(ABC):
             same as input, but moved to requested device
         """
         device = self.get_device(device)
-        if isinstance(input, tuple):
-            return tuple(i.to(device) for i in input)
         return input.to(device)
 
 
