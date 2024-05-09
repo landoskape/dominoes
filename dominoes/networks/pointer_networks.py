@@ -59,6 +59,31 @@ def get_pointer_network(
     return pointernet_constructor(input_dim, embedding_dim, **pointernet_kwargs)
 
 
+"""
+    input_dim,
+    embedding_dim,
+    embedding_bias=True,
+    
+    -- contextual=False,
+    -- multimodal=False,
+    -- num_multimodal=0,
+    -- mm_input_dim=None,
+    -- require_init=False,
+    -- permutation=True,
+
+    num_encoding_layers=1,
+    encoder_method="transformer",
+    decoder_method="transformer",
+    pointer_method="standard",
+    encoder_kwargs={},
+    decoder_kwargs={},
+    pointer_kwargs={},
+    thompson=False,
+    temperature=1.0,
+    
+"""
+
+
 def get_pointer_kwargs(args):
     """
     method for getting the pointer method and its kwargs from a dictionary of arguments
@@ -67,19 +92,18 @@ def get_pointer_kwargs(args):
     embedding_dim = args["embedding_dim"]
 
     # these are the possible kwargs that can be passed to the pointer network
+    # key is the argument name in the ArgParser, value is the pointer network keyword
     possible_kwargs = dict(
-        train_temperature="temperature",
-        encoding_layers="encoding_layers",
-        heads="heads",
-        expansion="expansion",
+        embedding_bias="embedding_bias",
+        num_encoding_layers="num_encoding_layers",
+        encoder_method="encoder_method",
         decoder_method="decoder_method",
-        permutation="permutation",
-        bias="bias",
+        pointer_method="pointer_method",
+        train_temperature="temperature",
     )
     # these use the default=False, store as True and require a sign flip
     signflip_kwargs = dict(
         no_thompson="thompson",
-        no_kqnorm="kqnorm",
     )
 
     # if any kwargs are included in args, add them to the pointer_kwargs dictionary
