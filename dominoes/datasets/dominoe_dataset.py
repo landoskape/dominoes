@@ -143,7 +143,8 @@ class DominoeMaster(DatasetRL, DatasetSL):
         returns:
             dict, the type of the context input for the dataset (see Pointer constructor)
         """
-        context_type = dict(contextual=True, multicontext=False, contextual_dims=0)
+        context_type = dict(contextual=False, multimodal=False, num_multimodal=1)
+        raise ValueError("needs to be dependent on whether there's an available token")
         return context_type
 
     @torch.no_grad()

@@ -82,6 +82,11 @@ class Dataset(ABC):
         pass
 
     @abstractmethod
+    def get_context_type(self):
+        """required method for getting the context type of the dataset for constructing pointer networks"""
+        pass
+
+    @abstractmethod
     def generate_batch(self, *args, **kwargs):
         """required method for generating a batch"""
 
