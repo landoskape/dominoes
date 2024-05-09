@@ -2,8 +2,9 @@ from abc import ABC, abstractmethod
 import torch
 from torch import nn
 
-from ..utils import masked_softmax, named_transpose
+from ..utils import masked_softmax
 
+from . import _process_input, _process_multimodal_input
 
 """
 Almost everything I've learned about machine learning and pytorch has been due
@@ -139,42 +140,6 @@ class AttentionBaseClass(nn.Module, ABC):
     def _build_mixing_matrix(self):
         """method for building mixing matrix for unifying num_heads"""
         self.unifynum_heads = nn.Linear(self.embedding_dim, self.embedding_dim)
-
-    def _process_input(self, x, mask=None):
-        """check sizes and create mask if not provided"""
-        # attention layer forward pass
-        assert x.ndim == 3, "x should have size: (batch_size, num_tokens, embedding_dimensionality)"
-        batch_size, tokens, embedding_dim = x.size()  # get size of input
-
-        mask = mask if mask is not None else torch.ones((batch_size, tokens), dtype=x.dtype).to(x.device)
-        assert x.size(0) == mask.size(0) and x.size(1) == mask.size(1), "mask must have same batch_size and num_tokens as x"
-
-        # this is the only requirement on the input (other than the number of dimensions)
-        msg = f"Input embedding dim ({embedding_dim}) should match layer embedding dim ({self.embedding_dim})"
-        assert embedding_dim == self.embedding_dim, msg
-
-        return batch_size, mask
-
-    def _process_multimodal_input(self, multimode, mm_mask=None):
-        """check sizes and create mask for all multimodal inputs if not provided"""
-        # first check if multimodal context is a sequence (tuple or list)
-        assert type(multimode) == tuple or type(multimode) == list, "context should be a tuple or a list"
-        if len(multimode) != 0:
-            raise ValueError(f"this network requires {self.num_multimodal} context tensors but {len(multimode)} were provided")
-
-        if mm_mask is None:
-            # make a None list for the mask if not provided
-            mm_mask = [None for _ in range(self.num_multimodal)]
-        else:
-            assert len(mm_mask) == self.num_multimodal, f"if mm_mask provided, must have {self.num_multimodal} elements"
-
-        # get the batch and mask for each multimode input
-        mm_batch, mm_mask = named_transpose([self._process_input(mmc, mmm) for mmc, mmm in zip(multimode, mm_mask)])
-
-        # make sure batch_size is consistent
-        assert all([mmb == mm_batch[0] for mmb in mm_batch]), "batch size of each mm context tensor should be the same"
-
-        return mm_batch[0], mm_mask
 
     def _send_to_kqv(self, x, context=None, multimode=None):
         """
@@ -337,7 +302,7 @@ class SelfAttention(AttentionBaseClass):
     def forward(self, x, mask=None):
         """core forward method with residual connection for attention mechanism"""
         # create mask if not provided, check input sizes
-        batch_size, mask = self._process_input(x, mask)
+        batch_size, mask = _process_input(x, mask, self.embedding_dim)
 
         # convert input tokens to their keys, queries, and values
         keys, queries, values = self._send_to_kqv(x)
@@ -365,8 +330,8 @@ class ContextualAttention(AttentionBaseClass):
     def forward(self, x, context, mask=None, context_mask=None):
         """core forward method with residual connection for attention mechanism"""
         # create mask if not provided, check input sizes
-        batch_size, mask = self._process_input(x, mask)
-        context_batch_size, context_mask = self._process_input(context, context_mask)
+        batch_size, mask = _process_input(x, mask, self.embedding_dim)
+        context_batch_size, context_mask = _process_input(context, context_mask, self.embedding_dim, name="context")
         assert batch_size == context_batch_size, "batch size of x and context should match"
 
         # convert input tokens to their keys, queries, and values
@@ -393,8 +358,8 @@ class MultimodalAttention(AttentionBaseClass):
     def forward(self, x, multimode, mask=None, mm_mask=None):
         """core forward method with residual connection for attention mechanism"""
         # create mask if not provided, check input sizes
-        batch_size, mask = self._process_input(x, mask)
-        mm_batch_size, mm_mask = self._process_multimodal_input(multimode, mm_mask)
+        batch_size, mask = _process_input(x, mask, self.embedding_dim)
+        mm_batch_size, mm_mask = _process_multimodal_input(multimode, mm_mask, self.num_multimodal, self.embedding_dim)
 
         assert batch_size == mm_batch_size, "batch size of x and multimode inputs should match"
 
@@ -423,9 +388,9 @@ class MultimodalContextualAttention(AttentionBaseClass):
     def forward(self, x, context, multimode, mask=None, context_mask=None, mm_mask=None):
         """core forward method with residual connection for attention mechanism"""
         # create mask if not provided, check input sizes
-        batch_size, mask = self._process_input(x, mask)
-        context_batch_size, context_mask = self._process_input(context, context_mask)
-        mm_batch_size, mm_mask = self._process_multimodal_input(multimode, mm_mask)
+        batch_size, mask = _process_input(x, mask, self.embedding_dim)
+        context_batch_size, context_mask = _process_input(context, context_mask, self.embedding_dim, name="context")
+        mm_batch_size, mm_mask = _process_multimodal_input(multimode, mm_mask, self.num_multimodal, self.embedding_dim)
 
         assert batch_size == context_batch_size, "batch size of x and context should match"
         assert batch_size == mm_batch_size, "batch size of x and multimode inputs should match"

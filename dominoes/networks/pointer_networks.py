@@ -6,7 +6,7 @@ from ..utils import named_transpose
 from .attention_modules import get_attention_layer, _attention_type
 from .transformer_modules import get_transformer_layer
 from .pointer_decoder import PointerDecoder
-from . import _check_kwargs
+from . import _check_kwargs, _process_input, _process_multimodal_input
 
 
 def _get_pointernet_constructor(contextual, multimodal):
@@ -151,7 +151,7 @@ class PointerNetworkBaseClass(nn.Module, ABC):
         self.contextual = contextual
         self.multimodal = multimodal
         self.num_multimodal = num_multimodal * multimodal
-        self.mm_input_dim = self._set_multimodal_input_dim(mm_input_dim, input_dim, self.num_multimodal)
+        self.mm_input_dim = self._check_multimodal_input_dim(mm_input_dim, self.num_multimodal) if multimodal else None
         self.num_encoding_layers = num_encoding_layers
         self.require_init = require_init
         self.encoder_method = encoder_method
@@ -168,9 +168,10 @@ class PointerNetworkBaseClass(nn.Module, ABC):
         self.embedding = nn.Linear(in_features=input_dim, out_features=self.embedding_dim, bias=self.embedding_bias)
 
         # create embedding for multimodal inputs to embedding dimension
-        self.mm_embedding = nn.ModuleList(
-            [nn.Linear(in_features=mid, out_features=self.embedding_dim, bias=self.embedding_bias) for mid in self.mm_input_dim]
-        )
+        if self.multimodal:
+            self.mm_embedding = nn.ModuleList(
+                [nn.Linear(in_features=mid, out_features=self.embedding_dim, bias=self.embedding_bias) for mid in self.mm_input_dim]
+            )
 
         # build encoder layers
         self._build_encoder(num_encoding_layers, encoder_method, encoder_kwargs)
@@ -197,14 +198,12 @@ class PointerNetworkBaseClass(nn.Module, ABC):
         """method for setting the thompson sampling flag of the pointer network"""
         self.thompson = thompson
 
-    def _set_multimodal_input_dim(self, mm_input_dim, input_dim, num_multimodal):
+    def _check_multimodal_input_dim(self, mm_input_dim, num_multimodal):
         """helper for setting input dim of multimodal inputs"""
-        if mm_input_dim is not None:
-            assert type(mm_input_dim) == tuple or type(mm_input_dim) == list, "mm_input_dim must be a tuple or list"
-            assert all([type(mid) == int for mid in mm_input_dim]), "all elements of mm_input_dim must be integers"
-            return mm_input_dim
-        else:
-            return [input_dim] * num_multimodal
+        assert type(mm_input_dim) == tuple or type(mm_input_dim) == list, "mm_input_dim must be a tuple or list"
+        assert len(mm_input_dim) == num_multimodal, f"mm_input_dim must have {num_multimodal} elements"
+        assert all([type(mid) == int for mid in mm_input_dim]), "all elements of mm_input_dim must be integers"
+        return mm_input_dim
 
     def _build_encoder(self, num_encoding_layers, encoder_method, encoder_kwargs):
         """flexible method for creating encoding layers for pointer network"""
@@ -267,27 +266,6 @@ class PointerNetworkBaseClass(nn.Module, ABC):
         temperature = temperature or self.temperature
         thompson = thompson or self.thompson
         return temperature, thompson
-
-    def _process_input(self, input, mask, name="input"):
-        """method for processing inputs (for main input or context inputs, and used by multimode)"""
-        batch_size, num_tokens, inp_dim = input.size()
-        assert inp_dim == self.input_dim, f"dimensionality of {name} doesn't match network"
-
-        if mask is not None:
-            assert mask.ndim == 2, f"{name} mask must have shape (batch, num_tokens)"
-            assert mask.size(0) == batch_size and mask.size(1) == num_tokens, f"{name} mask must have same batch size and max tokens as x"
-            assert not torch.any(torch.all(mask == 0, dim=1)), f"{name} mask includes rows where all elements are masked, this is not permitted"
-        else:
-            mask = torch.ones((batch_size, num_tokens), dtype=input.dtype).to(input.device)
-
-        return mask, batch_size
-
-    def _process_multimodal_inputs(self, multimode, mm_mask):
-        """method for processing all multimode inputs"""
-        msg = f"multimode inputs must be a tuple or list of tensors with length {self.num_multimodal}"
-        assert (type(multimode) == tuple or type(multimode) == list) and len(multimode) == self.num_multimodal, msg
-        mm_mask, mm_batch_size = named_transpose([self._process_input(mmx, mmm, name="multimode") for mmx, mmm in zip(multimode, mm_mask)])
-        return mm_mask, mm_batch_size
 
     def _get_max_output(self, x, init, max_output=None):
         """method for getting the maximum number of outputs for the pointer network"""
@@ -404,7 +382,7 @@ class PointerNetwork(PointerNetworkBaseClass):
         temperature, thompson = self._get_decoder_state(temperature, thompson)
 
         # process main input
-        mask, batch_size = self._process_input(x, mask)
+        batch_size, mask = _process_input(x, mask, self.input_dim)
 
         # get max output
         max_output = self._get_max_output(x, init, max_output=max_output)
@@ -458,8 +436,8 @@ class ContextualPointerNetwork(PointerNetworkBaseClass):
         temperature, thompson = self._get_decoder_state(temperature, thompson)
 
         # process main input
-        mask, batch_size = self._process_input(x, mask)
-        context_mask, context_batch_size = self._process_input(context, context_mask, name="context")
+        batch_size, mask = _process_input(x, mask, self.input_dim)
+        context_batch_size, context_mask = _process_input(context, context_mask, self.input_dim, name="context")
 
         # check for consistency in batch sizes
         assert batch_size == context_batch_size, "batch sizes of x and context must match"
@@ -516,11 +494,11 @@ class MultimodalPointerNetwork(PointerNetworkBaseClass):
         temperature, thompson = self._get_decoder_state(temperature, thompson)
 
         # process main input
-        mask, batch_size = self._process_input(x, mask)
-        mm_mask, mm_batch_size = self._process_multimodal_inputs(multimode, mm_mask)
+        batch_size, mask = _process_input(x, mask, self.input_dim)
+        mm_batch_size, mm_mask = _process_multimodal_input(multimode, mm_mask, self.num_multimodal, self.mm_input_dim)
 
         # check for consistency in batch sizes
-        assert all([batch_size == mmbs for mmbs in mm_batch_size]), "batch sizes of x and each multimodal input must match"
+        assert batch_size == mm_batch_size, "batch sizes of x multimodal inputs must match"
 
         # get max output
         max_output = self._get_max_output(x, init, max_output=max_output)
@@ -581,13 +559,13 @@ class MultimodalContextualPointerNetwork(PointerNetworkBaseClass):
         temperature, thompson = self._get_decoder_state(temperature, thompson)
 
         # process main input
-        mask, batch_size = self._process_input(x, mask)
-        context_mask, context_batch_size = self._process_input(context, context_mask, name="context")
-        mm_mask, mm_batch_size = self._process_multimodal_inputs(multimode, mm_mask)
+        batch_size, mask = _process_input(x, mask, self.input_dim)
+        context_batch_size, context_mask = _process_input(context, context_mask, self.input_dim, name="context")
+        mm_batch_size, mm_mask = _process_multimodal_input(multimode, mm_mask, self.num_multimodal, self.mm_input_dim)
 
         # check for consistency in batch sizes
         assert batch_size == context_batch_size, "batch sizes of x and context must match"
-        assert all([batch_size == mmbs for mmbs in mm_batch_size]), "batch sizes of x and each multimodal input must match"
+        assert batch_size == mm_batch_size, "batch sizes of x multimodal inputs must match"
 
         # get max output
         max_output = self._get_max_output(x, init, max_output=max_output)
