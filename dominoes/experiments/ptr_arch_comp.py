@@ -12,7 +12,7 @@ import torch
 from .. import files as fm
 from .. import datasets
 from .. import train
-from ..networks import get_pointer_methods, PointerNetwork
+from ..networks import get_pointer_methods, get_pointer_kwargs, PointerNetwork
 from ..utils import loadSavedExperiment
 from .. import utils
 
@@ -59,17 +59,9 @@ class PointerArchitectureComparison(Experiment):
         """
 
         # create networks
-        net_kwargs = dict(
-            temperature=self.args.train_temperature,
-            thompson=not self.args.no_thompson,
-            encoding_layers=self.args.encoding_layers,
-            heads=self.args.heads,
-            kqnorm=not self.args.no_kqnorm,
-            decoder_method=self.args.decoder_method,
-            expansion=self.args.expansion,
-        )
+        embedding_dim, pointer_kwargs = get_pointer_kwargs(vars(self.args))
         nets = [
-            PointerNetwork(input_dim, self.args.embedding_dim, pointer_method=POINTER_METHOD, **net_kwargs)
+            PointerNetwork(input_dim, embedding_dim, pointer_method=POINTER_METHOD, **pointer_kwargs)
             for POINTER_METHOD in get_pointer_methods()
             for _ in range(self.args.replicates)
         ]
@@ -92,6 +84,7 @@ class PointerArchitectureComparison(Experiment):
 
         # input dimensionality
         input_dim = dataset.get_input_dim()
+        context_parameters = dataset.get_context_type()
 
         # create networks
         nets, optimizers, prms = self.create_networks(input_dim)
