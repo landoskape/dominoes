@@ -14,8 +14,7 @@ class DominoeMaster(DatasetRL, DatasetSL):
 
     def __init__(self, task, device="cpu", **parameters):
         """constructor method"""
-        # first add loss function setup to the supervised loss component of this class
-        DatasetSL.__init__(self)
+        super().__init__()
 
         self.set_device(device)
 

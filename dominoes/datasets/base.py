@@ -171,6 +171,9 @@ class DatasetRL(Dataset):
     A child of the general dataset class that is designed for reinforcement learning tasks
     """
 
+    def __init__(self):
+        pass
+
     def create_gamma_transform(self, max_output, gamma, device=None):
         """
         create a gamma transform matrix for the dataset
