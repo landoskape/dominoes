@@ -12,7 +12,7 @@ import torch
 from .. import files as fm
 from .. import datasets
 from .. import train
-from ..networks import get_pointer_methods, get_pointer_kwargs, PointerNetwork
+from ..networks import get_pointer_network, get_pointer_methods, get_pointer_kwargs
 from ..utils import loadSavedExperiment
 from .. import utils
 
@@ -48,7 +48,7 @@ class PointerArchitectureComparison(Experiment):
         parser = arglib.add_dominoe_sorting_parameters(parser)
         return parser
 
-    def create_networks(self, input_dim):
+    def create_networks(self, input_dim, context_parameters):
         """
         method for creating networks
 
@@ -61,8 +61,14 @@ class PointerArchitectureComparison(Experiment):
         # create networks
         embedding_dim, pointer_kwargs = get_pointer_kwargs(vars(self.args))
         nets = [
-            PointerNetwork(input_dim, embedding_dim, pointer_method=POINTER_METHOD, **pointer_kwargs)
-            for POINTER_METHOD in get_pointer_methods()
+            get_pointer_network(
+                input_dim,
+                embedding_dim,
+                pointer_method=pointer_method,
+                **context_parameters,
+                **pointer_kwargs,
+            )
+            for pointer_method in get_pointer_methods()
             for _ in range(self.args.replicates)
         ]
         nets = [net.to(self.device) for net in nets]
@@ -87,7 +93,7 @@ class PointerArchitectureComparison(Experiment):
         context_parameters = dataset.get_context_parameters()
 
         # create networks
-        nets, optimizers, prms = self.create_networks(input_dim)
+        nets, optimizers, prms = self.create_networks(input_dim, context_parameters)
 
         # train networks
         train_parameters = self.make_train_parameters()
