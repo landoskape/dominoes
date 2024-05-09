@@ -2,7 +2,45 @@ from abc import ABC, abstractmethod
 import torch
 from torch import nn
 
-from .attention_modules import get_attention_layer
+from .attention_modules import get_attention_layer, _attention_type
+
+
+def _get_transformer_constructor(contextual, multimodal):
+    """get the attention constructor based on the attention type"""
+    attention_type = _attention_type(contextual, multimodal)
+    if attention_type not in TRANSFORMER_REGISTRY:
+        raise ValueError(f"Unrecognized transformer type: {attention_type}")
+    return TRANSFORMER_REGISTRY[attention_type]
+
+
+def get_transformer_layer(
+    embedding_dim,
+    num_heads,
+    expansion=4,
+    kqnorm=True,
+    contextual=False,
+    multimodal=False,
+    num_multimodal=0,
+    mlp_bias=True,
+    attention_bias=False,
+    residual=False,
+):
+    """
+    create transformer layer with requested arguments
+    residual is defaulted to False because transformer layers handle residual connections on their own
+    """
+    transformer_kwargs = dict(
+        num_heads=num_heads,
+        expansion=expansion,
+        kqnorm=kqnorm,
+        mlp_bias=mlp_bias,
+        attention_bias=attention_bias,
+        residual=residual,
+    )
+    if multimodal:
+        transformer_kwargs["num_multimodal"] = num_multimodal
+    transformer_constructor = _get_transformer_constructor(contextual, multimodal)
+    return transformer_constructor(embedding_dim, **transformer_kwargs)
 
 
 # ---------------------------------
@@ -13,17 +51,13 @@ class TransformerBaseClass(nn.Module, ABC):
     Performs multi-headed attention on input, then layer normalization, then
     two-stage feedforward processing with an optional expansion, then layer
     normalization, with residual connections before each layer normalization.
-
-    This transformer layer has the option of using contextual attention, where
-    some inputs are only used to generate keys and values that modulate the
-    primary inputs. This form of contextual attention, if used, processes the
-    main inputs and the context inputs using the same key & value matrices.
-    (See ContextualAttention above).
     """
 
-    def __init__(self, embedding_dim, contextual, multimodal, heads=8, expansion=1, kqnorm=True, bias=True):
+    def __init__(
+        self, embedding_dim, contextual, multimodal, num_heads=8, expansion=1, kqnorm=True, mlp_bias=True, attention_bias=False, num_multimodal=0
+    ):
         # check if valid arguments
-        self._check_args(embedding_dim, heads, expansion)
+        self._check_args(embedding_dim, num_heads, expansion)
 
         # initialize as a nn module
         super().__init__()
@@ -32,30 +66,41 @@ class TransformerBaseClass(nn.Module, ABC):
         self.embedding_dim = embedding_dim
         self.contextual = contextual
         self.multimodal = multimodal
-        self.heads = heads
+        self.num_heads = num_heads
         self.kqnorm = kqnorm
-        self.bias = bias
+        self.mlp_bias = mlp_bias
+        self.attention_bias = attention_bias
+        self.num_multimodal = num_multimodal * multimodal  # if multimodal is False, num_multimodal is 0
 
         # make the attention layer
-        self.attention = get_attention_layer(embedding_dim, heads, kqnorm, contextual, multimodal, num_context=1)
+        self.attention = get_attention_layer(
+            embedding_dim,
+            num_heads,
+            kqnorm=kqnorm,
+            contextual=contextual,
+            multimodal=multimodal,
+            num_multimodal=num_multimodal,
+            bias=attention_bias,
+            residual=False,
+        )
 
         # make the mlp layers
-        self.mlp_layers = [
-            nn.Linear(embedding_dim, embedding_dim * expansion, bias=bias),
+        mlp_layers = [
+            nn.Linear(embedding_dim, embedding_dim * expansion, bias=mlp_bias),
             nn.ReLU(),
-            nn.Linear(embedding_dim * expansion, embedding_dim, bias=bias),
+            nn.Linear(embedding_dim * expansion, embedding_dim, bias=mlp_bias),
         ]
-        self.mlp = nn.Sequential(*self.mlp_layers)
+        self.mlp = nn.Sequential(*mlp_layers)
 
         # make the layer norm layers
         self.layer_norm_attended = nn.LayerNorm(embedding_dim)
         self.layer_norm_transformed = nn.LayerNorm(embedding_dim)
 
-    def _check_args(self, embedding_dim, heads, expansion):
+    def _check_args(self, embedding_dim, num_heads, expansion):
         if type(expansion) != int or expansion < 1:
             raise ValueError(f"expansion ({expansion}) must be a positive integer")
-        if embedding_dim % heads != 0:
-            raise ValueError(f"Embedding dimension ({embedding_dim}) should be divisible by the number of heads ({heads})")
+        if embedding_dim % num_heads != 0:
+            raise ValueError(f"Embedding dimension ({embedding_dim}) should be divisible by the number of num_heads ({num_heads})")
 
     def _forward_post_attention(self, x, attended):
         """centralized function to process the output of the attention layer"""
@@ -67,7 +112,7 @@ class TransformerBaseClass(nn.Module, ABC):
         return self.layer_norm_transformed(x + transformed)
 
     @abstractmethod
-    def forward(self, x, mask=None, context=None, context_mask=None, mm_context=None, mm_mask=None):
+    def forward(self, x, mask=None, context=None, context_mask=None, multimode=None, mm_mask=None):
         """forward pass of the transformer"""
         raise NotImplementedError
 
@@ -103,8 +148,8 @@ class MultimodalTransformer(TransformerBaseClass):
     def __init__(self, *args, **kwargs):
         TransformerBaseClass.__init__(self, *args, contextual=self.contextual, multimodal=self.multimodal, **kwargs)
 
-    def forward(self, x, mm_context, mask=None, mm_mask=None):
-        attended = self.attention(x, mm_context, mask=mask, mm_mask=mm_mask)
+    def forward(self, x, multimode, mask=None, mm_mask=None):
+        attended = self.attention(x, multimode, mask=mask, mm_mask=mm_mask)
         return self._forward_post_attention(x, attended)
 
 
@@ -115,6 +160,14 @@ class MultimodalContextualTransformer(TransformerBaseClass):
     def __init__(self, *args, **kwargs):
         TransformerBaseClass.__init__(self, *args, contextual=self.contextual, multimodal=self.multimodal, **kwargs)
 
-    def forward(self, x, context, mm_context, mask=None, context_mask=None, mm_mask=None):
-        attended = self.attention(x, context, mm_context, mask=mask, context_mask=context_mask, mm_mask=mm_mask)
+    def forward(self, x, context, multimode, mask=None, context_mask=None, mm_mask=None):
+        attended = self.attention(x, context, multimode, mask=mask, context_mask=context_mask, mm_mask=mm_mask)
         return self._forward_post_attention(x, attended)
+
+
+TRANSFORMER_REGISTRY = {
+    "A": Transformer,
+    "CA": ContextualTransformer,
+    "MA": MultimodalTransformer,
+    "MCA": MultimodalContextualTransformer,
+}
