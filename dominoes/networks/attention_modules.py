@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import torch
 from torch import nn
 
-from ..utils import get_device, masked_softmax, named_transpose
+from ..utils import masked_softmax, named_transpose
 
 
 """
@@ -43,372 +43,402 @@ def _get_attention_constructor(contextual, multimodal):
     return ATTENTION_REGISTRY[attention_type]
 
 
-def get_attention_layer(embedding_dim, heads, kqnorm, contextual, multimodal, num_context, residual=False):
+def get_attention_layer(
+    embedding_dim,
+    num_heads,
+    kqnorm=True,
+    contextual=False,
+    multimodal=False,
+    num_multimodal=0,
+    bias=False,
+    residual=False,
+):
     """
     create attention layer with requested arguments
 
     residual is defaulted to False because transformer layers handle residual connections on their own
     """
-    attention_kwargs = dict(heads=heads, kqnorm=kqnorm, residual=residual)
+    attention_kwargs = dict(
+        kqnorm=kqnorm,
+        bias=bias,
+        residual=residual,
+        contextual=contextual,
+        multimodal=multimodal and num_multimodal > 0,
+    )
+    if multimodal and num_multimodal > 0:
+        attention_kwargs["num_multimodal"] = num_multimodal
     attention_constructor = _get_attention_constructor(contextual, multimodal)
-    if multimodal:
-        attention_kwargs["num_context"] = num_context
-    return attention_constructor(embedding_dim, **attention_kwargs)
+    return attention_constructor(embedding_dim, num_heads, **attention_kwargs)
 
 
 # ---------------------------------
 # ----------- attention -----------
 # ---------------------------------
-class SelfAttention(nn.Module):
+class AttentionBaseClass(nn.Module, ABC):
     """
     Canonical implementation of multi-head self attention.
     Adopted from pbloem/former
     """
 
-    def __init__(self, emb, heads=8, kqnorm=True, residual=False):
+    def __init__(self, embedding_dim, num_heads, kqnorm=True, bias=False, residual=False, num_multimodal=0):
         super().__init__()
 
         # This is a requirement
-        assert emb % heads == 0, f"Embedding dimension ({emb}) should be divisible by the # of heads ({heads})"
+        assert embedding_dim % num_heads == 0, f"Embedding dimension ({embedding_dim}) should be divisible by the # of num_heads ({num_heads})"
 
         # Store parameters
-        self.emb = emb
-        self.heads = heads
+        self.embedding_dim = embedding_dim
+        self.num_heads = num_heads
+        self.bias = bias
+        self.kqnorm = kqnorm
         self.residual = residual
+        self.num_multimodal = num_multimodal
 
         # Dimensionality of each head
-        self.headsize = emb // heads
+        self.num_headsize = embedding_dim // num_heads
 
-        # Linear transformations to keys, queries, and values
-        self.tokeys = nn.Linear(emb, emb, bias=False)
-        self.toqueries = nn.Linear(emb, emb, bias=False)
-        self.tovalues = nn.Linear(emb, emb, bias=False)
+        # Build attention matrices for sending input to queries, keys, and values
+        self._build_attention_matrices()
 
-        # Final linear layer after attention
-        self.unifyheads = nn.Linear(emb, emb)
+        # Build multimodal matrices for sending additional inputs to keys and values
+        self._build_multimodal_attention_matrices(num_multimodal)
 
-        # If requested, apply layer norm to the output of each head
-        self.kqnorm = kqnorm
-        if kqnorm:
-            self.kln = nn.LayerNorm([self.headsize])
-            self.qln = nn.LayerNorm([self.headsize])
+        # Build supporting matrices
+        self._build_layer_norms()
 
-    def _process_primary_input(self, x, mask=None):
+        # Build mixing matrix for unifying num_heads
+        self._build_mixing_matrix()
+
+    def _build_attention_matrices(self):
+        """
+        method for building attention matrices for sending input to queries, keys, and values
+
+        optionally ignore queries for contextual or multimodal inputs
+        name will be inserted into attribute in the format "to_{name}_keys/queries/value" if provided
+        """
+        self.to_queries = nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.bias)
+        self.to_keys = nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.bias)
+        self.to_values = nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.bias)
+
+    def _build_multimodal_attention_matrices(self, num_multimodal):
+        """
+        method for building attention matrices for sending input to queries, keys, and values for multimodal inputs
+        """
+        if num_multimodal > 0:
+            self.to_mm_keys = nn.ModuleList([nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.bias) for _ in range(num_multimodal)])
+            self.to_mm_values = nn.ModuleList([nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.bias) for _ in range(num_multimodal)])
+
+    def _build_layer_norms(self):
+        """method for building layer norm matrices for each head"""
+        if self.kqnorm:
+            self.kln = nn.LayerNorm([self.num_headsize])
+            self.qln = nn.LayerNorm([self.num_headsize])
+            if self.num_multimodal > 0:
+                self.mm_kln = nn.ModuleList([nn.LayerNorm([self.num_headsize]) for _ in range(self.num_multimodal)])
+
+    def _build_mixing_matrix(self):
+        """method for building mixing matrix for unifying num_heads"""
+        self.unifynum_heads = nn.Linear(self.embedding_dim, self.embedding_dim)
+
+    def _process_input(self, x, mask=None):
+        """check sizes and create mask if not provided"""
         # attention layer forward pass
         assert x.ndim == 3, "x should have size: (batch_size, num_tokens, embedding_dimensionality)"
-        batch, tokens, emb = x.size()  # get size of input
+        batch_size, tokens, embedding_dim = x.size()  # get size of input
 
-        mask = mask if mask is not None else torch.ones((batch, tokens), dtype=x.dtype).to(get_device(x))
+        mask = mask if mask is not None else torch.ones((batch_size, tokens), dtype=x.dtype).to(x.device)
         assert x.size(0) == mask.size(0) and x.size(1) == mask.size(1), "mask must have same batch_size and num_tokens as x"
 
         # this is the only requirement on the input (other than the number of dimensions)
-        assert emb == self.emb, f"Input embedding dim ({emb}) should match layer embedding dim ({self.emb})"
+        msg = f"Input embedding dim ({embedding_dim}) should match layer embedding dim ({self.embedding_dim})"
+        assert embedding_dim == self.embedding_dim, msg
 
-        return batch, tokens, mask
+        return batch_size, mask
 
-    def _send_to_kqv(self, x, batch, tokens):
+    def _process_multimodal_input(self, multimode, mm_mask=None):
+        """check sizes and create mask for all multimodal inputs if not provided"""
+        # first check if multimodal context is a sequence (tuple or list)
+        assert type(multimode) == tuple or type(multimode) == list, "context should be a tuple or a list"
+        if len(multimode) != 0:
+            raise ValueError(f"this network requires {self.num_multimodal} context tensors but {len(multimode)} were provided")
+
+        if mm_mask is None:
+            # make a None list for the mask if not provided
+            mm_mask = [None for _ in range(self.num_multimodal)]
+        else:
+            assert len(mm_mask) == self.num_multimodal, f"if mm_mask provided, must have {self.num_multimodal} elements"
+
+        # get the batch and mask for each multimode input
+        mm_batch, mm_mask = named_transpose([self._process_input(mmc, mmm) for mmc, mmm in zip(multimode, mm_mask)])
+
+        # make sure batch_size is consistent
+        assert all([mmb == mm_batch[0] for mmb in mm_batch]), "batch size of each mm context tensor should be the same"
+
+        return mm_batch[0], mm_mask
+
+    def _send_to_kqv(self, x, context=None, multimode=None):
+        """
+        centralized method for sending input to queries, keys, and values
+
+        works for contextual attention and multimodal attention, if not using context or multimodal
+        inputs, just don't provide them to this method.
+        """
+        batch_size, qtokens = x.size(0), x.size(1)
+
+        if context is not None:
+            assert context.size(0) == batch_size, "batch size of x and context should match"
+            ctokens = context.size(1)
+        else:
+            ctokens = 0
+
+        if multimode is not None:
+            assert len(multimode) == self.num_multimodal, "number of multimodal contexts should match num_multimodal"
+            assert all([mm.size(0) == batch_size for mm in multimode]), "batch size of x and multimode tensors should match"
+            mm_tokens = [mm.size(1) for mm in multimode]
+            using_multimode = True
+        else:
+            mm_tokens = [0]
+            using_multimode = False
+
+        # process input and context together
+        xkv = torch.cat((x, context), dim=1) if context is not None else x
+
         # convert input tokens to their keys, queries, and values
-        keys = self.tokeys(x)
-        queries = self.toqueries(x)
-        values = self.tovalues(x)
+        queries = self.to_queries(x)
+        keys = self.to_keys(xkv)
+        values = self.to_values(xkv)
 
-        # separate heads
-        keys = keys.view(batch, tokens, self.heads, self.headsize)
-        queries = queries.view(batch, tokens, self.heads, self.headsize)
-        values = values.view(batch, tokens, self.heads, self.headsize)
+        # separate num_heads
+        queries = queries.view(batch_size, qtokens, self.num_heads, self.num_headsize)
+        keys = keys.view(batch_size, qtokens + ctokens, self.num_heads, self.num_headsize)
+        values = values.view(batch_size, qtokens + ctokens, self.num_heads, self.num_headsize)
 
-        # perform layer norm on each heads representation if requested
+        if using_multimode:
+            # generate keys and values for multimodal inputs
+            mm_keys = [to_mmkeys(mm) for to_mmkeys, mm in zip(self.to_mm_keys, multimode)]
+            mm_values = [to_mmvalues(mm) for to_mmvalues, mm in zip(self.to_mm_values, multimode)]
+
+            # separate context num_heads
+            mm_keys = [k.view(batch_size, mmt, self.num_heads, self.num_headsize) for k, mmt in zip(mm_keys, mm_tokens)]
+            mm_values = [v.view(batch_size, mmt, self.num_heads, self.num_headsize) for v, mmt in zip(mm_values, mm_tokens)]
+
         if self.kqnorm:
+            # perform layer norm on each num_heads representation if requested
             keys = self.kln(keys)
             queries = self.qln(queries)
+            if using_multimode:
+                mm_keys = [mmkln(mk) for mmkln, mk in zip(self.mm_kln, mm_keys)]
+
+        if using_multimode:
+            # combine keys & values with multimodal keys & values
+            keys = torch.cat((keys, torch.cat(mm_keys, dim=1)), dim=1)
+            values = torch.cat((values, torch.cat(mm_values, dim=1)), dim=1)
+
+        # measure totak number of key/value tokens
+        kvtokens = qtokens + ctokens + sum(mm_tokens)
 
         # put each head into batch dimension for straightforward batch dot products
-        keys = keys.transpose(1, 2).contiguous().view(batch * self.heads, tokens, self.headsize)
-        queries = queries.transpose(1, 2).contiguous().view(batch * self.heads, tokens, self.headsize)
-        values = values.transpose(1, 2).contiguous().view(batch * self.heads, tokens, self.headsize)
+        queries = queries.transpose(1, 2).contiguous().view(batch_size * self.num_heads, qtokens, self.num_headsize)
+        keys = keys.transpose(1, 2).contiguous().view(batch_size * self.num_heads, kvtokens, self.num_headsize)
+        values = values.transpose(1, 2).contiguous().view(batch_size * self.num_heads, kvtokens, self.num_headsize)
 
         return keys, queries, values
 
-    def _measure_attention(self, queries, keys, mask, batch, tokens):
+    def _make_key_mask(self, mask, context_mask=None, mm_mask=None):
+        """
+        create a mask for keys, which will be used to mask out context and multimodal tokens
+
+        doesn't do any checks, because it is assumed that the mask, context_mask, and mm_mask
+        are all already checked by the _process_input method, and then the respective forward
+        pass method checks the outputs of each _process_input call.
+        """
+        key_mask = torch.cat((mask, context_mask), dim=1) if context_mask is not None else mask
+        key_mask = torch.cat((key_mask, torch.cat(mm_mask, dim=1)), dim=1) if mm_mask is not None else key_mask
+        return key_mask
+
+    def _measure_attention(self, queries, keys, mask, key_mask=None):
+        """
+        measure attention between queries and keys, where keys can have more tokens than queries
+        if this is a contextual or a multimodal attention layer.
+
+        if keys have context tokens, key_mask must be provided.
+        """
+        assert queries.size(0) == keys.size(0), "batch size * head_size of queries and keys should match"
+        assert queries.size(0) // self.num_heads == mask.size(0), "batch size of queries and mask should match"
+
+        # handle tokens dimension
+        qtokens = queries.size(1)
+        ktokens = keys.size(1)
+
+        # check if keys have context tokens and if key_mask is provided
+        if ktokens != qtokens:
+            assert ktokens > qtokens, "keys should have greater than or equal tokens than queries"
+            assert key_mask is not None, "key_mask must be provided if keys have more tokens than queries"
+
+        if key_mask is not None:
+            assert mask.size(0) == key_mask.size(0), "batch size of mask and key_mask should match"
+        else:
+            key_mask = mask
+
+        # check for token size consistency
+        assert qtokens == mask.size(1), "num_tokens of queries and mask should match"
+        assert ktokens == key_mask.size(1), "num_tokens of keys and key_mask should match"
+
         # scale queries and keys by the fourth root of the embedding size
         # same as dividing the dot product by square root of embedding size (but more memory efficient?)
-        queries = queries / (self.emb ** (1 / 4))
-        keys = keys / (self.emb ** (1 / 4))
+        queries = queries / (self.embedding_dim ** (1 / 4))
+        keys = keys / (self.embedding_dim ** (1 / 4))
 
         # dot product between scaled queries and keys is attention
         attention = torch.bmm(queries, keys.transpose(1, 2))
 
-        # check to make sure this is correct
-        assert attention.size() == (batch * self.heads, tokens, tokens), "somehow the query-key dot product is an unexpected size"
-
-        # mask query key products to -inf that are not used
-        attention_mask = torch.bmm(mask.unsqueeze(2), mask.unsqueeze(1))
-        attention_mask = attention_mask.unsqueeze(1).expand(batch, self.heads, tokens, tokens).reshape(batch * self.heads, tokens, tokens)
+        # create mask for attention matrix, expand and reshape appropriately
+        attention_mask = torch.bmm(mask.unsqueeze(2), key_mask.unsqueeze(1))
+        attention_mask = attention_mask.unsqueeze(1).expand(mask.size(0), self.num_heads, qtokens, ktokens)
+        attention_mask = attention_mask.reshape(mask.size(0) * self.num_heads, qtokens, ktokens)
 
         # and take softmax to get self-attention probabilities
         attention = masked_softmax(attention, attention_mask, dim=2)
 
         return attention
 
-    def _measure_head_output(self, attention, values, batch, tokens):
+    def _measure_head_output(self, attention, values, batch_size):
+        """
+        combine attention with values to get the output of each head, and then unify num_heads
+        """
+        assert attention.size(0) == values.size(0), "batch size * head_size of attention and values should match"
+
         # return values according how much they are attented
-        out = torch.bmm(attention, values).view(batch, self.heads, tokens, self.headsize)
+        out = torch.bmm(attention, values).view(batch_size, self.num_heads, attention.size(1), self.num_headsize)
 
-        # unify heads, change view to original input size
-        out = out.transpose(1, 2).contiguous().view(batch, tokens, self.headsize * self.heads)
+        # unify num_heads, change view to original input size
+        out = out.transpose(1, 2).contiguous().view(batch_size, attention.size(1), self.num_headsize * self.num_heads)
 
-        # unify heads with linear layer
-        return self.unifyheads(out)
+        # unify num_heads with linear layer
+        return self.unifynum_heads(out)
+
+    @abstractmethod
+    def forward(self, x, mask=None):
+        """core forward method with residual connection for attention mechanism"""
+        raise NotImplementedError
+
+
+class SelfAttention(AttentionBaseClass):
+    """
+    Implementation of multi-head self attention mechanism
+
+    Simplest attention model where attention is measured between all input tokens
+    """
+
+    def __init__(self, embedding_dim, num_heads=8, kqnorm=True, bias=False, residual=False):
+        """overwriting to prevent user from providing multimodal inputs for this attention layer"""
+        super().__init__(embedding_dim, num_heads=num_heads, kqnorm=kqnorm, bias=bias, residual=residual, num_multimodal=0)
 
     def forward(self, x, mask=None):
         """core forward method with residual connection for attention mechanism"""
         # create mask if not provided, check input sizes
-        batch, tokens, mask = self._process_primary_input(x, mask)
-        # convert input tokens to their keys, queries, and values
-        keys, queries, values = self._send_to_kqv(x, batch, tokens)
-        # measure attention from keys and queries
-        attention = self._measure_attention(queries, keys, mask, batch, tokens)
-        out = self._measure_head_output(attention, values, batch, tokens)
+        batch_size, mask = self._process_input(x, mask)
 
-        # mix output of attention heads with residual channel (when requested)
+        # convert input tokens to their keys, queries, and values
+        keys, queries, values = self._send_to_kqv(x)
+
+        # measure attention from keys and queries
+        attention = self._measure_attention(queries, keys, mask)
+        out = self._measure_head_output(attention, values, batch_size)
+
+        # mix output of attention num_heads with residual channel (when requested)
         return out + x * self.residual
 
 
-class ContextualAttention(SelfAttention):
+class ContextualAttention(AttentionBaseClass):
     """
-    Implementation of attention with contextual inputs not to be transformed
+    Implementation of multi-headed attention with contextual inputs
 
-    Treats some inputs as context only and uses them to generate keys and
-    values but doesn't generate queries or transformed representations.
+    Main inputs (x) are used to generate queries, keys, and values, while context
+    inputs are used to generate keys and values that modulate the main inputs.
     """
 
-    def _send_to_kqv(self, x, context, batch, itokens, tokens):
-        """overwrite to include context in key and value calculations"""
-        # create full input to keys/values by concatenating input with context
-        x_plus_context = torch.cat((x, context), dim=1)
-
-        # convert input tokens to their keys, queries, and values
-        queries = self.toqueries(x)
-        keys = self.tokeys(x_plus_context)
-        values = self.tovalues(x_plus_context)
-
-        # separate heads
-        queries = queries.view(batch, itokens, self.heads, self.headsize)
-        keys = keys.view(batch, tokens, self.heads, self.headsize)
-        values = values.view(batch, tokens, self.heads, self.headsize)
-
-        # perform layer norm on each heads representation if requested
-        if self.kqnorm:
-            keys = self.kln(keys)
-            queries = self.qln(queries)
-
-        # put each head into batch dimension for straightforward batch dot products
-        queries = queries.transpose(1, 2).contiguous().view(batch * self.heads, itokens, self.headsize)
-        keys = keys.transpose(1, 2).contiguous().view(batch * self.heads, tokens, self.headsize)
-        values = values.transpose(1, 2).contiguous().view(batch * self.heads, tokens, self.headsize)
-
-        return keys, queries, values
-
-    def _measure_attention(self, queries, keys, mask, context_mask, batch, itokens, tokens):
-        """overwrite attention measurement to include contextual information"""
-
-        # scale queries and keys by the fourth root of the embedding size
-        # same as dividing the dot product by square root of embedding size (but more memory efficient?)
-        queries = queries / (self.emb ** (1 / 4))
-        keys = keys / (self.emb ** (1 / 4))
-
-        # dot product between scaled queries and keys is attention
-        attention = torch.bmm(queries, keys.transpose(1, 2))
-
-        # check to make sure this is correct
-        assert attention.size() == (batch * self.heads, itokens, tokens), "somehow the query-key dot product is an unexpected size"
-
-        # mask query key products to -inf that are not used
-        mask_plus_context_mask = torch.cat((mask, context_mask), dim=1)
-
-        attention_mask = torch.bmm(mask.unsqueeze(2), mask_plus_context_mask.unsqueeze(1))
-        attention_mask = attention_mask.unsqueeze(1).expand(batch, self.heads, itokens, tokens).reshape(batch * self.heads, itokens, tokens)
-
-        # and take softmax to get self-attention probabilities
-        attention = masked_softmax(attention, attention_mask, dim=2)
-
-        return attention
+    def __init__(self, embedding_dim, num_heads=8, kqnorm=True, bias=False, residual=False):
+        """overwriting to prevent user from providing multimodal inputs for this attention layer"""
+        super().__init__(embedding_dim, num_heads=num_heads, kqnorm=kqnorm, bias=bias, residual=residual, num_multimodal=0)
 
     def forward(self, x, context, mask=None, context_mask=None):
-        """core forward method with residual connection for contextual attention mechanism"""
-        batch, itokens, mask = self._process_primary_input(x, mask)
-        cbatch, ctokens, context_mask = self._process_primary_input(context, context_mask)
-        assert batch == cbatch, "batch size of x and context should match"
+        """core forward method with residual connection for attention mechanism"""
+        # create mask if not provided, check input sizes
+        batch_size, mask = self._process_input(x, mask)
+        context_batch_size, context_mask = self._process_input(context, context_mask)
+        assert batch_size == context_batch_size, "batch size of x and context should match"
 
-        tokens = itokens + ctokens
-        keys, queries, values = self._send_to_kqv(x, context, batch, itokens, tokens)
-        attention = self._measure_attention(queries, keys, mask, batch, itokens, tokens)
-        out = self._measure_head_output(attention, values, batch, itokens)
+        # convert input tokens to their keys, queries, and values
+        keys, queries, values = self._send_to_kqv(x, context=context)
+        key_mask = self._make_key_mask(mask, context_mask=context_mask)
 
-        # mix output of attention heads with residual channel (when requested)
+        # measure attention from keys and queries
+        attention = self._measure_attention(queries, keys, mask, key_mask=key_mask)
+        out = self._measure_head_output(attention, values, batch_size)
+
+        # mix output of attention num_heads with residual channel (when requested)
         return out + x * self.residual
 
 
-class MultimodalBaseClass(ABC):
-    def _init_multimodal(self, emb, num_mm_context=1, kqnorm=True):
-        """initialize multimodal attention mechanisms"""
-
-        # Then add requirements for the multimodal attention mechanisms
-        self.num_mm_context = num_mm_context
-        self.to_mm_keys = nn.ModuleList([nn.Linear(emb, emb, bias=False) for _ in range(num_mm_context)])
-        self.to_mm_values = nn.ModuleList([nn.Linear(emb, emb, bias=False) for _ in range(num_mm_context)])
-
-        # If requested, apply layer norm to the output of each head
-        if kqnorm:
-            self.mm_kln = nn.ModuleList([nn.LayerNorm([self.headsize]) for _ in range(num_mm_context)])
-
-    def _process_multimodal_inputs(self, mm_context, mm_mask=None):
-        # first check if multimodal context is a sequence (tuple or list)
-        assert type(mm_context) == tuple or type(mm_context) == list, "context should be a tuple or a list"
-        # check if the right number of contexts are provided
-        msg = f"this network requires {self.num_mm_context} context tensors but only {len(mm_context)} were provided"
-        assert len(mm_context) == self.num_mm_context, msg
-        # check if the mask is provided and has the right number of elements or is NOne
-        assert mm_mask is None or len(mm_mask) == self.num_mm_context, f"if mm_mask provided, must have {self.num_mm_context} elements"
-        # make a none list for the mask if not provided
-        mm_mask = [None for _ in range(self.num_context)] if mm_mask is None else mm_mask
-        # get the batch / tokens / mask for each context input
-        mm_batch, mm_tokens, mm_mask = named_transpose([self._process_primary_input(mmc, mmm) for mmc, mmm in zip(mm_context, mm_mask)])
-        assert all([mmb == mm_batch[0] for mmb in mm_batch]), "batch size of each mm context tensor should be the same"
-
-        return mm_batch[0], mm_tokens, mm_mask
-
-    @abstractmethod
-    def _send_to_kqv(self, x, mm_context, batch, itokens, mmtokens, tokens):
-        pass
-
-    @abstractmethod
-    def forward(self, x, mm_context, mask=None, mm_mask=None):
-        pass
-
-
-class MultimodalAttention(ContextualAttention, MultimodalBaseClass):
+class MultimodalAttention(AttentionBaseClass):
     """
-    need docstring
+    Implementation of multi-headed attention with multimodal inputs
+
+    Main inputs (x) are used to generate queries, keys, and values, while multimodal
+    inputs are used to generate keys and values that modulate the main inputs using
+    a different set of key and value matrices (and layer norms if requested).
     """
 
-    def __init__(self, emb, num_mm_context=1, heads=8, kqnorm=True, residual=False):
-        # implement SelfAttention initialization
-        super().__init__(emb, heads=heads, kqnorm=kqnorm, residual=residual)
-        self._init_multimodal(emb, num_mm_context=num_mm_context, kqnorm=kqnorm)
+    def forward(self, x, multimode, mask=None, mm_mask=None):
+        """core forward method with residual connection for attention mechanism"""
+        # create mask if not provided, check input sizes
+        batch_size, mask = self._process_input(x, mask)
+        mm_batch_size, mm_mask = self._process_multimodal_input(multimode, mm_mask)
 
-    def _send_to_kqv(self, x, mm_context, batch, itokens, mm_tokens, tokens):
+        assert batch_size == mm_batch_size, "batch size of x and multimode inputs should match"
+
         # convert input tokens to their keys, queries, and values
-        queries = self.toqueries(x)  # context inputs don't need to query
-        keys = self.tokeys(x)
-        values = self.tovalues(x)
+        keys, queries, values = self._send_to_kqv(x, multimode=multimode)
+        key_mask = self._make_key_mask(mask, mm_mask=mm_mask)
 
-        # convert context tokens to keys and values
-        mm_keys = [to_mm_keys(c) for to_mm_keys, c in zip(self.to_mm_keys, mm_context)]
-        mm_values = [to_mm_values(c) for to_mm_values, c in zip(self.to_mm_values, mm_context)]
+        # measure attention from keys and queries
+        attention = self._measure_attention(queries, keys, mask, key_mask=key_mask)
+        out = self._measure_head_output(attention, values, batch_size)
 
-        # separate heads
-        queries = queries.view(batch, itokens, self.heads, self.headsize)
-        keys = keys.view(batch, itokens, self.heads, self.headsize)
-        values = values.view(batch, itokens, self.heads, self.headsize)
-
-        # separate context heads
-        mm_keys = [k.view(batch, mmt, self.heads, self.headsize) for k, mmt in zip(mm_keys, mm_tokens)]
-        mm_values = [v.view(batch, mmt, self.heads, self.headsize) for v, mmt in zip(mm_values, mm_tokens)]
-
-        # perform layer norm on each heads representation if requested
-        if self.kqnorm:
-            keys = self.kln(keys)
-            queries = self.qln(queries)
-            mm_keys = [mm_kln(mk) for mm_kln, mk in zip(self.mm_kln, mm_keys)]
-
-        # combine representations of main inputs and context inputs
-        keys = torch.cat((keys, torch.cat(mm_keys, dim=1)), dim=1)
-        values = torch.cat((values, torch.cat(mm_values, dim=1)), dim=1)
-
-        # put each head into batch dimension for straightforward batch dot products
-        queries = queries.transpose(1, 2).contiguous().view(batch * self.heads, itokens, self.headsize)
-        keys = keys.transpose(1, 2).contiguous().view(batch * self.heads, tokens, self.headsize)
-        values = values.transpose(1, 2).contiguous().view(batch * self.heads, tokens, self.headsize)
-
-        return keys, queries, values
-
-    def forward(self, x, mm_context, mask=None, mm_mask=None):
-        """core forward method with residual connection for multimodal attention mechanism"""
-        batch, itokens, mask = self._process_primary_input(x, mask)
-        mm_batch, mm_tokens, mm_mask = self._process_multimodal_inputs(mm_context, mm_mask)
-
-        assert mm_batch == batch, "batch size of x and mm_context tensors should be the same"
-        tokens = itokens + sum(mm_tokens)
-
-        full_mask = torch.cat((mask, torch.cat(mm_mask, dim=1)), dim=1)
-        keys, queries, values = self._send_to_kqv(x, mm_context, batch, itokens, mm_tokens, tokens)
-        attention = self._measure_attention(queries, keys, mask, full_mask, batch, itokens, tokens)
-        out = self._measure_head_output(attention, values, batch, itokens)
-
-        # mix output of attention heads with residual channel (when requested)
+        # mix output of attention num_heads with residual channel (when requested)
         return out + x * self.residual
 
 
-class MultimodalContextualAttention(MultimodalAttention):
+class MultimodalContextualAttention(AttentionBaseClass):
     """
-    need docstring
+    Implementation of multi-headed attention with multimodal inputs and contextual inputs
+
+    Main inputs (x) are used to generate queries, keys, and values, contextual inputs are
+    used to generate keys and values with the same matrices as main inputs, while multimodal
+    inputs are used to generate keys and values that modulate the main inputs using
+    a different set of key and value matrices (and layer norms if requested).
     """
 
-    def _send_to_kqv(self, x, context, mm_context, batch, itokens, ctokens, mm_tokens, tokens):
-        # process input and context together
-        x_plus_context = torch.cat((x, context), dim=1)
+    def forward(self, x, context, multimode, mask=None, context_mask=None, mm_mask=None):
+        """core forward method with residual connection for attention mechanism"""
+        # create mask if not provided, check input sizes
+        batch_size, mask = self._process_input(x, mask)
+        context_batch_size, context_mask = self._process_input(context, context_mask)
+        mm_batch_size, mm_mask = self._process_multimodal_input(multimode, mm_mask)
+
+        assert batch_size == context_batch_size, "batch size of x and context should match"
+        assert batch_size == mm_batch_size, "batch size of x and multimode inputs should match"
 
         # convert input tokens to their keys, queries, and values
-        queries = self.toqueries(x)
-        keys = self.tokeys(x_plus_context)
-        values = self.tovalues(x_plus_context)
+        keys, queries, values = self._send_to_kqv(x, context=context, multimode=multimode)
+        key_mask = self._make_key_mask(mask, context_mask=context_mask, mm_mask=mm_mask)
 
-        # separate heads
-        queries = queries.view(batch, itokens, self.heads, self.headsize)
-        keys = keys.view(batch, itokens + ctokens, self.heads, self.headsize)
-        values = values.view(batch, itokens + ctokens, self.heads, self.headsize)
+        # measure attention from keys and queries
+        attention = self._measure_attention(queries, keys, mask, key_mask=key_mask)
+        out = self._measure_head_output(attention, values, batch_size)
 
-        # generate keys and values for multimodal context inputs
-        mm_keys = [to_mmkeys(c) for to_mmkeys, c in zip(self.to_mm_keys, mm_context)]
-        mm_values = [to_mmvalues(c) for to_mmvalues, c in zip(self.to_mm_values, mm_context)]
-
-        # separate context heads
-        mm_keys = [k.view(batch, mmt, self.heads, self.headsize) for k, mmt in zip(mm_keys, mm_tokens)]
-        mm_values = [v.view(batch, mmt, self.heads, self.headsize) for v, mmt in zip(mm_values, mm_tokens)]
-
-        # perform layer norm on each heads representation if requested
-        if self.kqnorm:
-            keys = self.kln(keys)
-            queries = self.qln(queries)
-            mm_keys = [mmkln(mk) for mmkln, mk in zip(self.mm_kln, mm_keys)]
-
-        # combine representations of main inputs and context inputs
-        keys = torch.cat((keys, torch.cat(mm_keys, dim=1)), dim=1)
-        values = torch.cat((values, torch.cat(mm_values, dim=1)), dim=1)
-
-        # put each head into batch dimension for straightforward batch dot products
-        queries = queries.transpose(1, 2).contiguous().view(batch * self.heads, itokens, self.headsize)
-        keys = keys.transpose(1, 2).contiguous().view(batch * self.heads, tokens, self.headsize)
-        values = values.transpose(1, 2).contiguous().view(batch * self.heads, tokens, self.headsize)
-
-        return keys, queries, values
-
-    def forward(self, x, context, mm_context, mask=None, context_mask=None, mm_mask=None):
-        batch, itokens, mask = self._process_primary_input(x, mask)
-        cbatch, ctokens, context_mask = self._process_primary_input(context, context_mask)
-        mm_batch, mm_tokens, mm_mask = self._process_multimodal_inputs(mm_context, mm_mask)
-
-        assert mm_batch == batch, "batch size of x and mm_context tensors should be the same"
-        assert batch == cbatch, "batch size of x and context should match"
-        tokens = itokens + ctokens + sum(mm_tokens)
-
-        full_mask = torch.cat((mask, context_mask, torch.cat(mm_mask, dim=1)), dim=1)
-        keys, queries, values = self._send_to_kqv(x, context, mm_context, batch, itokens, ctokens, mm_tokens, tokens)
-        attention = self._measure_attention(queries, keys, mask, full_mask, batch, itokens, tokens)
-        out = self._measure_head_output(attention, values, batch, itokens)
-
-        # mix output of attention heads with residual channel (when requested)
+        # mix output of attention num_heads with residual channel (when requested)
         return out + x * self.residual
 
 
