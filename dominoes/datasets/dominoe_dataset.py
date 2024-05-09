@@ -114,13 +114,12 @@ class DominoeMaster(DatasetRL, DatasetSL):
             raise ValueError("Requested training set but it hasn't been made yet, use `set_train_fraction` to make one")
         return self.train_set if train else self.dominoe_set
 
-    def get_input_dim(self, highest_dominoe=None, available_token=None, null_token=None):
+    def get_input_dim(self, highest_dominoe=None, null_token=None):
         """
         get the input dimension of the dataset based on the highest dominoe and the tokens
 
         args (all optional, uses default registered at initialization if not provided):
             highest_dominoe: int, the highest value of a dominoe
-            available_token: bool, whether to include an available token in the representation
             null_token: bool, whether to include a null token in the representation
 
         returns:
@@ -128,24 +127,30 @@ class DominoeMaster(DatasetRL, DatasetSL):
         """
         # use requested parameters or registered value set at initialization
         highest_dominoe = highest_dominoe or self.prms["highest_dominoe"]
-        available_token = available_token or self.prms["available_token"]
         null_token = null_token or self.prms["null_token"]
 
         # input dimension determined by highest dominoe (twice the number of possible values on a dominoe)
-        input_dim = (2 if not available_token else 3) * (highest_dominoe + 1) + (1 if null_token else 0)
+        input_dim = 2 * (highest_dominoe + 1) + (1 if null_token else 0)
 
         return input_dim
 
-    def get_context_type(self):
+    def get_context_parameters(self):
         """
-        get the type of the context input for the dataset
+        get the parameters of the contextual/multimodal inputs for the dataset
 
         returns:
-            dict, the type of the context input for the dataset (see Pointer constructor)
+            dict, parameters of the context inputs for the dataset
         """
-        context_type = dict(contextual=False, multimodal=False, num_multimodal=1)
-        raise ValueError("needs to be dependent on whether there's an available token")
-        return context_type
+        multimodal = self.prms["available_token"]
+        num_multimodal = 1 * multimodal
+        mm_input_dim = [self.prms["highest_dominoe"] + 1] if multimodal else None
+        context_parameters = dict(
+            contextual=False,
+            multimodal=multimodal,
+            num_multimodal=num_multimodal,
+            mm_input_dim=mm_input_dim,
+        )
+        return context_parameters
 
     @torch.no_grad()
     def generate_batch(self, train=True, device=None, **kwargs):
@@ -180,7 +185,7 @@ class DominoeMaster(DatasetRL, DatasetSL):
         # will encode the hand as binary representations including null and available tokens if requested
         # will also include the index of the selection in each hand a list of available values for each batch element
         # note that dominoes direction is randomized for the input, but not for the target
-        input, selection, available = self._random_dominoe_hand(
+        binary_input, binary_available, selection, available = self._random_dominoe_hand(
             prms["hand_size"],
             self._randomize_direction(dominoes),
             prms["highest_dominoe"],
@@ -189,12 +194,16 @@ class DominoeMaster(DatasetRL, DatasetSL):
             available_token=self.available_token,
         )
 
-        # construct batch dictionary
-        input = self.input_to_device(input, device=device)
-        batch = dict(input=input, train=train, selection=selection)
+        # move inputs to device
+        binary_input = self.input_to_device(binary_input, device=device)
+        if self.available_token:
+            binary_available = self.input_to_device(binary_available, device=device)
+
+        # create batch dictionary
+        batch = dict(input=binary_input, train=train, selection=selection)
 
         # add task specific parameters to the batch dictionary
-        batch = self._add_task_parameters(batch, available, **prms)
+        batch = self._add_task_parameters(batch, binary_available, available, **prms)
         batch.update(prms)
 
         # if target is requested (e.g. for SL tasks) then get target based on registered task
@@ -206,9 +215,10 @@ class DominoeMaster(DatasetRL, DatasetSL):
 
         return batch
 
-    def _add_task_parameters(self, batch, available, **prms):
+    def _add_task_parameters(self, batch, binary_available, available, **prms):
         """Add task specific parameters to the batch dictionary"""
         if self.task == "sequencer":
+            batch["multimode"] = binary_available
             batch["available"] = available
         if self.task == "sorting":
             pass
@@ -603,7 +613,7 @@ class DominoeMaster(DatasetRL, DatasetSL):
         num_dominoes = dominoes.size(1)
 
         # get input dim
-        input_dim = self.get_input_dim(highest_dominoe, available_token, null_token)
+        input_dim = self.get_input_dim(highest_dominoe, null_token)
 
         # first & second value are index and index shifted by highest_dominoe + 1
         first_value = dominoes[..., 0].unsqueeze(2)
@@ -626,21 +636,21 @@ class DominoeMaster(DatasetRL, DatasetSL):
         # add available token to the hand if requested
         if available_token:
             # create a representation of the available token
-            available_index = available + 2 * (highest_dominoe + 1)
-            rep_available = torch.zeros((batch_size, 1, input_dim), dtype=torch.float)
-            rep_available.scatter_(2, available_index.view(batch_size, 1, 1), torch.ones(batch_size, 1, 1))
-            # stack it to the end of each hand
-            binary = torch.cat((binary, rep_available), dim=1)
+            available_dim = highest_dominoe + 1
+            binary_available = torch.zeros((batch_size, 1, available_dim), dtype=torch.float)
+            binary_available.scatter_(2, available.view(batch_size, 1, 1), torch.ones(batch_size, 1, 1))
 
         # remove batch dimension if it didn't exist
         if not with_batch:
             binary = binary.squeeze(0)
+            if available_token:
+                binary_available = binary_available.squeeze(0)
 
-        # separate available token(s) from the rest of the binary representation (it's a "context" input)
-        if available_token:
-            binary = (binary[:, :-1], binary[:, -1])
+        # make a None binary available for consistent code
+        if not available_token:
+            binary_available = None
 
-        return binary
+        return binary, binary_available
 
     @torch.no_grad()
     def _random_dominoe_hand(self, hand_size, dominoes, highest_dominoe, batch_size, null_token=True, available_token=True):
@@ -673,10 +683,10 @@ class DominoeMaster(DatasetRL, DatasetSL):
             available_token=available_token,
             null_token=null_token,
         )
-        input = self._binary_dominoe_representation(hands, **kwargs)
+        binary_input, binary_available = self._binary_dominoe_representation(hands, **kwargs)
 
         # return binary representation, the selection indices and the available values
-        return input, selection, available
+        return binary_input, binary_available, selection, available
 
     @torch.no_grad()
     def _randomize_direction(self, dominoes):
