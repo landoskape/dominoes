@@ -148,6 +148,8 @@ class DominoeMaster(DatasetRL, DatasetSL):
             multimodal=multimodal,
             num_multimodal=num_multimodal,
             mm_input_dim=mm_input_dim,
+            require_init=False,
+            permutation=True,
         )
         return context_parameters
 

@@ -70,7 +70,14 @@ class TSPDataset(DatasetRL, DatasetSL):
         returns:
             dict, the type of the context input for the dataset (see Pointer constructor)
         """
-        context_parameters = dict(contextual=False, multimodal=False, num_multimodal=0, mm_input_dim=None)
+        context_parameters = dict(
+            contextual=False,
+            multimodal=False,
+            num_multimodal=0,
+            mm_input_dim=None,
+            require_init=True,
+            permutation=True,
+        )
         return context_parameters
 
     @torch.no_grad()
