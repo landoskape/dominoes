@@ -84,7 +84,7 @@ class PointerArchitectureComparison(Experiment):
 
         # input dimensionality
         input_dim = dataset.get_input_dim()
-        context_parameters = dataset.get_context_type()
+        context_parameters = dataset.get_context_parameters()
 
         # create networks
         nets, optimizers, prms = self.create_networks(input_dim)
