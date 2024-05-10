@@ -25,7 +25,7 @@ def _process_input(input, mask, expected_dim, name="input"):
     return batch_size, mask
 
 
-def _process_multimodal_input(self, multimode, mm_mask, num_multimodal, mm_dim):
+def _process_multimodal_input(multimode, mm_mask, num_multimodal, mm_dim):
     """check sizes and create mask for all multimodal inputs if not provided"""
     # first check if multimodal context is a sequence (tuple or list)
     assert type(multimode) == tuple or type(multimode) == list, "context should be a tuple or a list"
