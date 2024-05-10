@@ -11,16 +11,7 @@ def add_standard_training_parameters(parser):
     return parser
 
 
-def add_transformer_parameters(parser):
-    """arguments for transformer layers"""
-    parser.add_argument("--embedding_dim", type=int, default=48, help="the dimensions of the embedding (default=48)")
-    parser.add_argument("--heads", type=int, default=1, help="the number of heads in transformer layers (default=1)")
-    parser.add_argument("--encoding_layers", type=int, default=1, help="the number of stacked transformers in the encoder (default=1)")
-    parser.add_argument("--expansion", type=int, default=4, help="the expansion of the FF layer in the transformer of the encoder (default=4)")
-    return parser
-
-
-def add_network_metaparameters(parser):
+def add_network_training_metaparameters(parser):
     """
     arguments for determining default network & training metaparameters
     """
@@ -29,10 +20,113 @@ def add_network_metaparameters(parser):
     parser.add_argument("--gamma", type=float, default=1.0)  # default gamma for reward processing
     parser.add_argument("--train_temperature", type=float, default=5.0, help="temperature for training")
     parser.add_argument(
-        "--no-thompson", default=False, action="store_true", help="if used, will not use Thompson sampling during training (default=False)"
+        "--no_thompson",
+        type=bool,
+        default=False,
+        action="store_true",
+        help="if used, do greedy instead of Thompson sampling during training (default=False)",
     )
-    parser.add_argument("--no_kqnorm", default=False, action="store_true", help="if used, will not use kqnorm during training (default=False)")
-    parser.add_argument("--decoder_method", type=str, default="transformer", help="the method to use for decoding (default=transformer)")
+    return parser
+
+
+def add_pointernet_parameters(parser):
+    """arguments for the PointerNet"""
+    parser.add_argument("--embedding_dim", type=int, default=128, help="the dimensions of the embedding (default=128)")
+    parser.add_argument("--embedding_bias", type=bool, default=False, action="store_true", help="whether to use embedding_bias (default=False)")
+    parser.add_argument("--num_encoding_layers", type=int, default=1, help="the number of encoding layers in the PointerNet (default=1)")
+    parser.add_argument("--encoder_method", type=str, default="transformer", help="PointerNet encoding layer method (default='transformer')")
+    parser.add_argument("--decoder_method", type=str, default="transformer", help="PointerNet decoding layer method (default='transformer')")
+    parser.add_argument("--pointer_method", type=str, default="standard", help="PointerNet pointer layer method (default='standard')")
+    return parser
+
+
+def add_pointernet_encoder_parameters(parser):
+    """arguments for the encoder layers in a PointerNet"""
+    parser.add_argument("--encoder_num_heads", type=int, default=1, help="the number of heads in ptrnet encoding layers (default=1)")
+    parser.add_argument("--encoder_no_kqnorm", default=False, action="store_true", help="if used, won't use kqnorm in the encoder (default=False)")
+    parser.add_argument("--encoder_expansion", type=int, default=4, help="the expansion of the FF layers in the encoder (default=4)")
+    parser.add_argument(
+        "--encoder_no_kqv_bias",
+        default=False,
+        action="store_true",
+        help="if used, won't use bias in the attention layers (default=False)",
+    )
+    parser.add_argument(
+        "--encoder_no_mlp_bias",
+        default=False,
+        action="store_true",
+        help="if used, won't use bias in the MLP part of transformer encoders (default=False)",
+    )
+    parser.add_argument(
+        "--encoder_no_residual",
+        default=False,
+        action="store_true",
+        help="if used, won't use residual connections in the encoder (default=False)",
+    )
+    return parser
+
+
+def add_pointernet_decoder_parameters(parser):
+    """arguments for the decoder layers in a PointerNet"""
+    parser.add_argument("--decoder_num_heads", type=int, default=1, help="the number of heads in ptrnet decoding layers (default=1)")
+    parser.add_argument("--decoder_no_kqnorm", default=False, action="store_true", help="if used, won't use kqnorm in the decoder (default=False)")
+    parser.add_argument("--decoder_expansion", type=int, default=4, help="the expansion of the FF layers in the decoder (default=4)")
+    parser.add_argument(
+        "--decoder_no_gru_bias",
+        default=False,
+        action="store_true",
+        help="if used, won't use bias in the gru decoder method (default=False)",
+    )
+    parser.add_argument(
+        "--decoder_no_kqv_bias",
+        default=False,
+        action="store_true",
+        help="if used, won't use bias in the attention layer (default=False)",
+    )
+    parser.add_argument(
+        "--decoder_no_mlp_bias",
+        default=False,
+        action="store_true",
+        help="if used, won't use bias in the MLP part of transformer decoders (default=False)",
+    )
+    parser.add_argument(
+        "--decoder_no_residual",
+        default=False,
+        action="store_true",
+        help="if used, won't use residual connections in the decoder (default=False)",
+    )
+    return parser
+
+
+def add_pointernet_pointer_parameters(parser):
+    """arguments for the pointer layer in a PointerNet"""
+    parser.add_argument("--pointer_num_heads", type=int, default=1, help="the number of heads in ptrnet decoding layers (default=1)")
+    parser.add_argument("--pointer_no_kqnorm", default=False, action="store_true", help="if used, won't use kqnorm in the decoder (default=False)")
+    parser.add_argument("--pointer_expansion", type=int, default=4, help="the expansion of the FF layers in the decoder (default=4)")
+    parser.add_argument(
+        "--pointer_bias",
+        default=False,
+        action="store_true",
+        help="if used, will use bias in pointer projection layers (default=False)",
+    )
+    parser.add_argument(
+        "--pointer_no_kqv_bias",
+        default=False,
+        action="store_true",
+        help="if used, won't use bias in the attention layer of pointers (default=False)",
+    )
+    parser.add_argument(
+        "--pointer_no_mlp_bias",
+        default=False,
+        action="store_true",
+        help="if used, won't use bias in the MLP part of transformer pointers (default=False)",
+    )
+    parser.add_argument(
+        "--pointer_no_residual",
+        default=False,
+        action="store_true",
+        help="if used, won't use residual connections in the attentional pointer (default=False)",
+    )
     return parser
 
 
