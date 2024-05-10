@@ -3,6 +3,7 @@ def add_standard_training_parameters(parser):
     arguments for defining the network type, dataset, optimizer, and other metaparameters
     """
     parser.add_argument("--task", type=str, required=True, help="which task to use (the dataset to load), required")
+    parser.add_argument("--learning_mode", type=str, default="reinforce", help="which learning mode to use (default=reinforce)")
     parser.add_argument("--optimizer", type=str, default="Adam", help="what optimizer to train with (default=Adam)")
     parser.add_argument("--batch_size", type=int, default=128, help="what batch size to pass to DataLoader")
     parser.add_argument("--train_epochs", type=int, default=2000, help="how many epochs to train the networks on")
@@ -21,7 +22,6 @@ def add_network_training_metaparameters(parser):
     parser.add_argument("--train_temperature", type=float, default=5.0, help="temperature for training")
     parser.add_argument(
         "--no_thompson",
-        type=bool,
         default=False,
         action="store_true",
         help="if used, do greedy instead of Thompson sampling during training (default=False)",
@@ -32,7 +32,7 @@ def add_network_training_metaparameters(parser):
 def add_pointernet_parameters(parser):
     """arguments for the PointerNet"""
     parser.add_argument("--embedding_dim", type=int, default=128, help="the dimensions of the embedding (default=128)")
-    parser.add_argument("--embedding_bias", type=bool, default=False, action="store_true", help="whether to use embedding_bias (default=False)")
+    parser.add_argument("--embedding_bias", default=False, action="store_true", help="whether to use embedding_bias (default=False)")
     parser.add_argument("--num_encoding_layers", type=int, default=1, help="the number of encoding layers in the PointerNet (default=1)")
     parser.add_argument("--encoder_method", type=str, default="transformer", help="PointerNet encoding layer method (default='transformer')")
     parser.add_argument("--decoder_method", type=str, default="transformer", help="PointerNet decoding layer method (default='transformer')")
@@ -178,7 +178,6 @@ def add_tsp_parameters(parser):
     """
     parser.add_argument("--num_cities", type=int, default=10, help="the number of cities in the TSP (default=10)")
     parser.add_argument("--coord_dims", type=int, default=2, help="the number of dimensions for the coordinates (default=2)")
-    parser.add_argument("--threads", type=int, default=1, help="the number of threads to use for generating batches (default=1)")
     return parser
 
 
