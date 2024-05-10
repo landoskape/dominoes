@@ -126,7 +126,7 @@ class DominoeMaster(DatasetRL, DatasetSL):
         """
         # use requested parameters or registered value set at initialization
         highest_dominoe = highest_dominoe or self.prms["highest_dominoe"]
-        null_token = null_token or self.prms["null_token"]
+        null_token = null_token or self.null_token
 
         # input dimension determined by highest dominoe (twice the number of possible values on a dominoe)
         input_dim = 2 * (highest_dominoe + 1) + (1 if null_token else 0)
@@ -140,7 +140,7 @@ class DominoeMaster(DatasetRL, DatasetSL):
         returns:
             dict, parameters of the context inputs for the dataset
         """
-        multimodal = self.prms["available_token"]
+        multimodal = self.available_token
         num_multimodal = 1 * multimodal
         mm_input_dim = [self.prms["highest_dominoe"] + 1] if multimodal else None
         context_parameters = dict(
