@@ -187,8 +187,9 @@ class PointerTransformer(PointerLayer):
         kwargs["multimodal"] = True
         kwargs["num_multimodal"] = 1
         self.transformer_kwargs = kwargs
-        num_heads = kwargs.pop(kwargs)
+        num_heads = kwargs.pop("num_heads")
         _ = kwargs.pop("bias", None)  # used for other pointer layers, not PointerTransformer
+        _ = kwargs.pop("residual", None)  # used for other pointer layers, not PointerTransformer
         self.transformer = get_transformer_layer(self.embedding_dim, num_heads, **kwargs)
         self.vt = nn.Linear(self.embedding_dim, 1, bias=False)
 
