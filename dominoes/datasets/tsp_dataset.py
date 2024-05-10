@@ -80,7 +80,7 @@ class TSPDataset(DatasetRL, DatasetSL):
         )
         return context_parameters
 
-    def create_training_variables(self, **train_parameters):
+    def create_training_variables(self, num_nets, **train_parameters):
         """dataset specific training variable storage"""
         return {}  # nothing here yet, but ready for it in the future
 

@@ -92,7 +92,7 @@ class Dataset(ABC):
         pass
 
     @abstractmethod
-    def create_training_variables(self, **train_parameters):
+    def create_training_variables(self, num_nets, **train_parameters):
         """required method for creating training variables for the dataset"""
         pass
 

@@ -162,13 +162,13 @@ class DominoeMaster(DatasetRL, DatasetSL):
         """
         return self.prms["hand_size"]
 
-    def create_training_variables(self, **train_parameters):
+    def create_training_variables(self, num_nets, **train_parameters):
         """dataset specific training variable storage"""
         return {}  # nothing here yet, but ready for it in the future
 
     def save_training_variables(self, training_variables, epoch_state, **train_parameters):
         """dataset specific training variable storage"""
-        pass # nothing to do (usually update training_variables in place)
+        pass  # nothing to do (usually update training_variables in place)
 
     @torch.no_grad()
     def generate_batch(self, train=True, device=None, **kwargs):
