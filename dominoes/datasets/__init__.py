@@ -49,7 +49,7 @@ def get_dataset_kwargs(args):
     return a dictionary of kwargs for a dataset from argparse args
     """
     # first get class parameters for the requested task
-    parameters = get_dataset_parameters(args.task)
+    parameters = get_dataset_parameters(args["task"])
     # get the required parameters (the parameters that need to be set on initialization)
     required = [key for key, value in parameters.items() if value is None]
     # get the permitted parameters (any other parameters that can be set at initialization)
