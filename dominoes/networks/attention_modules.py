@@ -63,8 +63,6 @@ def get_attention_layer(
         kqnorm=kqnorm,
         kqv_bias=kqv_bias,
         residual=residual,
-        contextual=contextual,
-        multimodal=multimodal and num_multimodal > 0,
     )
     if multimodal and num_multimodal > 0:
         attention_kwargs["num_multimodal"] = num_multimodal
@@ -82,6 +80,7 @@ class AttentionBaseClass(nn.Module, ABC):
     """
 
     def __init__(self, embedding_dim, num_heads, kqnorm=True, kqv_bias=False, residual=False, num_multimodal=0):
+        """constructor method for attention layers"""
         super().__init__()
 
         # This is a requirement
@@ -122,9 +121,7 @@ class AttentionBaseClass(nn.Module, ABC):
         self.to_values = nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.kqv_bias)
 
     def _build_multimodal_attention_matrices(self, num_multimodal):
-        """
-        method for building attention matrices for sending input to queries, keys, and values for multimodal inputs
-        """
+        """method for building attention matrices for sending input to queries, keys, and values for multimodal inputs"""
         if num_multimodal > 0:
             self.to_mm_keys = nn.ModuleList([nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.kqv_bias) for _ in range(num_multimodal)])
             self.to_mm_values = nn.ModuleList([nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.kqv_bias) for _ in range(num_multimodal)])
@@ -139,7 +136,7 @@ class AttentionBaseClass(nn.Module, ABC):
 
     def _build_mixing_matrix(self):
         """method for building mixing matrix for unifying num_heads"""
-        self.unifynum_heads = nn.Linear(self.embedding_dim, self.embedding_dim)
+        self.unify_heads = nn.Linear(self.embedding_dim, self.embedding_dim)
 
     def _send_to_kqv(self, x, context=None, multimode=None):
         """
@@ -268,9 +265,7 @@ class AttentionBaseClass(nn.Module, ABC):
         return attention
 
     def _measure_head_output(self, attention, values, batch_size):
-        """
-        combine attention with values to get the output of each head, and then unify num_heads
-        """
+        """combine attention with values to get the output of each head, and then unify num_heads"""
         assert attention.size(0) == values.size(0), "batch size * head_size of attention and values should match"
 
         # return values according how much they are attented
@@ -280,11 +275,27 @@ class AttentionBaseClass(nn.Module, ABC):
         out = out.transpose(1, 2).contiguous().view(batch_size, attention.size(1), self.num_headsize * self.num_heads)
 
         # unify num_heads with linear layer
-        return self.unifynum_heads(out)
+        return self.unify_heads(out)
+
+    def _mix_residual(self, x, out):
+        """mix output of attention num_heads with residual channel when requested"""
+        return out + x * self.residual
 
     @abstractmethod
     def forward(self, x, mask=None):
-        """core forward method with residual connection for attention mechanism"""
+        """
+        forward method must be code by each child, ideally it uses the supporting methods in this parent class
+
+        children determine whether context/multimode inputs and their masks are included in the forward pass
+
+        The general structure is:
+        - process input and context/multimode inputs (_process_input)
+        - send inputs to queries, keys, and values (_send_to_kqv)
+        - measure attention between queries and keys (_measure_attention)
+        - measure head output between attention and values (_measure_head_output)
+        - mix output of attention num_heads with residual channel when requested (_mix_residual)
+        - return output
+        """
         raise NotImplementedError
 
 
@@ -312,7 +323,7 @@ class SelfAttention(AttentionBaseClass):
         out = self._measure_head_output(attention, values, batch_size)
 
         # mix output of attention num_heads with residual channel (when requested)
-        return out + x * self.residual
+        return self._mix_residual(x, out)
 
 
 class ContextualAttention(AttentionBaseClass):
@@ -343,7 +354,7 @@ class ContextualAttention(AttentionBaseClass):
         out = self._measure_head_output(attention, values, batch_size)
 
         # mix output of attention num_heads with residual channel (when requested)
-        return out + x * self.residual
+        return self._mix_residual(x, out)
 
 
 class MultimodalAttention(AttentionBaseClass):
@@ -372,7 +383,7 @@ class MultimodalAttention(AttentionBaseClass):
         out = self._measure_head_output(attention, values, batch_size)
 
         # mix output of attention num_heads with residual channel (when requested)
-        return out + x * self.residual
+        return self._mix_residual(x, out)
 
 
 class MultimodalContextualAttention(AttentionBaseClass):
@@ -404,7 +415,7 @@ class MultimodalContextualAttention(AttentionBaseClass):
         out = self._measure_head_output(attention, values, batch_size)
 
         # mix output of attention num_heads with residual channel (when requested)
-        return out + x * self.residual
+        return self._mix_residual(x, out)
 
 
 ATTENTION_REGISTRY = {
