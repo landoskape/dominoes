@@ -101,10 +101,7 @@ class PointerArchitectureComparison(Experiment):
         nets, optimizers, prms = self.create_networks(input_dim, context_parameters)
 
         # train networks
-        train_parameters = self.make_train_parameters()
-        # gamma=self.args.gamma
-        # learning_mode
-        # saving loss / reward etc
+        train_parameters = self.make_train_parameters(dataset)
 
         train_results = train.train(nets, optimizers, dataset, **train_parameters)
 
