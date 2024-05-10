@@ -236,7 +236,7 @@ class DominoeMaster(DatasetRL, DatasetSL):
     def _add_task_parameters(self, batch, binary_available, available, **prms):
         """Add task specific parameters to the batch dictionary"""
         if self.task == "sequencer":
-            batch["multimode"] = binary_available
+            batch["multimode"] = [binary_available]
             batch["available"] = available
         if self.task == "sorting":
             pass
