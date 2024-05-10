@@ -116,11 +116,11 @@ class PointerArchitectureComparison(Experiment):
         main plotting loop
         """
         train_results = results["train_results"]
-        if "train_loss" in train_results:
+        if "train_loss" in train_results and train_results["train_loss"] is not None:
             train_loss = train_results["train_loss"]
             plt.plot(train_loss)
             plt.show()
-        if "train_reward" in train_results:
+        if "train_reward" in train_results and train_results["train_reward"] is not None:
             train_reward = train_results["train_reward"]
             plt.plot(train_reward)
             plt.show()
