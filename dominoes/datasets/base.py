@@ -257,9 +257,9 @@ class DatasetRL(Dataset):
         """
         return torch.gather(scores, 2, choices.unsqueeze(2)).squeeze(2)
 
-    def process_reward(self, rewards, scores, choices, gamma_transform):
+    def process_rewards(self, rewards, scores, choices, gamma_transform):
         """
-        process the reward for performing policy gradient
+        process the rewards for performing policy gradient
 
         args:
             rewards: list of torch.Tensor, the rewards for each network (precomputed using `reward_function`)
