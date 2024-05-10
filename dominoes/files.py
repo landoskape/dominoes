@@ -1,14 +1,36 @@
-import sys
 import os
 from pathlib import Path
 
 
+def save_path():
+    return Path("C:/Users/andrew/Documents/MachineLearning/Dominoes-Experiments")
+
+
+def results_path():
+    return save_path() / "results"
+
+
+def parameters_path():
+    return save_path() / "parameters"
+
+
+def network_path():
+    return save_path() / "networks"
+
+
+def figure_path():
+    return code_path() / "docs" / "media"
+
+
+# -----------------------------------------------------------
+# ----- old system saving experiments in the repository -----
+# -----------------------------------------------------------
 def code_path():
     return Path("C:/Users/andrew/Documents/GitHub/dominoes")
 
 
 def savePath():
-    return code_path() / "savedNetworks"
+    return code_path() / "experiments" / "savedNetworks"
 
 
 def prmPath():
