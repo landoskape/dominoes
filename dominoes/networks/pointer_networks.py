@@ -59,9 +59,9 @@ def get_pointer_network(
     return pointernet_constructor(input_dim, embedding_dim, **pointernet_kwargs)
 
 
-def get_pointer_kwargs(args):
-    """get pointer network kwargs from arguments"""
-    return PointerArguments(vars(args)).get_args()[1]
+def get_pointer_arguments(args):
+    """get pointer network arguments from arguments"""
+    return PointerArguments(vars(args)).get_args()
 
 
 class PointerArguments:
