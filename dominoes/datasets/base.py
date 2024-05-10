@@ -215,7 +215,7 @@ class DatasetRL(Dataset):
         # return the gamma transform matrix
         return (gamma**exponent).to(device)
 
-    def get_pretemp_score(self, scores, choices, temperatures, return_full_score=False):
+    def get_pretemp_score(self, scores, choices, temperature, return_full_score=False):
         """
         get the pre-temperature score for the choices made by the networks
 
@@ -234,7 +234,7 @@ class DatasetRL(Dataset):
                             3-d float tensor, same shape as scores, only returned if return_full_score=True
         """
         # Measure the pre-temperature score of each network (this may have an additive offset, but that's okay)
-        pretemp_scores = [torch.softmax(score * temp, dim=2) for score, temp in zip(scores, temperatures)]
+        pretemp_scores = [torch.softmax(score * temperature, dim=2) for score in scores]
         # Get pre-temperature score for the choices made by the networks
         pretemp_policies = [self.get_choice_score(choice, score) for choice, score in zip(choices, pretemp_scores)]
         if return_full_score:

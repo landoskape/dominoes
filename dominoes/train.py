@@ -37,8 +37,6 @@ def train(nets, optimizers, dataset, **parameters):
         train_reward = torch.zeros(epochs, num_nets, device="cpu")
         train_reward_by_pos = torch.zeros(epochs, max_possible_output, num_nets, device="cpu")
         confidence = torch.zeros(epochs, max_possible_output, num_nets, device="cpu")
-        # need this for estimating confidence
-        temperatures = [net.temperature for net in nets]
 
     # create dataset-specified variables for storing data
     dataset_variables = dataset.create_training_variables(num_nets, **parameters)
@@ -112,7 +110,7 @@ def train(nets, optimizers, dataset, **parameters):
                     train_loss[epoch, i] = loss[i].detach().cpu()
 
             if save_reward:
-                pretemp_scores = dataset.get_pretemp_scores(scores, choices, temperatures)
+                pretemp_scores = dataset.get_pretemp_scores(scores, choices, temperature)
                 for i in range(num_nets):
                     train_reward[epoch, i] = torch.mean(torch.sum(rewards[i], dim=1)).detach().cpu()
                     train_reward_by_pos[epoch, :, i] = torch.mean(rewards[i], dim=0).detach().cpu()
@@ -127,7 +125,7 @@ def train(nets, optimizers, dataset, **parameters):
                 loss=loss if get_loss else None,
                 rewards=rewards if get_reward else None,
                 gamma_transform=gamma_transform if learning_mode == "reinforce" else None,
-                temperatures=temperatures,
+                temperature=temperature,
             )
             dataset.save_training_variables(dataset_variables, epoch_state, **parameters)
 
