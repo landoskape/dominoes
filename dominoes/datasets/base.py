@@ -25,7 +25,7 @@ class Dataset(ABC):
         """
         pass
 
-    def _check_parameters(self, reference=None, init=False, **parameters):
+    def _check_parameters(self, reference=None, init=False, raise_for_extra=False, **parameters):
         """
         check if parameters provided in the parameters are valid (and complete)
 
@@ -45,9 +45,11 @@ class Dataset(ABC):
         """
         if reference is None:
             reference = self.get_class_parameters()
-        for param in parameters:
-            if param not in reference:
-                raise ValueError(f"parameter {param} not recognized for task {self.task}")
+        if raise_for_extra:
+            # check if extra parameters are provided and raise error if they are
+            for param in parameters:
+                if param not in reference:
+                    raise ValueError(f"parameter {param} not recognized for task {self.task}")
         # if init==True, then this is being called by the constructor's __init__ method and
         # we need to check if any required parameters without defaults are set properly
         if init:
@@ -55,7 +57,7 @@ class Dataset(ABC):
                 if param not in parameters and reference[param] is None:
                     raise ValueError(f"parameter {param} not provided for task {self.task}")
 
-    def parameters(self, **prms):
+    def parameters(self, raise_for_extra=False, **prms):
         """
         Helper method for handling default parameters for each task
 
@@ -70,7 +72,7 @@ class Dataset(ABC):
         # get registered parameters
         prms_to_use = copy(self.prms)
         # check if updates are valid
-        self._check_parameters(reference=prms_to_use, init=False, **prms)
+        self._check_parameters(reference=prms_to_use, init=False, raise_for_extra=raise_for_extra, **prms)
         # update parameters
         prms_to_use.update(prms)
         # return to caller function

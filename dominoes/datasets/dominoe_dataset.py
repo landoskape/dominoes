@@ -22,11 +22,11 @@ class DominoeMaster(DatasetRL, DatasetSL):
         self.task = task
 
         # check parameters
-        self._check_parameters(init=True, **parameters)
+        self._check_parameters(init=True, raise_for_extra=True, **parameters)
 
         # set parameters to required defaults first, then update
         self.prms = self.get_class_parameters()
-        self.prms = self.parameters(**parameters)
+        self.prms = self.parameters(raise_for_extra=True, **parameters)
 
         # create base dominoe set
         self.dominoe_set = get_dominoes(self.prms["highest_dominoe"], as_torch=True)

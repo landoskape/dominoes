@@ -21,11 +21,11 @@ class TSPDataset(DatasetRL, DatasetSL):
         self.set_device(device)
 
         # check parameters
-        self._check_parameters(init=True, **parameters)
+        self._check_parameters(init=True, raise_for_extra=True, **parameters)
 
         # set parameters to required defaults first, then update
         self.prms = self.get_class_parameters()
-        self.prms = self.parameters(**parameters)
+        self.prms = self.parameters(raise_for_extra=True, **parameters)
 
     @classmethod
     def get_class_parameters(cls):
