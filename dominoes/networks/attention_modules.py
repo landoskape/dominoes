@@ -51,7 +51,7 @@ def get_attention_layer(
     contextual=False,
     multimodal=False,
     num_multimodal=0,
-    bias=False,
+    kqv_bias=False,
     residual=False,
 ):
     """
@@ -61,7 +61,7 @@ def get_attention_layer(
     """
     attention_kwargs = dict(
         kqnorm=kqnorm,
-        bias=bias,
+        kqv_bias=kqv_bias,
         residual=residual,
         contextual=contextual,
         multimodal=multimodal and num_multimodal > 0,
@@ -81,7 +81,7 @@ class AttentionBaseClass(nn.Module, ABC):
     Adopted from pbloem/former
     """
 
-    def __init__(self, embedding_dim, num_heads, kqnorm=True, bias=False, residual=False, num_multimodal=0):
+    def __init__(self, embedding_dim, num_heads, kqnorm=True, kqv_bias=False, residual=False, num_multimodal=0):
         super().__init__()
 
         # This is a requirement
@@ -90,7 +90,7 @@ class AttentionBaseClass(nn.Module, ABC):
         # Store parameters
         self.embedding_dim = embedding_dim
         self.num_heads = num_heads
-        self.bias = bias
+        self.kqv_bias = kqv_bias
         self.kqnorm = kqnorm
         self.residual = residual
         self.num_multimodal = num_multimodal
@@ -117,17 +117,17 @@ class AttentionBaseClass(nn.Module, ABC):
         optionally ignore queries for contextual or multimodal inputs
         name will be inserted into attribute in the format "to_{name}_keys/queries/value" if provided
         """
-        self.to_queries = nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.bias)
-        self.to_keys = nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.bias)
-        self.to_values = nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.bias)
+        self.to_queries = nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.kqv_bias)
+        self.to_keys = nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.kqv_bias)
+        self.to_values = nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.kqv_bias)
 
     def _build_multimodal_attention_matrices(self, num_multimodal):
         """
         method for building attention matrices for sending input to queries, keys, and values for multimodal inputs
         """
         if num_multimodal > 0:
-            self.to_mm_keys = nn.ModuleList([nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.bias) for _ in range(num_multimodal)])
-            self.to_mm_values = nn.ModuleList([nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.bias) for _ in range(num_multimodal)])
+            self.to_mm_keys = nn.ModuleList([nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.kqv_bias) for _ in range(num_multimodal)])
+            self.to_mm_values = nn.ModuleList([nn.Linear(self.embedding_dim, self.embedding_dim, bias=self.kqv_bias) for _ in range(num_multimodal)])
 
     def _build_layer_norms(self):
         """method for building layer norm matrices for each head"""
@@ -295,9 +295,9 @@ class SelfAttention(AttentionBaseClass):
     Simplest attention model where attention is measured between all input tokens
     """
 
-    def __init__(self, embedding_dim, num_heads=8, kqnorm=True, bias=False, residual=False):
+    def __init__(self, embedding_dim, num_heads=8, kqnorm=True, kqv_bias=False, residual=False):
         """overwriting to prevent user from providing multimodal inputs for this attention layer"""
-        super().__init__(embedding_dim, num_heads=num_heads, kqnorm=kqnorm, bias=bias, residual=residual, num_multimodal=0)
+        super().__init__(embedding_dim, num_heads=num_heads, kqnorm=kqnorm, kqv_bias=kqv_bias, residual=residual, num_multimodal=0)
 
     def forward(self, x, mask=None):
         """core forward method with residual connection for attention mechanism"""
@@ -323,9 +323,9 @@ class ContextualAttention(AttentionBaseClass):
     inputs are used to generate keys and values that modulate the main inputs.
     """
 
-    def __init__(self, embedding_dim, num_heads=8, kqnorm=True, bias=False, residual=False):
+    def __init__(self, embedding_dim, num_heads=8, kqnorm=True, kqv_bias=False, residual=False):
         """overwriting to prevent user from providing multimodal inputs for this attention layer"""
-        super().__init__(embedding_dim, num_heads=num_heads, kqnorm=kqnorm, bias=bias, residual=residual, num_multimodal=0)
+        super().__init__(embedding_dim, num_heads=num_heads, kqnorm=kqnorm, kqv_bias=kqv_bias, residual=residual, num_multimodal=0)
 
     def forward(self, x, context, mask=None, context_mask=None):
         """core forward method with residual connection for attention mechanism"""

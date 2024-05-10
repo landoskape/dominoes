@@ -21,8 +21,8 @@ def get_transformer_layer(
     contextual=False,
     multimodal=False,
     num_multimodal=0,
+    kqv_bias=False,
     mlp_bias=True,
-    attention_bias=False,
     residual=False,
 ):
     """
@@ -33,8 +33,8 @@ def get_transformer_layer(
         num_heads=num_heads,
         expansion=expansion,
         kqnorm=kqnorm,
+        kqv_bias=kqv_bias,
         mlp_bias=mlp_bias,
-        attention_bias=attention_bias,
         residual=residual,
     )
     if multimodal:
@@ -53,9 +53,7 @@ class TransformerBaseClass(nn.Module, ABC):
     normalization, with residual connections before each layer normalization.
     """
 
-    def __init__(
-        self, embedding_dim, contextual, multimodal, num_heads=8, expansion=1, kqnorm=True, mlp_bias=True, attention_bias=False, num_multimodal=0
-    ):
+    def __init__(self, embedding_dim, contextual, multimodal, num_heads=8, expansion=1, kqnorm=True, kqv_bias=False, mlp_bias=True, num_multimodal=0):
         # check if valid arguments
         self._check_args(embedding_dim, num_heads, expansion)
 
@@ -68,8 +66,8 @@ class TransformerBaseClass(nn.Module, ABC):
         self.multimodal = multimodal
         self.num_heads = num_heads
         self.kqnorm = kqnorm
+        self.kqv_bias = kqv_bias
         self.mlp_bias = mlp_bias
-        self.attention_bias = attention_bias
         self.num_multimodal = num_multimodal * multimodal  # if multimodal is False, num_multimodal is 0
 
         # make the attention layer
@@ -80,7 +78,7 @@ class TransformerBaseClass(nn.Module, ABC):
             contextual=contextual,
             multimodal=multimodal,
             num_multimodal=num_multimodal,
-            bias=attention_bias,
+            kqv_bias=kqv_bias,
             residual=False,
         )
 
