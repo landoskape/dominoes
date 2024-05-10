@@ -6,7 +6,7 @@ from ..utils import named_transpose
 from .attention_modules import get_attention_layer, _attention_type
 from .transformer_modules import get_transformer_layer
 from .pointer_decoder import PointerDecoder
-from .utils import _check_kwargs, _process_input, _process_multimodal_input
+from .net_utils import _check_kwargs, _process_input, _process_multimodal_input
 
 
 def _get_pointernet_constructor(contextual, multimodal):

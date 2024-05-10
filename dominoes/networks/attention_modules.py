@@ -4,7 +4,7 @@ from torch import nn
 
 from ..utils import masked_softmax
 
-from .utils import _process_input, _process_multimodal_input
+from .net_utils import _process_input, _process_multimodal_input
 
 """
 Almost everything I've learned about machine learning and pytorch has been due

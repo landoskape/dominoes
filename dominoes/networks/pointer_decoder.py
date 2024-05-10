@@ -4,7 +4,7 @@ from torch import nn
 from .attention_modules import get_attention_layer
 from .transformer_modules import get_transformer_layer
 from .pointer_layers import get_pointer_layer
-from .utils import _check_kwargs
+from .net_utils import _check_kwargs
 
 
 class PointerDecoder(nn.Module):
