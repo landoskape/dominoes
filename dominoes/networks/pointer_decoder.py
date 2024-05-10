@@ -34,12 +34,18 @@ class PointerDecoder(nn.Module):
         """method for building decoder with multiple possible methods and specialized kwargs"""
         # build decoder (updates the context vector)
         if decoder_method == "gru":
-            required_kwargs = ["bias"]
+            required_kwargs = [
+                "gru_bias",
+            ]
             _check_kwargs("gru", decoder_kwargs, required_kwargs)
-            self.decoder = nn.GRUCell(input_size=self.embedding_dim, hidden_size=self.embedding_dim, bias=decoder_kwargs["bias"])
+            self.decoder = nn.GRUCell(input_size=self.embedding_dim, hidden_size=self.embedding_dim, bias=decoder_kwargs["gru_bias"])
 
         elif decoder_method == "attention":
-            required_kwargs = ["num_heads", "kqnorm", "bias"]
+            required_kwargs = [
+                "num_heads",
+                "kqnorm",
+                "kqv_bias",
+            ]
             _check_kwargs("attention", decoder_kwargs, required_kwargs)
             self.decoder = get_attention_layer(
                 self.embedding_dim,
@@ -48,11 +54,17 @@ class PointerDecoder(nn.Module):
                 contextual=False,
                 multimodal=True,
                 num_multimodal=2,
-                bias=decoder_kwargs["bias"],
+                kqv_bias=decoder_kwargs["kqv_bias"],
                 residual=decoder_kwargs.get("residual", True),  # default is to update residual stream
             )
         elif decoder_method == "transformer":
-            required_kwargs = ["num_heads", "expansion", "kqnorm", "mlp_bias", "attention_bias"]
+            required_kwargs = [
+                "num_heads",
+                "expansion",
+                "kqnorm",
+                "kqv_bias",
+                "mlp_bias",
+            ]
             _check_kwargs("transformer", decoder_kwargs, required_kwargs)
             self.decoder = get_transformer_layer(
                 self.embedding_dim,
@@ -62,8 +74,8 @@ class PointerDecoder(nn.Module):
                 contextual=False,
                 multimodal=True,
                 num_multimodal=2,
+                kqv_bias=decoder_kwargs["kqv_bias"],
                 mlp_bias=decoder_kwargs["mlp_bias"],
-                attention_bias=decoder_kwargs["attention_bias"],
             )
         else:
             raise ValueError(f"decoder_method={decoder_method} not recognized!")
