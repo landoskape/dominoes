@@ -69,7 +69,6 @@ class PointerLayer(ABC, nn.Module):
         """centralized method of converting logits to probabilities with masking and temperature"""
         return masked_log_softmax(u / temperature, mask, dim=1)
 
-    @abstractmethod
     def forward(self, encoded, decoder_state, mask=None, temperature=1.0):
         """centralized forward pass of the pointer layer"""
         logits = self._get_logits(encoded, decoder_state, mask)
