@@ -6,6 +6,7 @@ from torch import nn
 from ..utils import masked_log_softmax
 from .attention_modules import get_attention_layer
 from .transformer_modules import get_transformer_layer
+from . import _check_kwargs
 
 
 def get_pointer_methods():
@@ -43,9 +44,7 @@ class StoredEncoding:
 
 
 class PointerLayer(ABC, nn.Module):
-    """
-    PointerLayer Module (abstract class containing the basic structure of a pointer layer)
-    """
+    """PointerLayer Module (abstract class containing the basic structure of a pointer layer)"""
 
     def __init__(self, embedding_dim, **kwargs):
         super().__init__()
@@ -78,14 +77,12 @@ class PointerLayer(ABC, nn.Module):
 
 
 class PointerStandard(PointerLayer):
-    """
-    PointerStandard Module (as specified in the original paper)
-    """
+    """PointerStandard Module (as specified in the original paper)"""
 
     def initialize(self, **kwargs):
         """prepare modules for standard pointer layer"""
-        self.W1 = nn.Linear(self.embedding_dim, self.embedding_dim, bias=False)
-        self.W2 = nn.Linear(self.embedding_dim, self.embedding_dim, bias=False)
+        self.W1 = nn.Linear(self.embedding_dim, self.embedding_dim, bias=kwargs.get("bias", False))
+        self.W2 = nn.Linear(self.embedding_dim, self.embedding_dim, bias=kwargs.get("bias", False))
         self.vt = nn.Linear(self.embedding_dim, 1, bias=False)
 
     def process_encoded(self, encoded):
@@ -98,14 +95,12 @@ class PointerStandard(PointerLayer):
 
 
 class PointerDot(PointerLayer):
-    """
-    PointerDot Module (variant of the paper, using a simple dot product)
-    """
+    """PointerDot Module (variant of the paper, using a simple dot product)"""
 
     def initialize(self, **kwargs):
         """prepare modules for dot product pointer layer"""
-        self.W1 = nn.Linear(self.embedding_dim, self.embedding_dim, bias=False)
-        self.W2 = nn.Linear(self.embedding_dim, self.embedding_dim, bias=False)
+        self.W1 = nn.Linear(self.embedding_dim, self.embedding_dim, bias=kwargs.get("bias", False))
+        self.W2 = nn.Linear(self.embedding_dim, self.embedding_dim, bias=kwargs.get("bias", False))
         self.eln = nn.LayerNorm(self.embedding_dim, bias=False)
         self.dln = nn.LayerNorm(self.embedding_dim, bias=False)
 
@@ -119,18 +114,12 @@ class PointerDot(PointerLayer):
 
 
 class PointerDotNoLN(PointerLayer):
-    """
-    PointerDotNoLN Module (variant of the paper, using a simple dot product)
-
-    log_softmax is preferable if the probabilities of each token are not
-    needed. However, if token embeddings are combined via their probabilities,
-    then softmax is required, so log_softmax should be set to `False`.
-    """
+    """PointerDotNoLN Module (variant of the paper, using a simple dot product)"""
 
     def initialize(self, **kwargs):
         """prepare modules for dot product pointer layer"""
-        self.W1 = nn.Linear(self.embedding_dim, self.embedding_dim, bias=False)
-        self.W2 = nn.Linear(self.embedding_dim, self.embedding_dim, bias=False)
+        self.W1 = nn.Linear(self.embedding_dim, self.embedding_dim, bias=kwargs.get("bias", False))
+        self.W2 = nn.Linear(self.embedding_dim, self.embedding_dim, bias=kwargs.get("bias", False))
 
         # still need to normalize to prevent gradient blowups -- but without additional affine!
         self.eln = nn.LayerNorm(self.embedding_dim, bias=False, elementwise_affine=False)
@@ -146,9 +135,7 @@ class PointerDotNoLN(PointerLayer):
 
 
 class PointerDotLean(PointerLayer):
-    """
-    PointerDotLean Module (variant of the paper, using a simple dot product and even less weights)
-    """
+    """PointerDotLean Module (variant of the paper, using a simple dot product and even less weights)"""
 
     def initialize(self, **kwargs):
         """prepare modules for dot product pointer layer"""
@@ -165,14 +152,11 @@ class PointerDotLean(PointerLayer):
 
 
 class PointerAttention(PointerLayer):
-    """
-    PointerAttention Module (variant of paper, using standard attention layer)
-    """
+    """PointerAttention Module (variant of paper, using standard attention layer)"""
 
     def initialize(self, **kwargs):
         """prepare modules for attention pointer layer"""
-        if "num_heads" not in kwargs:
-            raise ValueError("PointerAttention requires num_heads to be specified")
+        _check_kwargs("PointerAttention", kwargs, ["num_heads"])
         kwargs["contextual"] = False
         kwargs["multimodal"] = True
         kwargs["num_multimodal"] = 1
@@ -192,14 +176,11 @@ class PointerAttention(PointerLayer):
 
 
 class PointerTransformer(PointerLayer):
-    """
-    PointerTransformer Module (variant of paper using a transformer)
-    """
+    """PointerTransformer Module (variant of paper using a transformer)"""
 
-    def initialize(self, *kwargs):
+    def initialize(self, **kwargs):
         """prepare modules for transformer pointer layer"""
-        if "num_heads" not in kwargs:
-            raise ValueError("PointerTransformer requires num_heads to be specified")
+        _check_kwargs("PointerTransformer", kwargs, ["num_heads"])
         kwargs["contextual"] = False
         kwargs["multimodal"] = True
         kwargs["num_multimodal"] = 1
