@@ -6,7 +6,7 @@ from ..utils import named_transpose
 from .attention_modules import get_attention_layer, _attention_type
 from .transformer_modules import get_transformer_layer
 from .pointer_decoder import PointerDecoder
-from . import _check_kwargs, _process_input, _process_multimodal_input
+from .utils import _check_kwargs, _process_input, _process_multimodal_input
 
 
 def _get_pointernet_constructor(contextual, multimodal):
@@ -57,6 +57,11 @@ def get_pointer_network(
         pointernet_kwargs["mm_input_dim"] = mm_input_dim
     pointernet_constructor = _get_pointernet_constructor(contextual, multimodal)
     return pointernet_constructor(input_dim, embedding_dim, **pointernet_kwargs)
+
+
+def get_pointer_kwargs(args):
+    """get pointer network kwargs from arguments"""
+    return PointerArguments(vars(args)).get_args()[1]
 
 
 class PointerArguments:
