@@ -103,23 +103,23 @@ class Experiment(ABC):
 
     def configure_wandb(self):
         """create a wandb run file and set environment parameters appropriately"""
-        if self.args.use_wandb:
-            wandb.login()
-            run = wandb.init(
-                project=self.get_basename(),
-                name="",
-                config=self.args,
-            )
+        if not self.args.use_wandb:
+            return None
 
-            if str(self.basepath).startswith("/n/home"):
-                # ATL Note 240223: We can update the "startswith" list to be
-                # a registry of path locations that require WANDB_MODE to be offline
-                # in a smarter way, but I think that using /n/ is sufficient in general
-                os.environ["WANDB_MODE"] = "offline"
+        wandb.login()
+        run = wandb.init(
+            project=self.get_basename(),
+            name="",
+            config=self.args,
+        )
 
-            return run
+        if str(self.basepath).startswith("/n/home"):
+            # ATL Note 240223: We can update the "startswith" list to be
+            # a registry of path locations that require WANDB_MODE to be offline
+            # in a smarter way, but I think that using /n/ is sufficient in general
+            os.environ["WANDB_MODE"] = "offline"
 
-        return None
+        return run
 
     @abstractmethod
     def get_basename(self) -> str:
@@ -349,6 +349,22 @@ class Experiment(ABC):
         kwargs = get_dataset_kwargs(vars(self.args))
         # return the dataset
         return get_dataset(self.args.task, build=True, device=self.device, **kwargs)
+
+    def make_train_parameters(self, dataset):
+        """simple method for getting training parameters"""
+        # get the training parameters
+        parameters = {}
+        parameters["epochs"] = self.args.epochs
+        parameters["device"] = self.device
+        parameters["verbose"] = not self.args.silent
+        parameters["max_possible_output"] = dataset.get_max_possible_output()
+        parameters["learning_mode"] = self.args.learning_mode
+        parameters["temperature"] = self.args.train_temperature
+        parameters["thompson"] = not self.args.no_thompson
+        parameters["gamma"] = self.args.gamma
+        parameters["save_loss"] = self.args.save_loss
+        parameters["save_reward"] = self.args.save_reward
+        return parameters
 
     def plot_ready(self, name):
         """standard method for saving and showing plot when it's ready"""
