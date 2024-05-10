@@ -87,6 +87,21 @@ class Dataset(ABC):
         pass
 
     @abstractmethod
+    def get_max_possible_output(self):
+        """required method for getting the maximum possible output for the dataset"""
+        pass
+
+    @abstractmethod
+    def create_training_variables(self, **train_parameters):
+        """required method for creating training variables for the dataset"""
+        pass
+
+    @abstractmethod
+    def save_training_variables(self, training_variables, epoch_state, **train_parameters):
+        """required method for saving training variables for the dataset"""
+        pass
+
+    @abstractmethod
     def generate_batch(self, *args, **kwargs):
         """required method for generating a batch"""
 

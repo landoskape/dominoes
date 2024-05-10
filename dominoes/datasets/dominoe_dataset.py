@@ -153,6 +153,23 @@ class DominoeMaster(DatasetRL, DatasetSL):
         )
         return context_parameters
 
+    def get_max_possible_output(self):
+        """
+        get the maximum possible output for the dataset
+
+        returns:
+            int, the maximum possible output for the dataset (just the handsize)
+        """
+        return self.prms["hand_size"]
+
+    def create_training_variables(self, **train_parameters):
+        """dataset specific training variable storage"""
+        return {}  # nothing here yet, but ready for it in the future
+
+    def save_training_variables(self, training_variables, epoch_state, **train_parameters):
+        """dataset specific training variable storage"""
+        pass # nothing to do (usually update training_variables in place)
+
     @torch.no_grad()
     def generate_batch(self, train=True, device=None, **kwargs):
         """

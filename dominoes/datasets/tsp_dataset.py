@@ -80,6 +80,23 @@ class TSPDataset(DatasetRL, DatasetSL):
         )
         return context_parameters
 
+    def create_training_variables(self, **train_parameters):
+        """dataset specific training variable storage"""
+        return {}  # nothing here yet, but ready for it in the future
+
+    def save_training_variables(self, training_variables, epoch_state, **train_parameters):
+        """dataset specific training variable storage"""
+        pass  # nothing to do (usually update training_variables in place)
+
+    def get_max_possible_output(self):
+        """
+        get the maximum possible output for the dataset
+
+        returns:
+            int, the maximum possible output for the dataset (it's just the number of cities)
+        """
+        return self.prms["num_cities"]
+
     @torch.no_grad()
     def generate_batch(self, device=None, **kwargs):
         """
@@ -108,13 +125,15 @@ class TSPDataset(DatasetRL, DatasetSL):
 
         # construct batch dictionary
         input = self.input_to_device(input, device=device)
-        batch = dict(input=input, dists=dists.to(device), init=init.to(device))
+        dists = self.input_to_device(dists, device=device)
+        init = self.input_to_device(init, device=device)
+        batch = dict(input=input, dists=dists, init=init)
 
         # add task specific parameters to the batch dictionary
         batch.update(prms)
 
         if prms["return_target"]:
-            batch["target"] = get_paths(input, dists, init, prms["threads"]).to(device)
+            batch["target"] = self.input_to_device(get_paths(input, dists, init, prms["threads"]), device=device)
 
         return batch
 
