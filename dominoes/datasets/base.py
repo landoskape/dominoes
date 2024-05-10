@@ -215,7 +215,7 @@ class DatasetRL(Dataset):
         # return the gamma transform matrix
         return (gamma**exponent).to(device)
 
-    def get_pretemp_score(self, scores, choices, temperature, return_full_score=False):
+    def get_pretemp_scores(self, scores, choices, temperature, return_full_score=False):
         """
         get the pre-temperature score for the choices made by the networks
 

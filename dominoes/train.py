@@ -18,10 +18,8 @@ def train(nets, optimizers, dataset, **parameters):
     thompson = parameters.get("thompson", True)
 
     # process the learning_mode and save conditions
-    save_loss = parameters.get("save_loss", False)
-    save_reward = parameters.get("save_reward", False)
-    get_loss = learning_mode == "supervised" or save_loss
-    get_reward = learning_mode == "reinforce" or save_reward
+    get_loss = learning_mode == "supervised" or parameters.get("save_loss", False)
+    get_reward = learning_mode == "reinforce" or parameters.get("save_reward", False)
 
     if learning_mode == "reinforce":
         # create gamma transform for processing reward if not provided in parameters
@@ -29,11 +27,11 @@ def train(nets, optimizers, dataset, **parameters):
         gamma_transform = dataset.create_gamma_transform(max_possible_output, gamma, device=device)
 
     # create some variables for storing data related to supervised loss
-    if save_loss:
+    if get_loss:
         train_loss = torch.zeros(epochs, num_nets, device="cpu")
 
     # create some variables for storing data related to rewards
-    if save_reward:
+    if get_reward:
         train_reward = torch.zeros(epochs, num_nets, device="cpu")
         train_reward_by_pos = torch.zeros(epochs, max_possible_output, num_nets, device="cpu")
         confidence = torch.zeros(epochs, max_possible_output, num_nets, device="cpu")
@@ -105,11 +103,11 @@ def train(nets, optimizers, dataset, **parameters):
 
         # save training data
         with torch.no_grad():
-            if save_loss:
+            if get_loss:
                 for i in range(num_nets):
                     train_loss[epoch, i] = loss[i].detach().cpu()
 
-            if save_reward:
+            if get_reward:
                 pretemp_scores = dataset.get_pretemp_scores(scores, choices, temperature)
                 for i in range(num_nets):
                     train_reward[epoch, i] = torch.mean(torch.sum(rewards[i], dim=1)).detach().cpu()
@@ -131,10 +129,10 @@ def train(nets, optimizers, dataset, **parameters):
 
     # return training data
     results = dict(
-        train_loss=train_loss if save_loss else None,
-        train_reward=train_reward if save_reward else None,
-        train_reward_by_pos=train_reward_by_pos if save_reward else None,
-        confidence=confidence if save_reward else None,
+        train_loss=train_loss if get_loss else None,
+        train_reward=train_reward if get_reward else None,
+        train_reward_by_pos=train_reward_by_pos if get_reward else None,
+        confidence=confidence if get_reward else None,
         dataset_variables=dataset_variables,
     )
 
