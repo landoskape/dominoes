@@ -11,9 +11,11 @@ def train(nets, optimizers, dataset, **parameters):
     # get some key training parameters
     epochs = parameters.get("epochs")
     device = parameters.get("device")
-    max_output = parameters.get("max_output")
     verbose = parameters.get("verbose", True)
+    max_possible_output = parameters.get("max_possible_output")  # this is the maximum number of outputs ever
     learning_mode = parameters.get("learning_mode")
+    temperature = parameters.get("temperature", 1.0)
+    thompson = parameters.get("thompson", True)
 
     # process the learning_mode and save conditions
     save_loss = parameters.get("save_loss", False)
@@ -23,7 +25,8 @@ def train(nets, optimizers, dataset, **parameters):
 
     if learning_mode == "reinforce":
         # create gamma transform for processing reward if not provided in parameters
-        gamma_transform = dataset.create_gamma_transform(max_output, parameters["gamma"], device=device)
+        gamma = parameters.get("gamma")
+        gamma_transform = dataset.create_gamma_transform(max_possible_output, gamma, device=device)
 
     # create some variables for storing data related to supervised loss
     if save_loss:
@@ -32,8 +35,8 @@ def train(nets, optimizers, dataset, **parameters):
     # create some variables for storing data related to rewards
     if save_reward:
         train_reward = torch.zeros(epochs, num_nets, device="cpu")
-        train_reward_by_pos = torch.zeros(epochs, max_output, num_nets, device="cpu")
-        confidence = torch.zeros(epochs, max_output, num_nets, device="cpu")
+        train_reward_by_pos = torch.zeros(epochs, max_possible_output, num_nets, device="cpu")
+        confidence = torch.zeros(epochs, max_possible_output, num_nets, device="cpu")
         # need this for estimating confidence
         temperatures = [net.temperature for net in nets]
 
@@ -46,12 +49,27 @@ def train(nets, optimizers, dataset, **parameters):
         # generate a batch
         batch = dataset.generate_batch(**parameters)
 
-        # get input and initial idx for batch
+        # get input for batch
         input = batch["input"]
+
+        # add context inputs for batch if requested (use *context_inputs for consistent handling)
+        context_inputs = []
+        if "context" in batch:
+            context_inputs.append(batch["context"])
+        if "multimode" in batch:
+            context_inputs.append(batch["multimode"])
+
+        # get current max output for batch
+        max_output = batch.get("max_output", max_possible_output)
+
+        # get kwargs for forward pass
         net_kwargs = dict(
-            init=batch.get("init", None),
             mask=batch.get("mask", None),
-            decode_mask=batch.get("decode_mask", None),
+            context_mask=batch.get("context_mask", None),
+            mm_mask=batch.get("mm_mask", None),
+            init=batch.get("init", None),
+            temperature=temperature,
+            thompson=thompson,
             max_output=max_output,
         )
 
@@ -60,7 +78,7 @@ def train(nets, optimizers, dataset, **parameters):
             opt.zero_grad()
 
         # get output of network
-        scores, choices = named_transpose([net(input, **net_kwargs) for net in nets])
+        scores, choices = named_transpose([net(input, *context_inputs, **net_kwargs) for net in nets])
 
         # get loss
         if get_loss:
@@ -78,7 +96,8 @@ def train(nets, optimizers, dataset, **parameters):
         # backprop with reinforcement learning (with the REINFORCE algorithm)
         if learning_mode == "reinforce":
             # get processed rewards, do backprop
-            J = dataset.process_rewards(rewards, scores, choices, gamma_transform)[1]
+            c_gamma_transform = gamma_transform[:max_output][:, :max_output]  # only use the part of gamma_transform that is needed
+            J = dataset.process_rewards(rewards, scores, choices, c_gamma_transform)[1]
             for j in J:
                 j.backward()
 
