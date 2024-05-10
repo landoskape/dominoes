@@ -23,7 +23,6 @@ def get_transformer_layer(
     num_multimodal=0,
     kqv_bias=False,
     mlp_bias=True,
-    residual=False,
 ):
     """
     create transformer layer with requested arguments
@@ -35,7 +34,6 @@ def get_transformer_layer(
         kqnorm=kqnorm,
         kqv_bias=kqv_bias,
         mlp_bias=mlp_bias,
-        residual=residual,
     )
     if multimodal:
         transformer_kwargs["num_multimodal"] = num_multimodal
@@ -79,7 +77,7 @@ class TransformerBaseClass(nn.Module, ABC):
             multimodal=multimodal,
             num_multimodal=num_multimodal,
             kqv_bias=kqv_bias,
-            residual=False,
+            residual=False,  # residual is handled in the transformer layer's forward pass
         )
 
         # make the mlp layers
