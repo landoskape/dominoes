@@ -12,7 +12,7 @@ import torch
 from .. import files as fm
 from .. import datasets
 from .. import train
-from ..networks import get_pointer_network, get_pointer_methods, get_pointer_kwargs
+from ..networks import get_pointer_network, get_pointer_methods, get_pointer_arguments
 from ..utils import loadSavedExperiment
 from .. import utils
 
@@ -63,8 +63,8 @@ class PointerArchitectureComparison(Experiment):
         """
 
         # create networks
-        embedding_dim, pointer_kwargs = get_pointer_kwargs(self.args)
-        pointer_kwargs.pop("pointer_method", None)  # Remove pointer method because it's set here to all of them
+        embedding_dim, pointer_kwargs = get_pointer_arguments(self.args)
+        _ = pointer_kwargs.pop("pointer_method", None)  # Remove pointer method because it's set here to all of them
         nets = [
             get_pointer_network(
                 input_dim,
