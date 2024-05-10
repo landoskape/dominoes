@@ -41,7 +41,7 @@ def train(nets, optimizers, dataset, **parameters):
         temperatures = [net.temperature for net in nets]
 
     # create dataset-specified variables for storing data
-    dataset_variables = dataset.create_training_variables(num_nets, parameters)
+    dataset_variables = dataset.create_training_variables(num_nets, **parameters)
 
     # epoch loop
     epoch_loop = tqdm(range(epochs)) if verbose else range(epochs)
