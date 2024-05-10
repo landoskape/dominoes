@@ -59,32 +59,25 @@ def get_pointer_network(
     return pointernet_constructor(input_dim, embedding_dim, **pointernet_kwargs)
 
 
-"""
-    input_dim,
-    embedding_dim,
-    embedding_bias=True,
-    
-    -- contextual=False,
-    -- multimodal=False,
-    -- num_multimodal=0,
-    -- mm_input_dim=None,
-    -- require_init=False,
-    -- permutation=True,
-
-    num_encoding_layers=1,
-    encoder_method="transformer",
-    decoder_method="transformer",
-    pointer_method="standard",
-    encoder_kwargs={},
-    decoder_kwargs={},
-    pointer_kwargs={},
-    thompson=False,
-    temperature=1.0,
-    
-"""
-
-
 class PointerArguments:
+    """
+    Supporting class for processing arguments from an ArgumentParser to construct a PointerNetwork
+
+    The input to the PointerArguments constructor is a dictionary of arguments from an ArgumentParser,
+    and the initialization method processes these arguments to get the required and optional kwargs
+    for the PointerNetwork. It knows the relationship between the name of the argument as defined in
+    the ArgumentParser and the name of the associated keyword argument for the relevant constructor
+    (e.g. "num_heads" is used in several places, so the map is from "{encoder/decoder/pointer}_num_heads"
+    to "num_heads"). There are overlapping and nonoverlapping arguments for different possible constructors,
+    so the user should think carefully about how to send inputs into the network.
+
+    Usage:
+    ```python
+    args = ArgumentParser().parse_args() # (this will be defined elsewhere, usually in the experiment class)
+    embedding_dim, pointernet_kwargs = PointerArguments(vars(args)).get_args()
+    ptrnet = PointerNetwork(*other_args, embedding_dim, **other_kwargs, **pointernet_kwargs)
+    """
+
     def __init__(self, args):
         self.args = args
         self._get_pointernet_kwargs()
@@ -92,9 +85,13 @@ class PointerArguments:
         self._get_decoder_kwargs()
         self._get_pointer_kwargs()
 
-    def __call__(self):
+    def get_args(self):
         """return stored arguments"""
-        return self.embedding_dim, self.pointernet_kwargs, self.encoder_kwargs, self.decoder_kwargs, self.pointer_kwargs
+        pointernet_kwargs = self.pointernet_kwargs
+        pointernet_kwargs["encoder_kwargs"] = self.encoder_kwargs
+        pointernet_kwargs["decoder_kwargs"] = self.decoder_kwargs
+        pointernet_kwargs["pointer_kwargs"] = self.pointer_kwargs
+        return self.embedding_dim, pointernet_kwargs
 
     def _get_kwargs(self, required_args, required_kwargs, possible_kwargs, signflip_kwargs, name="pointer network"):
         """method for getting the required and optional kwargs from stored argument dictionary"""
@@ -151,6 +148,81 @@ class PointerArguments:
         # store arguments in self
         self.embedding_dim = embedding_dim
         self.pointernet_kwargs = pointernet_kwargs
+
+    def _get_encoder_kwargs(self):
+        """method for getting the encoder kwargs from a dictionary of arguments"""
+        required_args = []
+
+        # these are the possible kwargs that can be passed to the encoder
+        # key is the argument name in the ArgParser, value is the encoder keyword
+        required_kwargs = dict(
+            encoder_num_heads="num_heads",
+        )
+        possible_kwargs = dict(
+            encoder_expansion="expansion",
+        )
+        signflip_kwargs = dict(
+            encoder_no_kqnorm="kqnorm",
+            encoder_no_kqv_bias="kqv_bias",
+            encoder_no_mlp_bias="mlp_bias",
+            encoder_no_residual="residual",
+        )
+
+        # get arguments for encoder
+        _, encoder_kwargs = self._get_kwargs(required_args, required_kwargs, possible_kwargs, signflip_kwargs, name="encoder")
+
+        # store arguments in self
+        self.encoder_kwargs = encoder_kwargs
+
+    def _get_decoder_kwargs(self):
+        """method for getting the decoder kwargs from a dictionary of arguments"""
+        required_args = []
+
+        # these are the possible kwargs that can be passed to the decoder
+        # key is the argument name in the ArgParser, value is the decoder keyword
+        required_kwargs = {}
+        possible_kwargs = dict(
+            decoder_num_heads="num_heads",
+            decoder_expansion="expansion",
+        )
+        signflip_kwargs = dict(
+            decoder_no_gru_bias="gru_bias",
+            decoder_no_kqnorm="kqnorm",
+            decoder_no_kqv_bias="kqv_bias",
+            decoder_no_mlp_bias="mlp_bias",
+            decoder_no_residual="residual",
+        )
+
+        # get arguments for decoder
+        _, decoder_kwargs = self._get_kwargs(required_args, required_kwargs, possible_kwargs, signflip_kwargs, name="decoder")
+
+        # store arguments in self
+        self.decoder_kwargs = decoder_kwargs
+
+    def _get_pointer_kwargs(self):
+        """method for getting the pointer kwargs from a dictionary of arguments"""
+        required_args = []
+
+        # these are the possible kwargs that can be passed to the pointer
+        # key is the argument name in the ArgParser, value is the pointer keyword
+        required_kwargs = {}
+        possible_kwargs = dict(
+            pointer_bias="bias",
+            pointer_num_heads="num_heads",
+            pointer_expansion="expansion",
+        )
+        signflip_kwargs = dict(
+            decoder_no_kqnorm="kqnorm",
+            decoder_no_kqv_bias="kqv_bias",
+            decoder_no_mlp_bias="mlp_bias",
+            decoder_no_residual="residual",
+        )
+
+        # get arguments for pointer
+        _, pointer_kwargs = self._get_kwargs(required_args, required_kwargs, possible_kwargs, signflip_kwargs, name="pointer layer")
+
+        # store arguments in self
+        self.pointer_kwargs = pointer_kwargs
 
 
 class PointerNetworkBaseClass(nn.Module, ABC):
@@ -267,11 +339,13 @@ class PointerNetworkBaseClass(nn.Module, ABC):
     def _build_encoder(self, num_encoding_layers, encoder_method, encoder_kwargs):
         """flexible method for creating encoding layers for pointer network"""
         # build encoder
+        required_kwargs = [
+            "num_heads",
+            "kqnorm",
+        ]
         if encoder_method == "attention":
-            required_kwargs = [
-                "num_heads",
-                "kqnorm",
-                "bias",
+            required_kwargs += [
+                "kqv_bias",
                 "residual",
             ]
             _check_kwargs(encoder_method, encoder_kwargs, required_kwargs)
@@ -284,7 +358,7 @@ class PointerNetworkBaseClass(nn.Module, ABC):
                         contextual=self.contextual,
                         multimodal=self.multimodal,
                         num_multimodal=self.multimodal,
-                        bias=encoder_kwargs["bias"],
+                        kqv_bias=encoder_kwargs["kqv_bias"],
                         residual=encoder_kwargs["residual"],
                     )
                     for _ in range(num_encoding_layers)
@@ -292,12 +366,10 @@ class PointerNetworkBaseClass(nn.Module, ABC):
             )
 
         elif encoder_method == "transformer":
-            required_kwargs = [
-                "num_heads",
+            required_kwargs += [
                 "expansion",
-                "kqnorm",
+                "kqv_bias",
                 "mlp_bias",
-                "attention_bias",
             ]
             _check_kwargs(encoder_method, encoder_kwargs, required_kwargs)
             self.encoding_layers = nn.ModuleList(
@@ -310,8 +382,8 @@ class PointerNetworkBaseClass(nn.Module, ABC):
                         contextual=self.contextual,
                         multimodal=self.multimodal,
                         num_multimodal=self.multimodal,
+                        kqv_bias=encoder_kwargs["kqv_bias"],
                         mlp_bias=encoder_kwargs["mlp_bias"],
-                        attention_bias=encoder_kwargs["attention_bias"],
                     )
                     for _ in range(num_encoding_layers)
                 ]
