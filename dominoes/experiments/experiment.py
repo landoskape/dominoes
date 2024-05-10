@@ -350,17 +350,17 @@ class Experiment(ABC):
         # return the dataset
         return get_dataset(self.args.task, build=True, device=self.device, **kwargs)
 
-    def make_train_parameters(self, dataset):
+    def make_train_parameters(self, dataset, train=True):
         """simple method for getting training parameters"""
         # get the training parameters
         parameters = {}
-        parameters["epochs"] = self.args.epochs
+        parameters["epochs"] = self.args.train_epochs if train else self.args.test_epochs
         parameters["device"] = self.device
         parameters["verbose"] = not self.args.silent
         parameters["max_possible_output"] = dataset.get_max_possible_output()
         parameters["learning_mode"] = self.args.learning_mode
-        parameters["temperature"] = self.args.train_temperature
-        parameters["thompson"] = not self.args.no_thompson
+        parameters["temperature"] = self.args.train_temperature if train else 1.0
+        parameters["thompson"] = not self.args.no_thompson if train else False
         parameters["gamma"] = self.args.gamma
         parameters["save_loss"] = self.args.save_loss
         parameters["save_reward"] = self.args.save_reward
