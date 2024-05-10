@@ -9,6 +9,19 @@ def add_standard_training_parameters(parser):
     parser.add_argument("--train_epochs", type=int, default=2000, help="how many epochs to train the networks on")
     parser.add_argument("--test_epochs", type=int, default=100, help="how many epochs to train the networks on")
     parser.add_argument("--replicates", type=int, default=2, help="how many replicates of each network to train")
+    parser.add_argument("--silent", default=False, action="store_true", help="if used, won't print training progress")
+    parser.add_argument(
+        "--save_loss",
+        default=False,
+        action="store_true",
+        help="if used, will save loss during training (always True for learning_mode=supervised)",
+    )
+    parser.add_argument(
+        "--save_reward",
+        default=False,
+        action="store_true",
+        help="if used, will save reward during training (always True for learning_mode=reinforce)",
+    )
     return parser
 
 
@@ -201,6 +214,9 @@ def add_dominoe_sequencer_parameters(parser):
 def add_dominoe_sorting_parameters(parser):
     """arguments for the dominoe sorting task"""
     parser.add_argument(
-        "--allow_mistakes", default=False, action="store_true", help="if used, will allow mistakes in the sorting task (default=False)"
+        "--allow_mistakes",
+        default=False,
+        action="store_true",
+        help="if used, will allow mistakes in the sorting task (default=False)",
     )
     return parser
