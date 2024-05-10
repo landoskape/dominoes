@@ -89,7 +89,7 @@ class PointerStandard(PointerLayer):
 
     def _get_logits(self, encoded, decoder_state, mask):
         transform_decoded = self.W2(decoder_state)
-        logits = self.vt(torch.tanh(encoded.stored_encoding + transform_decoded.unsqueeze(1))).squeeze(2)
+        logits = self.vt(torch.tanh(encoded + transform_decoded.unsqueeze(1))).squeeze(2)
         return logits
 
 
@@ -108,7 +108,7 @@ class PointerDot(PointerLayer):
 
     def _get_logits(self, encoded, decoder_state, mask):
         transform_decoded = self.dln(self.W2(decoder_state))
-        logits = torch.bmm(encoded.stored_encoding, transform_decoded.unsqueeze(2)).squeeze(2)
+        logits = torch.bmm(encoded, transform_decoded.unsqueeze(2)).squeeze(2)
         return logits
 
 
@@ -129,7 +129,7 @@ class PointerDotNoLN(PointerLayer):
 
     def _get_logits(self, encoded, decoder_state, mask):
         transform_decoded = self.dln(self.W2(decoder_state))
-        logits = torch.bmm(encoded.stored_encoding, transform_decoded.unsqueeze(2)).squeeze(2)
+        logits = torch.bmm(encoded, transform_decoded.unsqueeze(2)).squeeze(2)
         return logits
 
 
@@ -146,7 +146,7 @@ class PointerDotLean(PointerLayer):
 
     def _get_logits(self, encoded, decoder_state, mask):
         transform_decoded = self.dln(decoder_state)
-        logits = torch.bmm(encoded.stored_encoding, transform_decoded.unsqueeze(2)).squeeze(2)
+        logits = torch.bmm(encoded, transform_decoded.unsqueeze(2)).squeeze(2)
         return logits
 
 
@@ -172,7 +172,7 @@ class PointerAttention(PointerLayer):
 
     def _get_logits(self, encoded, decoder_state, mask):
         # attention on encoded representations with decoder_state
-        attended = self.attention(encoded.stored_encoding, [decoder_state], mask=mask)
+        attended = self.attention(encoded, [decoder_state], mask=mask)
         logits = self.vt(torch.tanh(attended)).squeeze(2)
         return logits
 
@@ -198,7 +198,7 @@ class PointerTransformer(PointerLayer):
 
     def _get_logits(self, encoded, decoder_state, mask):
         # transform encoded representations with decoder_state
-        transformed = self.transformer(encoded.stored_encoding, [decoder_state], mask=mask)
+        transformed = self.transformer(encoded, [decoder_state], mask=mask)
         logits = self.vt(torch.tanh(transformed)).squeeze(2)
         return logits
 

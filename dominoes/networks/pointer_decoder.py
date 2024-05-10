@@ -156,11 +156,11 @@ class PointerDecoder(nn.Module):
         - updates the mask if permutation is enabled
         """
         # update context representation
-        decoder_context = self.decode(processed_encoding, decoder_input, decoder_context, mask)
+        decoder_context = self.decode(processed_encoding.stored_encoding, decoder_input, decoder_context, mask)
 
         # use pointer attention to evaluate scores of each possible input given the context
         decoder_state = self.get_decoder_state(decoder_input, decoder_context)
-        log_score = self.pointer(processed_encoding, decoder_state, mask=mask, temperature=temperature)
+        log_score = self.pointer(processed_encoding.stored_encoding, decoder_state, mask=mask, temperature=temperature)
 
         # choose token for this sample
         if thompson:
@@ -172,7 +172,7 @@ class PointerDecoder(nn.Module):
 
         # next decoder_input is whatever token had the highest probability
         index_tensor = choice.unsqueeze(-1).expand(batch_size, 1, self.embedding_dim)
-        decoder_input = torch.gather(processed_encoding, dim=1, index=index_tensor).squeeze(1)
+        decoder_input = torch.gather(processed_encoding.stored_encoding, dim=1, index=index_tensor).squeeze(1)
 
         if self.permutation:
             # mask previously chosen tokens (don't include this in the computation graph)
