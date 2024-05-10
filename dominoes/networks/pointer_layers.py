@@ -161,6 +161,9 @@ class PointerAttention(PointerLayer):
         kwargs["num_multimodal"] = 1
         self.attention_kwargs = kwargs
         num_heads = kwargs.pop("num_heads")
+        _ = kwargs.pop("bias", None)  # used for other pointer layers, not PointerAttention
+        _ = kwargs.pop("expansion", None)  # used for other pointer layers, not PointerAttention
+        _ = kwargs.pop("mlp_bias", None)  # used for other pointer layers, not PointerAttention
         self.attention = get_attention_layer(self.embedding_dim, num_heads, **kwargs)
         self.vt = nn.Linear(self.embedding_dim, 1, bias=False)
 
@@ -185,6 +188,7 @@ class PointerTransformer(PointerLayer):
         kwargs["num_multimodal"] = 1
         self.transformer_kwargs = kwargs
         num_heads = kwargs.pop(kwargs)
+        _ = kwargs.pop("bias", None)  # used for other pointer layers, not PointerTransformer
         self.transformer = get_transformer_layer(self.embedding_dim, num_heads, **kwargs)
         self.vt = nn.Linear(self.embedding_dim, 1, bias=False)
 
