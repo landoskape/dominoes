@@ -25,9 +25,9 @@ def make_baseline_nets(nets, dataset, batch_parameters={}, significance=0.05, ma
 
 def check_baseline_updates(nets, bl_nets):
     """check if baseline networks should be updated"""
-    for net, bl_net in zip(nets, bl_nets):
-        bl_net.check_improvement(net)
-    return bl_net
+    for inet, net in enumerate(nets):
+        bl_nets[inet].check_improvement(net)
+    return bl_nets
 
 
 class BaselineNetwork(nn.Module):
@@ -44,7 +44,6 @@ class BaselineNetwork(nn.Module):
         self.dataset = dataset
         self.batch_parameters = batch_parameters
         self.max_output = max_output
-        self.update_reference()
 
         # set forward kwargs for use in every forward pass
         self.forward_kwargs = dict(
@@ -53,14 +52,17 @@ class BaselineNetwork(nn.Module):
             max_output=self.max_output,
         )
 
+        # create a reference batch
+        self.update_reference()
+
         # set update significance
         self.set_significance(significance)
 
     def update_reference(self):
         """set the reference batch for the baseline network"""
         self.ref_batch = self.dataset.generate_batch(**self.batch_parameters)
-        self.ref_choices = forward_batch([self.net], self.ref_batch, **self.forward_kwargs)[1][0]
-        self.ref_rewards = self.dataset.reward_function(self.ref_choices, self.ref_batch)
+        ref_choices = forward_batch([self.net], self.ref_batch, **self.forward_kwargs)[1][0]
+        self.ref_rewards = self.dataset.reward_function(ref_choices, self.ref_batch)
 
     @torch.no_grad()
     def update_network(self, net):
@@ -76,8 +78,8 @@ class BaselineNetwork(nn.Module):
     @torch.no_grad()
     def check_improvement(self, net):
         """check if the network should be updated based on the reference batch"""
-        choices = forward_batch([net], self.batch, **self.forward_kwargs)[1][0]
-        rewards = self.dataset.reward_function(choices, self.batch)
+        choices = forward_batch([net], self.ref_batch, **self.forward_kwargs)[1][0]
+        rewards = self.dataset.reward_function(choices, self.ref_batch)
         p = ttest_rel(rewards.view(-1).cpu().numpy(), self.ref_rewards.view(-1).cpu().numpy(), alternative="greater")[1]
 
         if p < self.significance:
