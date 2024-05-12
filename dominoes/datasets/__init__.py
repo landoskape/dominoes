@@ -1,11 +1,11 @@
-from .dominoe_dataset import DominoeSequencer, DominoeSorting, DominoeDataset
+from .dominoe_dataset import DominoeSequencer, DominoeSorter, DominoeDataset
 from .tsp_dataset import TSPDataset
 
 
 DATASET_REGISTRY = {
     "dominoes": DominoeDataset,  # used for accessing the dominoe dataset class without a task
     "dominoe_sequencer": DominoeSequencer,  # used for sequencing dominoes according to the standard game
-    "dominoe_sorting": DominoeSorting,  # used for sorting dominoes according to their values
+    "dominoe_sorter": DominoeSorter,  # used for sorting dominoes according to their values
     "tsp": TSPDataset,  # used for solving the traveling salesman problem
 }
 
