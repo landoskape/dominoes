@@ -257,7 +257,7 @@ class DatasetRL(Dataset):
         """
         return torch.gather(scores, 2, choices.unsqueeze(2)).squeeze(2)
 
-    def process_rewards(self, rewards, scores, choices, gamma_transform):
+    def process_rewards(self, rewards, scores, choices, gamma_transform, baseline_rewards=None):
         """
         process the rewards for performing policy gradient
 
@@ -266,12 +266,21 @@ class DatasetRL(Dataset):
             scores: list of torch.Tensor, the log scores for the choices for each network
             choices: list of torch.Tensor, index to the choices made by each network
             gamma_transform: torch.Tensor, the gamma transform matrix for the reward
+            baseline_rewards: list of torch.Tensor, the baseline rewards for each network (if using baselines)
+                              -- if provided, will adjust G to be the advantage of the network
 
         returns:
             list of torch.Tensor, the rewards for each network
         """
         # measure cumulative discounted rewards for each network
         G = [torch.matmul(reward, gamma_transform) for reward in rewards]
+
+        # if using baselines, adjust G to be the advantage of the network
+        if baseline_rewards is not None:
+            # measure cumulative discounted rewards for each network
+            G_baseline = [torch.matmul(reward, gamma_transform) for reward in baseline_rewards]
+            # adjust G to be the advantage of the network
+            G = [g - gb for g, gb in zip(G, G_baseline)]
 
         # measure choice score for each network (the log-probability for each choice)
         choice_scores = [self.get_choice_score(choice, score) for choice, score in zip(choices, scores)]
