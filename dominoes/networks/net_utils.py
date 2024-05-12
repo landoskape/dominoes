@@ -53,3 +53,41 @@ def _process_multimodal_input(multimode, mm_mask, num_multimodal, mm_dim):
     assert all([mmb == mm_batch_size[0] for mmb in mm_batch_size]), "batch size of each multimodal input should be the same"
 
     return mm_batch_size[0], mm_mask
+
+
+def forward_batch(nets, batch, max_output=None, temperature=None, thompson=None):
+    """
+    forward pass for a batch of data on a list of pointer networks
+
+    batch is a dictionary with variable inputs and kwargs depending on the dataset.
+    This is a one-size fits all method for processing a batch through a list of networks.
+    """
+    # get input for batch
+    input = batch["input"]
+
+    # get current max output for batch
+    max_output = batch.get("max_output", max_output)
+
+    # get kwargs for forward pass
+    net_kwargs = dict(
+        mask=batch.get("mask", None),
+        init=batch.get("init", None),
+        temperature=temperature,
+        thompson=thompson,
+        max_output=max_output,
+    )
+
+    # add context inputs for batch if requested (use *context_inputs for consistent handling)
+    context_inputs = []
+    if "context" in batch:
+        context_inputs.append(batch["context"])
+        net_kwargs["context_mask"] = batch.get("context_mask", None)
+    if "multimode" in batch:
+        context_inputs.append(batch["multimode"])
+        net_kwargs["mm_mask"] = batch.get("mm_mask", None)
+
+    # get output of network
+    scores, choices = named_transpose([net(input, *context_inputs, **net_kwargs) for net in nets])
+
+    # return outputs
+    return scores, choices
