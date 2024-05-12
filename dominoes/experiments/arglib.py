@@ -39,6 +39,12 @@ def add_network_training_metaparameters(parser):
         action="store_true",
         help="if used, do greedy instead of Thompson sampling during training (default=False)",
     )
+    parser.add_argument(
+        "--no_baseline",
+        default=False,
+        action="store_true",
+        help="if used, will not use a baseline correction during training (default=False)",
+    )
     return parser
 
 
