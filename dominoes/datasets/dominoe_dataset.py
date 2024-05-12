@@ -753,7 +753,7 @@ class DominoeSequencer(DominoeMaster):
         DominoeMaster.__init__(self, self.task, *args, **kwargs)
 
 
-class DominoeSorting(DominoeMaster):
+class DominoeSorter(DominoeMaster):
     task = "sorting"
 
     def __init__(self, *args, **kwargs):
