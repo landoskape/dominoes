@@ -13,7 +13,7 @@ from .. import files as fm
 from .. import datasets
 from .. import train
 from ..networks import get_pointer_network, get_pointer_methods, get_pointer_arguments
-from ..utils import loadSavedExperiment
+from ..utils import loadSavedExperiment, compute_stats_by_type
 from .. import utils
 
 from .experiment import Experiment
@@ -115,14 +115,20 @@ class PointerArchitectureComparison(Experiment):
         """
         main plotting loop
         """
+        pointer_methods = get_pointer_methods()
+        num_methods = len(pointer_methods)
         train_results = results["train_results"]
         if "train_loss" in train_results and train_results["train_loss"] is not None:
-            train_loss = train_results["train_loss"]
-            plt.plot(train_loss)
+            train_loss = compute_stats_by_type(train_results["train_loss"], num_methods, 1)[0]
+            for i in range(num_methods):
+                plt.plot(train_loss[:, i], label=pointer_methods[i])
+            plt.legend()
             plt.show()
         if "train_reward" in train_results and train_results["train_reward"] is not None:
-            train_reward = train_results["train_reward"]
-            plt.plot(train_reward)
+            train_reward = compute_stats_by_type(train_results["train_reward"], num_methods, 1)[0]
+            for i in range(num_methods):
+                plt.plot(train_reward[:, i], label=pointer_methods[i])
+            plt.legend()
             plt.show()
 
 
