@@ -45,6 +45,9 @@ def add_network_training_metaparameters(parser):
         action="store_true",
         help="if used, will not use a baseline correction during training (default=False)",
     )
+    parser.add_argument("--bl_temperature", type=float, default=1.0, help="temperature for baseline networks during training")
+    parser.add_argument("--bl_thompson", default=False, action="store_true", help="if used, will use Thompson sampling for baseline networks")
+    parser.add_argument("--bl_significance", type=float, default=0.05, help="significance level for updating baseline networks")
     return parser
 
 

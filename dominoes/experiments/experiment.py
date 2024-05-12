@@ -362,6 +362,9 @@ class Experiment(ABC):
         parameters["temperature"] = self.args.train_temperature if train else 1.0
         parameters["thompson"] = not self.args.no_thompson if train else False
         parameters["baseline"] = not self.args.no_baseline if train else False
+        parameters["bl_temperature"] = self.args.bl_temperature
+        parameters["bl_thompson"] = not self.args.bl_thompson
+        parameters["bl_significance"] = self.args.bl_significance
         parameters["gamma"] = self.args.gamma
         parameters["save_loss"] = self.args.save_loss
         parameters["save_reward"] = self.args.save_reward
