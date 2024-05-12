@@ -162,7 +162,7 @@ class Experiment(ABC):
             help="plot saved data without retraining and analyzing networks",
         )
         parser.add_argument(
-            "--save-networks",
+            "--save_networks",
             default=False,
             action="store_true",
             help="if --nosave wasn't provided, will also save networks that are trained",
@@ -191,7 +191,7 @@ class Experiment(ABC):
 
         # common parameters that shouldn't be updated when loading old experiment
         parser.add_argument(
-            "--use-timestamp",
+            "--use_timestamp",
             default=False,
             action="store_true",
             help="if used, will save data in a folder named after the current time (or whatever is provided in --timestamp)",
@@ -361,6 +361,7 @@ class Experiment(ABC):
         parameters["learning_mode"] = self.args.learning_mode
         parameters["temperature"] = self.args.train_temperature if train else 1.0
         parameters["thompson"] = not self.args.no_thompson if train else False
+        parameters["baseline"] = not self.args.no_baseline if train else False
         parameters["gamma"] = self.args.gamma
         parameters["save_loss"] = self.args.save_loss
         parameters["save_reward"] = self.args.save_reward
