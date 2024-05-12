@@ -1,6 +1,8 @@
 from tqdm import tqdm
 import torch
 from .utils import named_transpose
+from .networks.net_utils import forward_batch
+from .networks.baseline import make_baseline_nets, check_baseline_updates
 
 
 def train(nets, optimizers, dataset, **parameters):
@@ -37,9 +39,19 @@ def train(nets, optimizers, dataset, **parameters):
         train_reward_by_pos = torch.zeros(epochs, max_possible_output, num_nets, device="cpu")
         confidence = torch.zeros(epochs, max_possible_output, num_nets, device="cpu")
 
-    # # prepare baseline networks if required
-    # if baseline:
-    #     baseline_nets = [net.copy() for net in nets]
+    # prepare baseline networks if required
+    if baseline:
+        bl_temperature = parameters.get("bl_temperature", 1.0)
+        bl_thompson = parameters.get("bl_thompson", False)
+        bl_significance = parameters.get("bl_significance", 0.05)
+        bl_nets = make_baseline_nets(
+            nets,
+            dataset,
+            batch_parameters=parameters,
+            significance=bl_significance,
+            temperature=bl_temperature,
+            thompson=bl_thompson,
+        )
 
     # create dataset-specified variables for storing data
     dataset_variables = dataset.create_training_variables(num_nets, **parameters)
@@ -50,36 +62,16 @@ def train(nets, optimizers, dataset, **parameters):
         # generate a batch
         batch = dataset.generate_batch(**parameters)
 
-        # get input for batch
-        input = batch["input"]
-
-        # get current max output for batch
-        max_output = batch.get("max_output", max_possible_output)
-
-        # get kwargs for forward pass
-        net_kwargs = dict(
-            mask=batch.get("mask", None),
-            init=batch.get("init", None),
-            temperature=temperature,
-            thompson=thompson,
-            max_output=max_output,
-        )
-
-        # add context inputs for batch if requested (use *context_inputs for consistent handling)
-        context_inputs = []
-        if "context" in batch:
-            context_inputs.append(batch["context"])
-            net_kwargs["context_mask"] = batch.get("context_mask", None)
-        if "multimode" in batch:
-            context_inputs.append(batch["multimode"])
-            net_kwargs["mm_mask"] = batch.get("mm_mask", None)
-
         # zero gradients
         for opt in optimizers:
             opt.zero_grad()
 
-        # get output of network
-        scores, choices = named_transpose([net(input, *context_inputs, **net_kwargs) for net in nets])
+        scores, choices = forward_batch(nets, batch, max_possible_output, temperature, thompson)
+
+        # get baseline choices if using them
+        if baseline:
+            with torch.no_grad():
+                bl_choices = forward_batch(bl_nets, batch, max_possible_output, bl_temperature, bl_thompson)[1]
 
         # get loss
         if get_loss:
@@ -88,6 +80,11 @@ def train(nets, optimizers, dataset, **parameters):
         # get reward
         if get_reward:
             rewards = [dataset.reward_function(choice, batch) for choice in choices]
+            if baseline:
+                with torch.no_grad():
+                    bl_rewards = [dataset.reward_function(choice, batch) for choice in bl_choices]
+            else:
+                bl_rewards = None
 
         # backprop with supervised learning (usually using negative log likelihood loss)
         if learning_mode == "supervised":
@@ -96,15 +93,26 @@ def train(nets, optimizers, dataset, **parameters):
 
         # backprop with reinforcement learning (with the REINFORCE algorithm)
         if learning_mode == "reinforce":
+            # get max output for this batch
+            max_output = batch.get("max_output", max_possible_output)
             # get processed rewards, do backprop
             c_gamma_transform = gamma_transform[:max_output][:, :max_output]  # only use the part of gamma_transform that is needed
-            J = dataset.process_rewards(rewards, scores, choices, c_gamma_transform)[1]
+            _, J = dataset.process_rewards(
+                rewards,
+                scores,
+                choices,
+                c_gamma_transform,
+                baseline_rewards=bl_rewards,
+            )
             for j in J:
                 j.backward()
 
         # update networks
         for opt in optimizers:
             opt.step()
+
+        # update baseline networks if required
+        bl_nets = check_baseline_updates(nets, bl_nets)
 
         # save training data
         with torch.no_grad():
