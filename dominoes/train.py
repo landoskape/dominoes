@@ -16,6 +16,7 @@ def train(nets, optimizers, dataset, **parameters):
     learning_mode = parameters.get("learning_mode")
     temperature = parameters.get("temperature", 1.0)
     thompson = parameters.get("thompson", True)
+    baseline = parameters.get("baseline", False)
 
     # process the learning_mode and save conditions
     get_loss = learning_mode == "supervised" or parameters.get("save_loss", False)
@@ -35,6 +36,10 @@ def train(nets, optimizers, dataset, **parameters):
         train_reward = torch.zeros(epochs, num_nets, device="cpu")
         train_reward_by_pos = torch.zeros(epochs, max_possible_output, num_nets, device="cpu")
         confidence = torch.zeros(epochs, max_possible_output, num_nets, device="cpu")
+
+    # # prepare baseline networks if required
+    # if baseline:
+    #     baseline_nets = [net.copy() for net in nets]
 
     # create dataset-specified variables for storing data
     dataset_variables = dataset.create_training_variables(num_nets, **parameters)
