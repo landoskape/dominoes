@@ -4,7 +4,7 @@ from torch import nn
 from .attention_modules import get_attention_layer
 from .transformer_modules import get_transformer_layer
 from .pointer_layers import get_pointer_layer
-from .net_utils import _check_kwargs
+from ..utils import check_args
 
 
 class PointerDecoder(nn.Module):
@@ -37,7 +37,7 @@ class PointerDecoder(nn.Module):
             required_kwargs = [
                 "gru_bias",
             ]
-            _check_kwargs("gru", decoder_kwargs, required_kwargs)
+            check_args("gru", decoder_kwargs, required_kwargs)
             self.decoder = nn.GRUCell(input_size=self.embedding_dim, hidden_size=self.embedding_dim, bias=decoder_kwargs["gru_bias"])
 
         elif decoder_method == "attention":
@@ -46,7 +46,7 @@ class PointerDecoder(nn.Module):
                 "kqnorm",
                 "kqv_bias",
             ]
-            _check_kwargs("attention", decoder_kwargs, required_kwargs)
+            check_args("attention", decoder_kwargs, required_kwargs)
             self.decoder = get_attention_layer(
                 self.embedding_dim,
                 decoder_kwargs["num_heads"],
@@ -65,7 +65,7 @@ class PointerDecoder(nn.Module):
                 "kqv_bias",
                 "mlp_bias",
             ]
-            _check_kwargs("transformer", decoder_kwargs, required_kwargs)
+            check_args("transformer", decoder_kwargs, required_kwargs)
             self.decoder = get_transformer_layer(
                 self.embedding_dim,
                 decoder_kwargs["num_heads"],

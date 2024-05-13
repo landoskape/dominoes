@@ -64,6 +64,42 @@ def compute_stats_by_type(tensor, num_types, dim, method="var"):
     return type_means, type_dev
 
 
+def check_args(method_name, args, required_args):
+    """method for checking args for required arguments and returning useful errors (args is a dictionary)"""
+    for key in required_args:
+        if key not in args:
+            raise ValueError(f"required arg {key} not found in args ({method_name} requires {required_args})")
+
+
+def process_arguments(args, required_args, required_kwargs, possible_kwargs, signflip_kwargs, name):
+    """method for getting the required and optional kwargs from stored argument dictionary"""
+    # if any required args are missing, raise an error
+    check_args(name, args, required_args)
+
+    # get required args (in order of list!)
+    args = [args[arg] for arg in required_args]
+
+    # get kwargs
+    kwargs = {}
+
+    # if any required kwargs are missing, raise an error
+    check_args(name, args, required_kwargs)
+    for key, value in required_kwargs.items():
+        kwargs[value] = args[key]
+
+    # if any kwargs are included in args, add them to the dictionary
+    for key, value in possible_kwargs.items():
+        if key in args:
+            kwargs[value] = args[key]
+
+    # these use the default=False, store as True and require a sign flip
+    for key, value in signflip_kwargs.items():
+        if key in args:
+            kwargs[value] = not args[key]
+
+    return args, kwargs
+
+
 def loadSavedExperiment(prmsPath, resPath, fileName, args=None):
     try:
         prms = np.load(prmsPath / (fileName + ".npy"), allow_pickle=True).item()

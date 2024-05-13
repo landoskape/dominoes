@@ -6,7 +6,8 @@ from ..utils import named_transpose
 from .attention_modules import get_attention_layer, _attention_type
 from .transformer_modules import get_transformer_layer
 from .pointer_decoder import PointerDecoder
-from .net_utils import _check_kwargs, _process_input, _process_multimodal_input
+from ..utils import check_args, process_arguments
+from .net_utils import process_input, process_multimodal_input
 
 
 def _get_pointernet_constructor(contextual, multimodal):
@@ -98,34 +99,6 @@ class PointerArguments:
         pointernet_kwargs["pointer_kwargs"] = self.pointer_kwargs
         return self.embedding_dim, pointernet_kwargs
 
-    def _get_kwargs(self, required_args, required_kwargs, possible_kwargs, signflip_kwargs, name="pointer network"):
-        """method for getting the required and optional kwargs from stored argument dictionary"""
-        # if any required args are missing, raise an error
-        _check_kwargs(name, self.args, required_args)
-
-        # get required args (in order of list!)
-        args = [self.args[arg] for arg in required_args]
-
-        # get kwargs
-        kwargs = {}
-
-        # if any required kwargs are missing, raise an error
-        _check_kwargs(name, self.args, required_kwargs)
-        for key, value in required_kwargs.items():
-            kwargs[value] = self.args[key]
-
-        # if any kwargs are included in args, add them to the dictionary
-        for key, value in possible_kwargs.items():
-            if key in self.args:
-                kwargs[value] = self.args[key]
-
-        # these use the default=False, store as True and require a sign flip
-        for key, value in signflip_kwargs.items():
-            if key in self.args:
-                kwargs[value] = not self.args[key]
-
-        return args, kwargs
-
     def _get_pointernet_kwargs(self):
         """method for getting the pointer network kwargs from a dictionary of arguments"""
         required_args = ["embedding_dim"]
@@ -148,7 +121,14 @@ class PointerArguments:
         )
 
         # get arguments for pointer network
-        (embedding_dim,), pointernet_kwargs = self._get_kwargs(required_args, required_kwargs, possible_kwargs, signflip_kwargs)
+        (embedding_dim,), pointernet_kwargs = process_arguments(
+            self.args,
+            required_args,
+            required_kwargs,
+            possible_kwargs,
+            signflip_kwargs,
+            name="PointerNetwork-MainNetwork",
+        )
 
         # store arguments in self
         self.embedding_dim = embedding_dim
@@ -174,7 +154,14 @@ class PointerArguments:
         )
 
         # get arguments for encoder
-        _, encoder_kwargs = self._get_kwargs(required_args, required_kwargs, possible_kwargs, signflip_kwargs, name="encoder")
+        _, encoder_kwargs = process_arguments(
+            self.args,
+            required_args,
+            required_kwargs,
+            possible_kwargs,
+            signflip_kwargs,
+            name="PointerNetwork-Encoder",
+        )
 
         # store arguments in self
         self.encoder_kwargs = encoder_kwargs
@@ -199,7 +186,14 @@ class PointerArguments:
         )
 
         # get arguments for decoder
-        _, decoder_kwargs = self._get_kwargs(required_args, required_kwargs, possible_kwargs, signflip_kwargs, name="decoder")
+        _, decoder_kwargs = process_arguments(
+            self.args,
+            required_args,
+            required_kwargs,
+            possible_kwargs,
+            signflip_kwargs,
+            name="PointerNetwork-Decoder",
+        )
 
         # store arguments in self
         self.decoder_kwargs = decoder_kwargs
@@ -224,7 +218,14 @@ class PointerArguments:
         )
 
         # get arguments for pointer
-        _, pointer_kwargs = self._get_kwargs(required_args, required_kwargs, possible_kwargs, signflip_kwargs, name="pointer layer")
+        _, pointer_kwargs = process_arguments(
+            self.args,
+            required_args,
+            required_kwargs,
+            possible_kwargs,
+            signflip_kwargs,
+            name="PointerNetwork-Pointer",
+        )
 
         # store arguments in self
         self.pointer_kwargs = pointer_kwargs
@@ -353,7 +354,7 @@ class PointerNetworkBaseClass(nn.Module, ABC):
                 "kqv_bias",
                 "residual",
             ]
-            _check_kwargs(encoder_method, encoder_kwargs, required_kwargs)
+            check_args(encoder_method, encoder_kwargs, required_kwargs)
             self.encoding_layers = nn.ModuleList(
                 [
                     get_attention_layer(
@@ -376,7 +377,7 @@ class PointerNetworkBaseClass(nn.Module, ABC):
                 "kqv_bias",
                 "mlp_bias",
             ]
-            _check_kwargs(encoder_method, encoder_kwargs, required_kwargs)
+            check_args(encoder_method, encoder_kwargs, required_kwargs)
             self.encoding_layers = nn.ModuleList(
                 [
                     get_transformer_layer(
@@ -518,7 +519,7 @@ class PointerNetwork(PointerNetworkBaseClass):
         temperature, thompson = self._get_decoder_state(temperature, thompson)
 
         # process main input
-        batch_size, mask = _process_input(x, mask, self.input_dim)
+        batch_size, mask = process_input(x, mask, self.input_dim)
 
         # get max output
         max_output = self._get_max_output(x, init, max_output=max_output)
@@ -572,8 +573,8 @@ class ContextualPointerNetwork(PointerNetworkBaseClass):
         temperature, thompson = self._get_decoder_state(temperature, thompson)
 
         # process main input
-        batch_size, mask = _process_input(x, mask, self.input_dim)
-        context_batch_size, context_mask = _process_input(context, context_mask, self.input_dim, name="context")
+        batch_size, mask = process_input(x, mask, self.input_dim)
+        context_batch_size, context_mask = process_input(context, context_mask, self.input_dim, name="context")
 
         # check for consistency in batch sizes
         assert batch_size == context_batch_size, "batch sizes of x and context must match"
@@ -630,8 +631,8 @@ class MultimodalPointerNetwork(PointerNetworkBaseClass):
         temperature, thompson = self._get_decoder_state(temperature, thompson)
 
         # process main input
-        batch_size, mask = _process_input(x, mask, self.input_dim)
-        mm_batch_size, mm_mask = _process_multimodal_input(multimode, mm_mask, self.num_multimodal, self.mm_input_dim)
+        batch_size, mask = process_input(x, mask, self.input_dim)
+        mm_batch_size, mm_mask = process_multimodal_input(multimode, mm_mask, self.num_multimodal, self.mm_input_dim)
 
         # check for consistency in batch sizes
         assert batch_size == mm_batch_size, "batch sizes of x multimodal inputs must match"
@@ -695,9 +696,9 @@ class MultimodalContextualPointerNetwork(PointerNetworkBaseClass):
         temperature, thompson = self._get_decoder_state(temperature, thompson)
 
         # process main input
-        batch_size, mask = _process_input(x, mask, self.input_dim)
-        context_batch_size, context_mask = _process_input(context, context_mask, self.input_dim, name="context")
-        mm_batch_size, mm_mask = _process_multimodal_input(multimode, mm_mask, self.num_multimodal, self.mm_input_dim)
+        batch_size, mask = process_input(x, mask, self.input_dim)
+        context_batch_size, context_mask = process_input(context, context_mask, self.input_dim, name="context")
+        mm_batch_size, mm_mask = process_multimodal_input(multimode, mm_mask, self.num_multimodal, self.mm_input_dim)
 
         # check for consistency in batch sizes
         assert batch_size == context_batch_size, "batch sizes of x and context must match"

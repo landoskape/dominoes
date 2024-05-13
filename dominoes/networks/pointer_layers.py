@@ -6,7 +6,7 @@ from torch import nn
 from ..utils import masked_log_softmax
 from .attention_modules import get_attention_layer
 from .transformer_modules import get_transformer_layer
-from .net_utils import _check_kwargs
+from ..utils import check_args
 
 
 def get_pointer_methods():
@@ -155,7 +155,7 @@ class PointerAttention(PointerLayer):
 
     def initialize(self, **kwargs):
         """prepare modules for attention pointer layer"""
-        _check_kwargs("PointerAttention", kwargs, ["num_heads"])
+        check_args("PointerAttention", kwargs, ["num_heads"])
         kwargs["contextual"] = False
         kwargs["multimodal"] = True
         kwargs["num_multimodal"] = 1
@@ -182,7 +182,7 @@ class PointerTransformer(PointerLayer):
 
     def initialize(self, **kwargs):
         """prepare modules for transformer pointer layer"""
-        _check_kwargs("PointerTransformer", kwargs, ["num_heads"])
+        check_args("PointerTransformer", kwargs, ["num_heads"])
         kwargs["contextual"] = False
         kwargs["multimodal"] = True
         kwargs["num_multimodal"] = 1
