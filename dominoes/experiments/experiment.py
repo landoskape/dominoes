@@ -346,7 +346,10 @@ class Experiment(ABC):
     def prepare_dataset(self):
         """simple method for getting dataset"""
         # return the dataset
-        return get_dataset(self.args.task, build=True, device=self.device, **vars(self.args))
+        dataset_parameters = vars(self.args).copy()
+        dataset_parameters.pop("task", None)
+        dataset_parameters.pop("device", None)
+        return get_dataset(self.args.task, build=True, device=self.device, **dataset_parameters)
 
     def make_train_parameters(self, dataset, train=True):
         """simple method for getting training parameters"""
