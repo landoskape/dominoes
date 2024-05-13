@@ -77,7 +77,7 @@ def process_arguments(args, required_args, required_kwargs, possible_kwargs, sig
     check_args(name, args, required_args)
 
     # get required args (in order of list!)
-    args = [args[arg] for arg in required_args]
+    rq_args = [args[arg] for arg in required_args]
 
     # get kwargs
     kwargs = {}
@@ -97,7 +97,7 @@ def process_arguments(args, required_args, required_kwargs, possible_kwargs, sig
         if key in args:
             kwargs[value] = not args[key]
 
-    return args, kwargs
+    return rq_args, kwargs
 
 
 def loadSavedExperiment(prmsPath, resPath, fileName, args=None):
