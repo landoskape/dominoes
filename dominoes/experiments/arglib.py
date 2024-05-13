@@ -55,7 +55,7 @@ def add_network_training_metaparameters(parser):
 def add_pointernet_parameters(parser):
     """arguments for the PointerNet"""
     parser.add_argument("--embedding_dim", type=int, default=128, help="the dimensions of the embedding (default=128)")
-    parser.add_argument("--embedding_bias", default=False, action="store_true", help="whether to use embedding_bias (default=False)")
+    parser.add_argument("--no_embedding_bias", default=False, action="store_true", help="whether to remove embedding_bias (default=False)")
     parser.add_argument("--num_encoding_layers", type=int, default=1, help="the number of encoding layers in the PointerNet (default=1)")
     parser.add_argument("--encoder_method", type=str, default="transformer", help="PointerNet encoding layer method (default='transformer')")
     parser.add_argument("--decoder_method", type=str, default="transformer", help="PointerNet decoding layer method (default='transformer')")
