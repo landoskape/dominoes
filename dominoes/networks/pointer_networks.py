@@ -62,7 +62,7 @@ def get_pointer_network(
 
 def get_pointer_arguments(args):
     """get pointer network arguments from arguments"""
-    return PointerArguments(vars(args)).get_args()
+    return PointerArguments(vars(args).copy()).get_args()
 
 
 class PointerArguments:
@@ -106,7 +106,6 @@ class PointerArguments:
         # these are the possible kwargs that can be passed to the pointer network
         # key is the argument name in the ArgParser, value is the pointer network keyword
         required_kwargs = dict(
-            embedding_bias="embedding_bias",
             num_encoding_layers="num_encoding_layers",
             encoder_method="encoder_method",
             decoder_method="decoder_method",
@@ -117,6 +116,7 @@ class PointerArguments:
         )
         # these use the default=False, store as True and require a sign flip
         signflip_kwargs = dict(
+            no_embedding_bias="embedding_bias",
             no_thompson="thompson",
         )
 
