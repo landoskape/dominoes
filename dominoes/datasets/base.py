@@ -3,16 +3,36 @@ from copy import copy
 import torch
 
 
+class RequiredParameter:
+    """
+    a class to represent required parameters for a dataset
+
+    each dataset is required to generate a set of parameters during initialization (in get_class_parameters)
+    if any of these parameters are an empty initialization of RequiredParameter, then the dataset will raise
+    an error in the __post_init__ method if the parameter is not set during initialization.
+    """
+
+    def __init__(self):
+        pass
+
+
 class Dataset(ABC):
     """
     the dataset class is a general purpose dataset for loading and evaluating performance on sequencing problems
     since it is the master class for RL and SL datasets, the only required method is `generate_batch`
     """
 
+    def __post_init__(self):
+        """a post-init method to ensure that all the required parameters have been set correctly"""
+        for key, value in self.prms.items():
+            if isinstance(value, RequiredParameter):
+                if not hasattr(self, key):
+                    raise ValueError(f"required parameter {key} not set for task {self.task}")
+
     @abstractmethod
-    def get_class_parameters(self):
+    def get_default_parameters(self):
         """
-        return the class parameters for the dataset. This is hard-coded here and only here,
+        return the default parameters for the dataset. This is hard-coded here and only here,
         so if the parameters change, this method should be updated.
 
         None means the parameter is required and doesn't have a default value. Otherwise,
@@ -20,44 +40,23 @@ class Dataset(ABC):
 
         returns:
             dict, the class-specific parameters for this dataset
-
-        Note: this is expected to be implemented as a @classmethod for access without class instances
         """
         pass
 
-    def _check_parameters(self, reference=None, init=False, raise_for_extra=False, **parameters):
+    @abstractmethod
+    def process_arguments(self, parameters):
         """
-        check if parameters provided in the parameters are valid (and complete)
-
-        checks two things:
-        1. If any parameters are provided that are not recognized for the dataset, an error will be generated
-
-        ... if init=True, will additionally check:
-        2. If any parameters are required for the dataset but not provided, an error will be generated
+        process the arguments for the dataset
 
         args:
-            reference: dict, the reference parameters to check against (if not provided, uses self.get_class_parameters())
-            init: bool, whether this is being called by the constructor's __init__ method
-                  in practive, this determines whether any required parameters without defaults are set properly
-            parameters: dict, the parameters provided at initialization
+            parameters: dict, the parameters to process for the dataset
 
-        raise ValueError if any parameters are not recognized or required parameters are not provided
+        returns:
+            dict, the processed parameters for the dataset
         """
-        if reference is None:
-            reference = self.get_class_parameters()
-        if raise_for_extra:
-            # check if extra parameters are provided and raise error if they are
-            for param in parameters:
-                if param not in reference:
-                    raise ValueError(f"parameter {param} not recognized for task {self.task}")
-        # if init==True, then this is being called by the constructor's __init__ method and
-        # we need to check if any required parameters without defaults are set properly
-        if init:
-            for param in reference:
-                if param not in parameters and reference[param] is None:
-                    raise ValueError(f"parameter {param} not provided for task {self.task}")
+        pass
 
-    def parameters(self, raise_for_extra=False, **prms):
+    def parameters(self, **prms):
         """
         Helper method for handling default parameters for each task
 
@@ -71,8 +70,6 @@ class Dataset(ABC):
         """
         # get registered parameters
         prms_to_use = copy(self.prms)
-        # check if updates are valid
-        self._check_parameters(reference=prms_to_use, init=False, raise_for_extra=raise_for_extra, **prms)
         # update parameters
         prms_to_use.update(prms)
         # return to caller function

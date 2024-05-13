@@ -2,8 +2,9 @@ from copy import copy
 import torch
 
 
-from .base import DatasetSL, DatasetRL
+from .base import DatasetSL, DatasetRL, RequiredParameter
 from .support import get_paths
+from ..utils import process_arguments
 
 
 class TSPDataset(DatasetRL, DatasetSL):
@@ -20,15 +21,12 @@ class TSPDataset(DatasetRL, DatasetSL):
 
         self.set_device(device)
 
-        # check parameters
-        self._check_parameters(init=True, raise_for_extra=True, **parameters)
-
         # set parameters to required defaults first, then update
-        self.prms = self.get_class_parameters()
-        self.prms = self.parameters(raise_for_extra=True, **parameters)
+        self.prms = self.get_default_parameters()
+        init_prms = self.process_arguments(parameters)  # get initialization parameters
+        self.prms = self.parameters(**init_prms)  # update reference parameters for the dataset
 
-    @classmethod
-    def get_class_parameters(cls):
+    def get_default_parameters(self):
         """
         return the class parameters for the task. This is hard-coded here and only here,
         so if the parameters change, this method should be updated.
@@ -41,7 +39,7 @@ class TSPDataset(DatasetRL, DatasetSL):
         """
         # tsp parameters
         params = dict(
-            num_cities=None,  # this parameter is required to be set at initialization
+            num_cities=RequiredParameter(),  # this parameter is required to be set at initialization
             coord_dims=2,
             batch_size=1,
             return_target=False,
@@ -49,6 +47,23 @@ class TSPDataset(DatasetRL, DatasetSL):
             threads=1,
         )
         return params
+
+    def process_arguments(self, args):
+        """process arguments (e.g. from an ArgumentParser) for this dataset and set to parameters"""
+        required_args = []
+        required_kwargs = dict(
+            num_cities="num_cities",
+        )
+        possible_kwargs = dict(
+            coord_dims="coord_dims",
+            batch_size="batch_size",
+            return_target="return_target",
+            ignore_index="ignore_index",
+            threads="threads",
+        )
+        signflip_kwargs = {}
+        init_prms = process_arguments(args, required_args, required_kwargs, possible_kwargs, signflip_kwargs, self.__class__.__name__)[1]
+        return init_prms
 
     def get_input_dim(self, coord_dims=None):
         """

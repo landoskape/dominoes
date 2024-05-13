@@ -5,8 +5,8 @@ import torch
 
 
 from .support import get_dominoes, get_best_line, pad_best_lines
-from ..utils import named_transpose
-from .base import DatasetSL, DatasetRL
+from ..utils import named_transpose, process_arguments
+from .base import DatasetSL, DatasetRL, RequiredParameter
 
 
 class DominoeMaster(DatasetRL, DatasetSL):
@@ -21,12 +21,10 @@ class DominoeMaster(DatasetRL, DatasetSL):
         self._check_task(task)
         self.task = task
 
-        # check parameters
-        self._check_parameters(init=True, raise_for_extra=True, **parameters)
-
         # set parameters to required defaults first, then update
-        self.prms = self.get_class_parameters()
-        self.prms = self.parameters(raise_for_extra=True, **parameters)
+        self.prms = self.get_default_parameters()
+        init_prms = self.process_arguments(parameters)  # get initialization parameters
+        self.prms = self.parameters(**init_prms)  # update reference parameters for the dataset
 
         # create base dominoe set
         self.dominoe_set = get_dominoes(self.prms["highest_dominoe"], as_torch=True)
@@ -54,25 +52,18 @@ class DominoeMaster(DatasetRL, DatasetSL):
         else:
             raise ValueError("task should be either 'sequencer', 'sorting', or None")
 
-    @classmethod
-    def get_class_parameters(cls):
+    def get_default_parameters(self):
         """
-        return the class parameters for the task. This is hard-coded here and only here,
+        set the deafult parameters for the task. This is hard-coded here and only here,
         so if the parameters change, this method should be updated.
 
         None means the parameter is required and doesn't have a default value. Otherwise,
         the value is the default value for the parameter.
-
-        args:
-            task: str, the task for which to get the required parameters
-
-        returns:
-            list of str, the required parameters for the task
         """
         # base parameters for all tasks
         params = dict(
-            hand_size=None,  # this parameter is required to be set at initialization
-            highest_dominoe=None,  # this parameter is required to be set at initialization
+            hand_size=RequiredParameter(),  # this parameter is required to be set at initialization
+            highest_dominoe=RequiredParameter(),  # this parameter is required to be set at initialization
             train_fraction=1.0,
             randomize_direction=True,
             batch_size=1,
@@ -80,18 +71,57 @@ class DominoeMaster(DatasetRL, DatasetSL):
             ignore_index=-100,
             threads=1,
         )
-        if cls.task == "sequencer":
+        if self.task == "sequencer":
             params["value_method"] = "length"
             params["value_multiplier"] = 1.0
             return params
-        elif cls.task == "sorting":
+        elif self.task == "sorting":
             params["allow_mistakes"] = False
             return params
-        elif cls.task is None:
+        elif self.task is None:
             # only need to specify highest dominoe for the no-task dataset
             return dict(highest_dominoe=None)
         else:
-            raise ValueError(f"task ({cls.task}) not recognized!")
+            raise ValueError(f"task ({self.task}) not recognized for dominoe dataset!")
+
+    def process_arguments(self, args):
+        """process arguments (e.g. from an ArgumentParser) for this dataset and set to parameters"""
+        required_args = []
+        required_kwargs = dict(
+            hand_size="hand_size",
+            highest_dominoe="highest_dominoe",
+        )
+        possible_kwargs = dict(
+            train_fraction="train_fraction",
+            batch_size="batch_size",
+            return_target="return_target",
+            ignore_index="ignore_index",
+            threads="threads",
+        )
+        signflip_kwargs = dict(
+            no_randomize_direction="randomize_direction",
+        )
+        required_args, required_kwargs, possible_kwargs, signflip_kwargs = self.task_specific_arguments(
+            required_args,
+            required_kwargs,
+            possible_kwargs,
+            signflip_kwargs,
+        )
+        init_prms = process_arguments(args, required_args, required_kwargs, possible_kwargs, signflip_kwargs, self.__class__.__name__)[1]
+        return init_prms
+
+    def task_specific_arguments(self, required_args, required_kwargs, possible_kwargs, signflip_kwargs):
+        """add (or remove) parameters for each task, respectively"""
+        if self.task == "sequencer":
+            possible_kwargs["value_method"] = "value_method"
+            possible_kwargs["value_multiplier"] = "value_multiplier"
+        elif self.task == "sorting":
+            possible_kwargs["allow_mistakes"] = "allow_mistakes"
+        elif self.task is None:
+            required_args = ["highest_dominoe"]
+        else:
+            raise ValueError(f"task ({self.task}) not recognized!")
+        return required_args, required_kwargs, possible_kwargs, signflip_kwargs
 
     @torch.no_grad()
     def set_train_fraction(self, train_fraction):
@@ -206,7 +236,7 @@ class DominoeMaster(DatasetRL, DatasetSL):
         # note that dominoes direction is randomized for the input, but not for the target
         binary_input, binary_available, selection, available = self._random_dominoe_hand(
             prms["hand_size"],
-            self._randomize_direction(dominoes) if prms["randomize_direction"] else dominoes,
+            dominoes,  # self._randomize_direction(dominoes) if prms["randomize_direction"] else dominoes,
             prms["highest_dominoe"],
             prms["batch_size"],
             null_token=self.null_token,
