@@ -236,7 +236,7 @@ class DominoeMaster(DatasetRL, DatasetSL):
         # note that dominoes direction is randomized for the input, but not for the target
         binary_input, binary_available, selection, available = self._random_dominoe_hand(
             prms["hand_size"],
-            dominoes,  # self._randomize_direction(dominoes) if prms["randomize_direction"] else dominoes,
+            self._randomize_direction(dominoes) if prms["randomize_direction"] else dominoes,
             prms["highest_dominoe"],
             prms["batch_size"],
             null_token=self.null_token,
