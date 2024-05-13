@@ -48,6 +48,7 @@ def add_network_training_metaparameters(parser):
     parser.add_argument("--bl_temperature", type=float, default=1.0, help="temperature for baseline networks during training")
     parser.add_argument("--bl_thompson", default=False, action="store_true", help="if used, will use Thompson sampling for baseline networks")
     parser.add_argument("--bl_significance", type=float, default=0.05, help="significance level for updating baseline networks")
+    parser.add_argument("--bl_batch_size", type=int, default=1024, help="batch size for baseline networks")
     return parser
 
 
@@ -210,6 +211,12 @@ def add_dominoe_parameters(parser):
     parser.add_argument("--highest_dominoe", type=int, default=9, help="the highest dominoe value (default=9)")
     parser.add_argument("--train_fraction", type=float, default=0.8, help="the fraction of dominoes to train with (default=0.8)")
     parser.add_argument("--hand_size", type=int, default=8, help="the number of dominoes in the hand (default=8)")
+    parser.add_argument(
+        "--no_randomize_direction",
+        default=False,
+        action="store_true",
+        help="if used, won't randomize the direction of the dominoes (default=False)",
+    )
     return parser
 
 
