@@ -13,7 +13,7 @@ import wandb
 from matplotlib import pyplot as plt
 
 from .. import files as files
-from ..datasets import get_dataset, get_dataset_kwargs
+from ..datasets import get_dataset
 
 
 class Experiment(ABC):
@@ -345,10 +345,8 @@ class Experiment(ABC):
     # -- support for main processing loop --
     def prepare_dataset(self):
         """simple method for getting dataset"""
-        # convert args to a dictionary and get the dataset kwargs (can generate an error if not set properly)
-        kwargs = get_dataset_kwargs(vars(self.args))
         # return the dataset
-        return get_dataset(self.args.task, build=True, device=self.device, **kwargs)
+        return get_dataset(self.args.task, build=True, device=self.device, **vars(self.args))
 
     def make_train_parameters(self, dataset, train=True):
         """simple method for getting training parameters"""
