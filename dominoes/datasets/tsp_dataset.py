@@ -93,9 +93,9 @@ class TSPDataset(DatasetRL, DatasetSL):
         get the maximum possible output for the dataset
 
         returns:
-            int, the maximum possible output for the dataset (it's just the number of cities)
+            int, the maximum possible output for the dataset (it's just the number of cities minus 1 for the start city)
         """
-        return self.prms["num_cities"]
+        return self.prms["num_cities"] - 1
 
     @torch.no_grad()
     def generate_batch(self, device=None, **kwargs):
