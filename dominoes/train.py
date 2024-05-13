@@ -44,10 +44,13 @@ def train(nets, optimizers, dataset, **parameters):
         bl_temperature = parameters.get("bl_temperature", 1.0)
         bl_thompson = parameters.get("bl_thompson", False)
         bl_significance = parameters.get("bl_significance", 0.05)
+        bl_batch_size = parameters.get("bl_batch_size", 1024)
+        bl_parameters = parameters.copy()
+        bl_parameters["batch_size"] = bl_batch_size  # update batch size for baseline reference batch
         bl_nets = make_baseline_nets(
             nets,
             dataset,
-            batch_parameters=parameters,
+            batch_parameters=bl_parameters,
             significance=bl_significance,
             temperature=bl_temperature,
             thompson=bl_thompson,
@@ -83,8 +86,6 @@ def train(nets, optimizers, dataset, **parameters):
             if baseline:
                 with torch.no_grad():
                     bl_rewards = [dataset.reward_function(choice, batch) for choice in bl_choices]
-            else:
-                bl_rewards = None
 
         # backprop with supervised learning (usually using negative log likelihood loss)
         if learning_mode == "supervised":
@@ -102,7 +103,7 @@ def train(nets, optimizers, dataset, **parameters):
                 scores,
                 choices,
                 c_gamma_transform,
-                baseline_rewards=bl_rewards,
+                baseline_rewards=bl_rewards if baseline else None,
             )
             for j in J:
                 j.backward()
