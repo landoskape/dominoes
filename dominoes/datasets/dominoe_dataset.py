@@ -74,6 +74,7 @@ class DominoeMaster(DatasetRL, DatasetSL):
             hand_size=None,  # this parameter is required to be set at initialization
             highest_dominoe=None,  # this parameter is required to be set at initialization
             train_fraction=1.0,
+            randomize_direction=True,
             batch_size=1,
             return_target=False,
             ignore_index=-100,
@@ -205,7 +206,7 @@ class DominoeMaster(DatasetRL, DatasetSL):
         # note that dominoes direction is randomized for the input, but not for the target
         binary_input, binary_available, selection, available = self._random_dominoe_hand(
             prms["hand_size"],
-            self._randomize_direction(dominoes),
+            self._randomize_direction(dominoes) if prms["randomize_direction"] else dominoes,
             prms["highest_dominoe"],
             prms["batch_size"],
             null_token=self.null_token,
@@ -721,7 +722,8 @@ class DominoeMaster(DatasetRL, DatasetSL):
             torch.Tensor, the dominoes with the direction of the dominoes randomized
         """
         # check shape of dominoes dataset
-        assert dominoes.size(-1) == 2, "dominoes should have shape (batch_size, num_dominoes, 2) or (num_dominoes, 2)"
+        shape_msg = "dominoes should have shape (batch_size, num_dominoes, 2) or (num_dominoes, 2)"
+        assert dominoes.size(-1) == 2 and (dominoes.ndim == 2 or dominoes.ndim == 3), shape_msg
 
         # create a fake batch dimension if it doesn't exist for consistent code
         with_batch = dominoes.dim() == 3
