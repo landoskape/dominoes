@@ -6,10 +6,10 @@ import torch
 
 from .support import get_dominoes, get_best_line, pad_best_lines
 from ..utils import named_transpose, process_arguments
-from .base import DatasetSL, DatasetRL, RequiredParameter
+from .base import Dataset, DatasetSL, DatasetRL, RequiredParameter
 
 
-class DominoeMaster(DatasetRL, DatasetSL):
+class DominoeMaster(Dataset):
     """A dataset for generating dominoe sequences for training and evaluation"""
 
     def __init__(self, task, device="cpu", **parameters):
@@ -775,18 +775,22 @@ class DominoeMaster(DatasetRL, DatasetSL):
         return randomized
 
 
-class DominoeSequencer(DominoeMaster):
+class DominoeSequencer(DominoeMaster, DatasetSL, DatasetRL):
     task = "sequencer"
 
     def __init__(self, *args, **kwargs):
         DominoeMaster.__init__(self, self.task, *args, **kwargs)
+        DatasetSL.__init__(self)
+        DatasetRL.__init__(self)
 
 
-class DominoeSorter(DominoeMaster):
+class DominoeSorter(DominoeMaster, DatasetSL, DatasetRL):
     task = "sorting"
 
     def __init__(self, *args, **kwargs):
         DominoeMaster.__init__(self, self.task, *args, **kwargs)
+        DatasetSL.__init__(self)
+        DatasetRL.__init__(self)
 
 
 class DominoeDataset(DominoeMaster):

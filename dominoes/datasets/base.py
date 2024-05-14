@@ -140,9 +140,9 @@ class Dataset(ABC):
         return input.to(device)
 
 
-class DatasetSL(Dataset):
+class DatasetSL:
     """
-    A child of the general dataset class that is designed for supervised learning tasks
+    A general dataset class that is used for supervised learning tasks.
     """
 
     def __init__(self):
@@ -180,9 +180,9 @@ class DatasetSL(Dataset):
         return loss
 
 
-class DatasetRL(Dataset):
+class DatasetRL:
     """
-    A child of the general dataset class that is designed for reinforcement learning tasks
+    A general dataset class that is used for reinforcement learning tasks.
     """
 
     def __init__(self):
