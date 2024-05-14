@@ -61,8 +61,7 @@ class TSPDataset(DatasetRL, DatasetSL):
             ignore_index="ignore_index",
             threads="threads",
         )
-        signflip_kwargs = {}
-        init_prms = process_arguments(args, required_args, required_kwargs, possible_kwargs, signflip_kwargs, self.__class__.__name__)[1]
+        init_prms = process_arguments(args, required_args, required_kwargs, possible_kwargs, self.__class__.__name__)[1]
         return init_prms
 
     def get_input_dim(self, coord_dims=None):

@@ -106,6 +106,7 @@ class PointerArguments:
         # these are the possible kwargs that can be passed to the pointer network
         # key is the argument name in the ArgParser, value is the pointer network keyword
         required_kwargs = dict(
+            embedding_bias="embedding_bias",
             num_encoding_layers="num_encoding_layers",
             encoder_method="encoder_method",
             decoder_method="decoder_method",
@@ -113,20 +114,14 @@ class PointerArguments:
         )
         possible_kwargs = dict(
             train_temperature="temperature",
+            thompson="thompson",
         )
-        # these use the default=False, store as True and require a sign flip
-        signflip_kwargs = dict(
-            no_embedding_bias="embedding_bias",
-            no_thompson="thompson",
-        )
-
         # get arguments for pointer network
         (embedding_dim,), pointernet_kwargs = process_arguments(
             self.args,
             required_args,
             required_kwargs,
             possible_kwargs,
-            signflip_kwargs,
             name="PointerNetwork-MainNetwork",
         )
 
@@ -145,21 +140,17 @@ class PointerArguments:
         )
         possible_kwargs = dict(
             encoder_expansion="expansion",
+            encoder_kqnorm="kqnorm",
+            encoder_kqv_bias="kqv_bias",
+            encoder_mlp_bias="mlp_bias",
+            encoder_residual="residual",
         )
-        signflip_kwargs = dict(
-            encoder_no_kqnorm="kqnorm",
-            encoder_no_kqv_bias="kqv_bias",
-            encoder_no_mlp_bias="mlp_bias",
-            encoder_no_residual="residual",
-        )
-
         # get arguments for encoder
         _, encoder_kwargs = process_arguments(
             self.args,
             required_args,
             required_kwargs,
             possible_kwargs,
-            signflip_kwargs,
             name="PointerNetwork-Encoder",
         )
 
@@ -176,22 +167,18 @@ class PointerArguments:
         possible_kwargs = dict(
             decoder_num_heads="num_heads",
             decoder_expansion="expansion",
+            decoder_gru_bias="gru_bias",
+            decoder_kqnorm="kqnorm",
+            decoder_kqv_bias="kqv_bias",
+            decoder_mlp_bias="mlp_bias",
+            decoder_residual="residual",
         )
-        signflip_kwargs = dict(
-            decoder_no_gru_bias="gru_bias",
-            decoder_no_kqnorm="kqnorm",
-            decoder_no_kqv_bias="kqv_bias",
-            decoder_no_mlp_bias="mlp_bias",
-            decoder_no_residual="residual",
-        )
-
         # get arguments for decoder
         _, decoder_kwargs = process_arguments(
             self.args,
             required_args,
             required_kwargs,
             possible_kwargs,
-            signflip_kwargs,
             name="PointerNetwork-Decoder",
         )
 
@@ -209,12 +196,10 @@ class PointerArguments:
             pointer_bias="bias",
             pointer_num_heads="num_heads",
             pointer_expansion="expansion",
-        )
-        signflip_kwargs = dict(
-            decoder_no_kqnorm="kqnorm",
-            decoder_no_kqv_bias="kqv_bias",
-            decoder_no_mlp_bias="mlp_bias",
-            decoder_no_residual="residual",
+            pointer_kqnorm="kqnorm",
+            pointer_kqv_bias="kqv_bias",
+            pointer_mlp_bias="mlp_bias",
+            pointer_residual="residual",
         )
 
         # get arguments for pointer
@@ -223,7 +208,6 @@ class PointerArguments:
             required_args,
             required_kwargs,
             possible_kwargs,
-            signflip_kwargs,
             name="PointerNetwork-Pointer",
         )
 

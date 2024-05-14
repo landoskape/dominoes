@@ -92,25 +92,22 @@ class DominoeMaster(DatasetRL, DatasetSL):
             highest_dominoe="highest_dominoe",
         )
         possible_kwargs = dict(
+            randomize_direction="randomize_direction",
             train_fraction="train_fraction",
             batch_size="batch_size",
             return_target="return_target",
             ignore_index="ignore_index",
             threads="threads",
         )
-        signflip_kwargs = dict(
-            no_randomize_direction="randomize_direction",
-        )
-        required_args, required_kwargs, possible_kwargs, signflip_kwargs = self.task_specific_arguments(
+        required_args, required_kwargs, possible_kwargs = self.task_specific_arguments(
             required_args,
             required_kwargs,
             possible_kwargs,
-            signflip_kwargs,
         )
-        init_prms = process_arguments(args, required_args, required_kwargs, possible_kwargs, signflip_kwargs, self.__class__.__name__)[1]
+        init_prms = process_arguments(args, required_args, required_kwargs, possible_kwargs, self.__class__.__name__)[1]
         return init_prms
 
-    def task_specific_arguments(self, required_args, required_kwargs, possible_kwargs, signflip_kwargs):
+    def task_specific_arguments(self, required_args, required_kwargs, possible_kwargs):
         """add (or remove) parameters for each task, respectively"""
         if self.task == "sequencer":
             possible_kwargs["value_method"] = "value_method"
@@ -121,7 +118,7 @@ class DominoeMaster(DatasetRL, DatasetSL):
             required_args = ["highest_dominoe"]
         else:
             raise ValueError(f"task ({self.task}) not recognized!")
-        return required_args, required_kwargs, possible_kwargs, signflip_kwargs
+        return required_args, required_kwargs, possible_kwargs
 
     @torch.no_grad()
     def set_train_fraction(self, train_fraction):
