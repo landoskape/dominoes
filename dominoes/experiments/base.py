@@ -1,10 +1,9 @@
-import sys
 import os
 from abc import ABC, abstractmethod
 from argparse import ArgumentParser
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 from natsort import natsorted
 from freezedry import freezedry
 
@@ -349,6 +348,8 @@ class Experiment(ABC):
         dataset_parameters = vars(self.args).copy()
         dataset_parameters.pop("task", None)
         dataset_parameters.pop("device", None)
+        if self.args.learning_mode == "supervised":
+            dataset_parameters["return_target"] = True
         return get_dataset(self.args.task, build=True, device=self.device, **dataset_parameters)
 
     def make_train_parameters(self, dataset, train=True):
