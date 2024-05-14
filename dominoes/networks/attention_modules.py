@@ -2,9 +2,7 @@ from abc import ABC, abstractmethod
 import torch
 from torch import nn
 
-from ..utils import masked_softmax
-
-from .net_utils import process_input, process_multimodal_input
+from .net_utils import process_input, process_multimodal_input, masked_softmax
 
 """
 Almost everything I've learned about machine learning and pytorch has been due

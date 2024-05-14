@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 import torch
 from torch import nn
 
-from ..utils import named_transpose
 from .attention_modules import get_attention_layer, _attention_type
 from .transformer_modules import get_transformer_layer
 from .pointer_decoder import PointerDecoder

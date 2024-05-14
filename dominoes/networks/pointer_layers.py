@@ -3,9 +3,9 @@ from abc import ABC, abstractmethod
 import torch
 from torch import nn
 
-from ..utils import masked_log_softmax
 from .attention_modules import get_attention_layer
 from .transformer_modules import get_transformer_layer
+from .net_utils import masked_log_softmax
 from ..utils import check_args
 
 
