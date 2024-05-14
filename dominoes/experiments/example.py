@@ -1,6 +1,6 @@
 import torch
 from . import arglib
-from .experiment import Experiment
+from .base import Experiment
 
 
 class ExampleExperiment(Experiment):

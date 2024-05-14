@@ -15,7 +15,7 @@ from .. import train
 from ..networks import get_pointer_network, get_pointer_methods, get_pointer_arguments
 from ..utils import compute_stats_by_type
 
-from .experiment import Experiment
+from .base import Experiment
 from . import arglib
 
 
