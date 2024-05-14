@@ -45,6 +45,7 @@ def train(nets, optimizers, dataset, **parameters):
         bl_thompson = parameters.get("bl_thompson", False)
         bl_significance = parameters.get("bl_significance", 0.05)
         bl_batch_size = parameters.get("bl_batch_size", 1024)
+        bl_duty_cycle = parameters.get("bl_duty_cycle", 1)
         bl_parameters = parameters.copy()
         bl_parameters["batch_size"] = bl_batch_size  # update batch size for baseline reference batch
         bl_nets = make_baseline_nets(
@@ -113,7 +114,8 @@ def train(nets, optimizers, dataset, **parameters):
             opt.step()
 
         # update baseline networks if required
-        bl_nets = check_baseline_updates(nets, bl_nets)
+        if baseline and epoch % bl_duty_cycle == 0:
+            bl_nets = check_baseline_updates(nets, bl_nets)
 
         # save training data
         with torch.no_grad():
