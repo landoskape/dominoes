@@ -49,9 +49,9 @@ def add_pointernet_parameters(parser):
 
 def add_pointernet_encoder_parameters(parser):
     """arguments for the encoder layers in a PointerNet"""
-    parser.add_argument("--encoder_num_heads", type=int, default=1, help="the number of heads in ptrnet encoding layers (default=1)")
+    parser.add_argument("--encoder_num_heads", type=int, default=8, help="the number of heads in ptrnet encoding layers (default=8)")
     parser.add_argument("--encoder_kqnorm", type=argbool, default=True, help="whether to use kqnorm in the encoder (default=True)")
-    parser.add_argument("--encoder_expansion", type=int, default=4, help="the expansion of the FF layers in the encoder (default=4)")
+    parser.add_argument("--encoder_expansion", type=int, default=1, help="the expansion of the FF layers in the encoder (default=1)")
     parser.add_argument("--encoder_kqv_bias", type=argbool, default=False, help="whether to use bias in the attention kqv layers (default=False)")
     parser.add_argument("--encoder_mlp_bias", type=argbool, default=True, help="use bias in the MLP part of transformer encoders (default=True)")
     parser.add_argument("--encoder_residual", type=argbool, default=True, help="use residual connections in the attentional encoders (default=True)")
@@ -60,9 +60,9 @@ def add_pointernet_encoder_parameters(parser):
 
 def add_pointernet_decoder_parameters(parser):
     """arguments for the decoder layers in a PointerNet"""
-    parser.add_argument("--decoder_num_heads", type=int, default=1, help="the number of heads in ptrnet decoding layers (default=1)")
+    parser.add_argument("--decoder_num_heads", type=int, default=8, help="the number of heads in ptrnet decoding layers (default=8)")
     parser.add_argument("--decoder_kqnorm", type=argbool, default=True, help="whether to use kqnorm in the decoder (default=True)")
-    parser.add_argument("--decoder_expansion", type=int, default=4, help="the expansion of the FF layers in the decoder (default=4)")
+    parser.add_argument("--decoder_expansion", type=int, default=1, help="the expansion of the FF layers in the decoder (default=1)")
     parser.add_argument("--decoder_gru_bias", type=argbool, default=True, help="whether to use bias in the gru decoder method (default=True)")
     parser.add_argument("--decoder_kqv_bias", type=argbool, default=True, help="whether to use bias in the attention layer (default=True)")
     parser.add_argument("--decoder_mlp_bias", type=argbool, default=True, help="use bias in the MLP part of transformer decoders (default=True)")
@@ -72,9 +72,9 @@ def add_pointernet_decoder_parameters(parser):
 
 def add_pointernet_pointer_parameters(parser):
     """arguments for the pointer layer in a PointerNet"""
-    parser.add_argument("--pointer_num_heads", type=int, default=1, help="the number of heads in ptrnet decoding layers (default=1)")
+    parser.add_argument("--pointer_num_heads", type=int, default=8, help="the number of heads in ptrnet decoding layers (default=8)")
     parser.add_argument("--pointer_kqnorm", type=argbool, default=True, help="whether to use kqnorm in the decoder (default=True)")
-    parser.add_argument("--pointer_expansion", type=int, default=4, help="the expansion of the FF layers in the decoder (default=4)")
+    parser.add_argument("--pointer_expansion", type=int, default=1, help="the expansion of the FF layers in the decoder (default=1)")
     parser.add_argument("--pointer_bias", type=argbool, default=False, help="whether to use bias in pointer projection layers (default=False)")
     parser.add_argument("--pointer_kqv_bias", type=argbool, default=True, help="use bias in the attention layer of pointers (default=True)")
     parser.add_argument("--pointer_mlp_bias", type=argbool, default=True, help="use bias in the MLP part of transformer pointers (default=True)")
@@ -118,8 +118,8 @@ def add_dominoe_parameters(parser):
     arguments for any dominoe task
     """
     parser.add_argument("--highest_dominoe", type=int, default=9, help="the highest dominoe value (default=9)")
-    parser.add_argument("--train_fraction", type=float, default=0.8, help="the fraction of dominoes to train with (default=0.8)")
-    parser.add_argument("--hand_size", type=int, default=8, help="the number of dominoes in the hand (default=8)")
+    parser.add_argument("--train_fraction", type=float, default=0.9, help="the fraction of dominoes to train with (default=0.9)")
+    parser.add_argument("--hand_size", type=int, default=12, help="the number of dominoes in the hand (default=12)")
     parser.add_argument("--randomize_direction", type=argbool, default=True, help="randomize the direction of the dominoes (default=True)")
     return parser
 
