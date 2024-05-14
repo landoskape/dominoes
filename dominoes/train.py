@@ -18,7 +18,7 @@ def train(nets, optimizers, dataset, **parameters):
     learning_mode = parameters.get("learning_mode")
     temperature = parameters.get("temperature", 1.0)
     thompson = parameters.get("thompson", True)
-    baseline = parameters.get("baseline", True)
+    baseline = parameters.get("baseline", True) and learning_mode == "reinforce"
 
     # process the learning_mode and save conditions
     get_loss = learning_mode == "supervised" or parameters.get("save_loss", False)
