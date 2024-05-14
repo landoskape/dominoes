@@ -13,8 +13,8 @@ def add_standard_training_parameters(parser):
     parser.add_argument("--test_epochs", type=int, default=100, help="how many epochs to train the networks on")
     parser.add_argument("--replicates", type=int, default=2, help="how many replicates of each network to train")
     parser.add_argument("--silent", type=argbool, default=False, help="whether or not to print training progress (default=False)")
-    parser.add_argument("--save_loss", type=argbool, default=False, help="whether to save loss during training (default=False)")
-    parser.add_argument("--save_reward", type=argbool, default=False, help="whether to save reward during training (default=False)")
+    parser.add_argument("--save_loss", default=False, action="store_true", help="save loss during training (default=False)")
+    parser.add_argument("--save_reward", default=False, action="store_true", help="save reward during training (default=False)")
     return parser
 
 
@@ -64,7 +64,7 @@ def add_pointernet_decoder_parameters(parser):
     parser.add_argument("--decoder_kqnorm", type=argbool, default=True, help="whether to use kqnorm in the decoder (default=True)")
     parser.add_argument("--decoder_expansion", type=int, default=1, help="the expansion of the FF layers in the decoder (default=1)")
     parser.add_argument("--decoder_gru_bias", type=argbool, default=True, help="whether to use bias in the gru decoder method (default=True)")
-    parser.add_argument("--decoder_kqv_bias", type=argbool, default=False, help="whether to use bias in the attention layer (default=True)")
+    parser.add_argument("--decoder_kqv_bias", type=argbool, default=False, help="whether to use bias in the attention layer (default=False)")
     parser.add_argument("--decoder_mlp_bias", type=argbool, default=True, help="use bias in the MLP part of transformer decoders (default=True)")
     parser.add_argument("--decoder_residual", type=argbool, default=True, help="use residual connections in the attentional decoders (default=True)")
     return parser
@@ -99,6 +99,7 @@ def add_checkpointing(parser):
 
 def add_dataset_parameters(parser):
     """add generic dataset parameters"""
+    parser.add_argument("--return_target", type=argbool, default=False, help="whether to return the target (default=False, True if supervised)")
     parser.add_argument("--threads", type=int, default=1, help="the number of threads to use for generating batches (default=1)")
     parser.add_argument("--ignore_index", type=int, default=-100, help="the index to ignore in the loss function (default=-100)")
     return parser
