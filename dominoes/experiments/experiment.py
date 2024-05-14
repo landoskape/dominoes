@@ -361,12 +361,13 @@ class Experiment(ABC):
         parameters["max_possible_output"] = dataset.get_max_possible_output()
         parameters["learning_mode"] = self.args.learning_mode
         parameters["temperature"] = self.args.train_temperature if train else 1.0
-        parameters["thompson"] = not self.args.no_thompson if train else False
-        parameters["baseline"] = not self.args.no_baseline if train else False
+        parameters["thompson"] = self.args.thompson if train else False
+        parameters["baseline"] = self.args.baseline if train else False
         parameters["bl_temperature"] = self.args.bl_temperature
         parameters["bl_thompson"] = not self.args.bl_thompson
         parameters["bl_significance"] = self.args.bl_significance
         parameters["bl_batch_size"] = self.args.bl_batch_size
+        parameters["bl_duty_cycle"] = self.args.bl_duty_cycle
         parameters["gamma"] = self.args.gamma
         parameters["save_loss"] = self.args.save_loss
         parameters["save_reward"] = self.args.save_reward

@@ -49,9 +49,9 @@ def add_pointernet_parameters(parser):
 
 def add_pointernet_encoder_parameters(parser):
     """arguments for the encoder layers in a PointerNet"""
-    parser.add_argument("--encoder_num_heads", type=int, default=1, help="the number of heads in ptrnet encoding layers (default=1)")
+    parser.add_argument("--encoder_num_heads", type=int, default=8, help="the number of heads in ptrnet encoding layers (default=8)")
     parser.add_argument("--encoder_kqnorm", type=argbool, default=True, help="whether to use kqnorm in the encoder (default=True)")
-    parser.add_argument("--encoder_expansion", type=int, default=4, help="the expansion of the FF layers in the encoder (default=4)")
+    parser.add_argument("--encoder_expansion", type=int, default=1, help="the expansion of the FF layers in the encoder (default=1)")
     parser.add_argument("--encoder_kqv_bias", type=argbool, default=False, help="whether to use bias in the attention kqv layers (default=False)")
     parser.add_argument("--encoder_mlp_bias", type=argbool, default=True, help="use bias in the MLP part of transformer encoders (default=True)")
     parser.add_argument("--encoder_residual", type=argbool, default=True, help="use residual connections in the attentional encoders (default=True)")
@@ -60,11 +60,11 @@ def add_pointernet_encoder_parameters(parser):
 
 def add_pointernet_decoder_parameters(parser):
     """arguments for the decoder layers in a PointerNet"""
-    parser.add_argument("--decoder_num_heads", type=int, default=1, help="the number of heads in ptrnet decoding layers (default=1)")
+    parser.add_argument("--decoder_num_heads", type=int, default=8, help="the number of heads in ptrnet decoding layers (default=8)")
     parser.add_argument("--decoder_kqnorm", type=argbool, default=True, help="whether to use kqnorm in the decoder (default=True)")
-    parser.add_argument("--decoder_expansion", type=int, default=4, help="the expansion of the FF layers in the decoder (default=4)")
+    parser.add_argument("--decoder_expansion", type=int, default=1, help="the expansion of the FF layers in the decoder (default=1)")
     parser.add_argument("--decoder_gru_bias", type=argbool, default=True, help="whether to use bias in the gru decoder method (default=True)")
-    parser.add_argument("--decoder_kqv_bias", type=argbool, default=True, help="whether to use bias in the attention layer (default=True)")
+    parser.add_argument("--decoder_kqv_bias", type=argbool, default=False, help="whether to use bias in the attention layer (default=True)")
     parser.add_argument("--decoder_mlp_bias", type=argbool, default=True, help="use bias in the MLP part of transformer decoders (default=True)")
     parser.add_argument("--decoder_residual", type=argbool, default=True, help="use residual connections in the attentional decoders (default=True)")
     return parser
@@ -72,11 +72,11 @@ def add_pointernet_decoder_parameters(parser):
 
 def add_pointernet_pointer_parameters(parser):
     """arguments for the pointer layer in a PointerNet"""
-    parser.add_argument("--pointer_num_heads", type=int, default=1, help="the number of heads in ptrnet decoding layers (default=1)")
+    parser.add_argument("--pointer_num_heads", type=int, default=8, help="the number of heads in ptrnet decoding layers (default=8)")
     parser.add_argument("--pointer_kqnorm", type=argbool, default=True, help="whether to use kqnorm in the decoder (default=True)")
-    parser.add_argument("--pointer_expansion", type=int, default=4, help="the expansion of the FF layers in the decoder (default=4)")
+    parser.add_argument("--pointer_expansion", type=int, default=1, help="the expansion of the FF layers in the decoder (default=1)")
     parser.add_argument("--pointer_bias", type=argbool, default=False, help="whether to use bias in pointer projection layers (default=False)")
-    parser.add_argument("--pointer_kqv_bias", type=argbool, default=True, help="use bias in the attention layer of pointers (default=True)")
+    parser.add_argument("--pointer_kqv_bias", type=argbool, default=False, help="use bias in the attention layer of pointers (default=True)")
     parser.add_argument("--pointer_mlp_bias", type=argbool, default=True, help="use bias in the MLP part of transformer pointers (default=True)")
     parser.add_argument("--pointer_residual", type=argbool, default=True, help="use residual connections in the attentional pointer (default=True)")
     return parser
