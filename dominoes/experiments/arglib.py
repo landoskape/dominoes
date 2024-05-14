@@ -64,7 +64,7 @@ def add_pointernet_decoder_parameters(parser):
     parser.add_argument("--decoder_kqnorm", type=argbool, default=True, help="whether to use kqnorm in the decoder (default=True)")
     parser.add_argument("--decoder_expansion", type=int, default=1, help="the expansion of the FF layers in the decoder (default=1)")
     parser.add_argument("--decoder_gru_bias", type=argbool, default=True, help="whether to use bias in the gru decoder method (default=True)")
-    parser.add_argument("--decoder_kqv_bias", type=argbool, default=True, help="whether to use bias in the attention layer (default=True)")
+    parser.add_argument("--decoder_kqv_bias", type=argbool, default=False, help="whether to use bias in the attention layer (default=True)")
     parser.add_argument("--decoder_mlp_bias", type=argbool, default=True, help="use bias in the MLP part of transformer decoders (default=True)")
     parser.add_argument("--decoder_residual", type=argbool, default=True, help="use residual connections in the attentional decoders (default=True)")
     return parser
@@ -76,7 +76,7 @@ def add_pointernet_pointer_parameters(parser):
     parser.add_argument("--pointer_kqnorm", type=argbool, default=True, help="whether to use kqnorm in the decoder (default=True)")
     parser.add_argument("--pointer_expansion", type=int, default=1, help="the expansion of the FF layers in the decoder (default=1)")
     parser.add_argument("--pointer_bias", type=argbool, default=False, help="whether to use bias in pointer projection layers (default=False)")
-    parser.add_argument("--pointer_kqv_bias", type=argbool, default=True, help="use bias in the attention layer of pointers (default=True)")
+    parser.add_argument("--pointer_kqv_bias", type=argbool, default=False, help="use bias in the attention layer of pointers (default=True)")
     parser.add_argument("--pointer_mlp_bias", type=argbool, default=True, help="use bias in the MLP part of transformer pointers (default=True)")
     parser.add_argument("--pointer_residual", type=argbool, default=True, help="use residual connections in the attentional pointer (default=True)")
     return parser

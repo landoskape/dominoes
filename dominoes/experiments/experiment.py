@@ -367,6 +367,7 @@ class Experiment(ABC):
         parameters["bl_thompson"] = self.args.bl_thompson
         parameters["bl_significance"] = self.args.bl_significance
         parameters["bl_batch_size"] = self.args.bl_batch_size
+        parameters["bl_duty_cycle"] = self.args.bl_duty_cycle
         parameters["gamma"] = self.args.gamma
         parameters["save_loss"] = self.args.save_loss
         parameters["save_reward"] = self.args.save_reward
