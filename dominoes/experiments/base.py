@@ -108,7 +108,7 @@ class Experiment(ABC):
         wandb.login()
         run = wandb.init(
             project=self.get_basename(),
-            name="",
+            name=f"Experiment: {self.timestamp}",
             config=self.args,
         )
 
