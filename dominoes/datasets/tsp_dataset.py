@@ -102,6 +102,14 @@ class TSPDataset(Dataset, DatasetSL, DatasetRL):
         """dataset specific training variable storage"""
         pass  # nothing to do (usually update training_variables in place)
 
+    def create_testing_variables(self, num_nets, **test_parameters):
+        """dataset specific testing variable storage"""
+        return {}  # nothing here yet, but ready for it in the future
+
+    def save_testing_variables(self, testing_variables, epoch_state, **test_parameters):
+        """dataset specific testing variable storage"""
+        pass  # nothing to do (update testing_variables in place)
+
     def get_max_possible_output(self):
         """
         get the maximum possible output for the dataset

@@ -196,7 +196,15 @@ class DominoeMaster(Dataset):
 
     def save_training_variables(self, training_variables, epoch_state, **train_parameters):
         """dataset specific training variable storage"""
-        pass  # nothing to do (usually update training_variables in place)
+        pass  # nothing to do (update training_variables in place)
+
+    def create_testing_variables(self, num_nets, **test_parameters):
+        """dataset specific testing variable storage"""
+        return {}  # nothing here yet, but ready for it in the future
+
+    def save_testing_variables(self, testing_variables, epoch_state, **test_parameters):
+        """dataset specific testing variable storage"""
+        pass  # nothing to do (update testing_variables in place)
 
     @torch.no_grad()
     def generate_batch(self, train=True, device=None, **kwargs):
