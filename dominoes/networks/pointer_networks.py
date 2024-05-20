@@ -405,6 +405,7 @@ class PointerNetworkBaseClass(nn.Module, ABC):
             else:
                 if max_output > num_tokens:
                     raise ValueError(msg)
+
         return max_output
 
     @abstractmethod
@@ -450,8 +451,8 @@ class PointerNetworkBaseClass(nn.Module, ABC):
             encoded,
             decoder_input,
             decoder_context,
+            max_output,
             mask=mask,
-            max_output=max_output,
             temperature=temperature,
             thompson=thompson,
         )
