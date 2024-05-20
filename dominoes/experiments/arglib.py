@@ -99,7 +99,6 @@ def add_checkpointing(parser):
 
 def add_dataset_parameters(parser):
     """add generic dataset parameters"""
-    parser.add_argument("--return_target", type=argbool, default=False, help="whether to return the target (default=False, True if supervised)")
     parser.add_argument("--threads", type=int, default=1, help="the number of threads to use for generating batches (default=1)")
     parser.add_argument("--ignore_index", type=int, default=-100, help="the index to ignore in the loss function (default=-100)")
     return parser

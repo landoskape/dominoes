@@ -348,11 +348,9 @@ class Experiment(ABC):
         dataset_parameters = vars(self.args).copy()
         dataset_parameters.pop("task", None)
         dataset_parameters.pop("device", None)
-        if self.args.learning_mode == "supervised":
-            dataset_parameters["return_target"] = True
         return get_dataset(self.args.task, build=True, device=self.device, **dataset_parameters)
 
-    def make_train_parameters(self, dataset, train=True):
+    def make_train_parameters(self, dataset, train=True, **parameter_updates):
         """simple method for getting training parameters"""
         # get the training parameters
         parameters = {}
@@ -372,6 +370,12 @@ class Experiment(ABC):
         parameters["gamma"] = self.args.gamma
         parameters["save_loss"] = self.args.save_loss
         parameters["save_reward"] = self.args.save_reward
+        # Handle return_target
+        # (If required for supervised learning or saving loss, then return_target=True, otherwise False)
+        # (When testing but not using supervised or saving loss during training, use parameter_updates)
+        parameters["return_target"] = self.args.learning_mode == "supervised" or self.args.save_loss
+        # additionally update parameters directly if requested
+        parameters.update(parameter_updates)
         return parameters
 
     def plot_ready(self, name):
