@@ -5,6 +5,7 @@ from .attention_modules import get_attention_layer
 from .transformer_modules import get_transformer_layer
 from .pointer_layers import get_pointer_layer
 from ..utils import check_args
+from .net_utils import process_input
 
 
 class PointerDecoder(nn.Module):
@@ -104,35 +105,28 @@ class PointerDecoder(nn.Module):
             raise ValueError(f"Pointer method not recognized, somehow it has changed to {self.pointer_method}")
         return decoder_state
 
-    def _process_inputs(self, encoded, decoder_input, decoder_context, mask=None, max_output=None):
-        """method for processing inputs to the pointer network, checking shape, creating mask if not provided"""
-        batch_size, max_num_tokens, embedding_dim = encoded.shape
-        assert encoded.ndim == 3, "encoded should be (batch_size, num_tokens, embedding_dim) size tensor"
+    def _check_additional_inputs(self, decoder_input, decoder_context, batch_size):
+        """method for checking additional inputs to the pointer decoder"""
         assert decoder_input.ndim == 2 and decoder_context.ndim == 2, "decoder input and context should be (batch_size, embedding_dim) tensors"
         assert decoder_input.size(0) == batch_size, "decoder_input has wrong number of batches"
-        assert decoder_input.size(1) == embedding_dim, "decoder_input has incorrect embedding dim"
+        assert decoder_input.size(1) == self.embedding_dim, "decoder_input has incorrect embedding dim"
         assert decoder_context.size(0) == batch_size, "decoder_context has wrong number of batches"
-        assert decoder_context.size(1) == embedding_dim, "decoder_context has incorrect embedding dim"
+        assert decoder_context.size(1) == self.embedding_dim, "decoder_context has incorrect embedding dim"
 
-        if mask is not None:
-            assert mask.ndim == 2, "mask must have shape (batch, tokens)"
-            assert mask.size(0) == batch_size and mask.size(1) == max_num_tokens, "mask must have same batch size and max tokens as x"
-        else:
-            mask = torch.ones((batch_size, max_num_tokens), dtype=encoded.dtype).to(encoded.device)
-
-        if max_output is None:
-            max_output = max_num_tokens
-
-        if max_output > max_num_tokens and self.permutation:
-            raise ValueError("max_output must be less than or equal to the number of tokens when using permutation mode")
-
+    def _check_output(self, mask, max_output):
+        """method for checking the output of the pointer network"""
         if self.permutation:
-            # prepare source for scattering if required
-            src = torch.zeros((batch_size, 1), dtype=mask.dtype).to(mask.device)
-        else:
-            src = None
+            # if using permutation, make sure there are >= possible tokens than max_output requested
+            max_possible_outputs = mask.sum(1).min().item()
+            assert max_output <= max_possible_outputs, "max_output is greater than the number of valid tokens"
 
-        return mask, max_output, src
+    def _get_mask_src(self, batch_size, mask):
+        """method for getting the source tensor for the mask if permutation is enabled"""
+        if not self.permutation:
+            # no mask updates needed if not doing a permutation
+            return None
+        # get the source tensor for the mask when doing a permutation
+        return torch.zeros((batch_size, 1), dtype=mask.dtype).to(mask.device) if self.permutation else None
 
     def _pointer_loop(
         self,
@@ -186,8 +180,8 @@ class PointerDecoder(nn.Module):
         encoded,
         decoder_input,
         decoder_context,
+        max_output,
         mask=None,
-        max_output=None,
         thompson=None,
         temperature=None,
     ):
@@ -200,8 +194,10 @@ class PointerDecoder(nn.Module):
 
         max_output should be an integer determining when to cut off decoder output
         """
-        batch_size = encoded.size(0)  # get batch size
-        mask, max_output, src = self._process_inputs(encoded, decoder_input, decoder_context, mask=mask, max_output=max_output)
+        batch_size, mask = process_input(encoded, mask, self.embedding_dim, name="decoder encoded")
+        self._check_output(mask, max_output)
+        self._check_additional_inputs(decoder_input, decoder_context, batch_size)
+        src = self._get_mask_src(batch_size, mask)
 
         # For some pointer layers, the encoded transform happens out of the loop just once
         # For others, it happens at each step. The output of this is a special object that
