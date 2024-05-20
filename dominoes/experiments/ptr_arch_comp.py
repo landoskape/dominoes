@@ -6,7 +6,7 @@ from .. import train
 from ..networks import get_pointer_network, get_pointer_methods, get_pointer_arguments
 from .base import Experiment
 from . import arglib
-from ..plotting import plot_basic_results
+from ..plotting import plot_train_results
 
 
 class PointerArchitectureComparison(Experiment):
@@ -117,4 +117,4 @@ class PointerArchitectureComparison(Experiment):
         main plotting loop
         """
         pointer_methods = self.pointer_methods()
-        plot_basic_results(results["train_results"], pointer_methods, train=True)
+        plot_train_results(self, results["train_results"], pointer_methods, name="training")
